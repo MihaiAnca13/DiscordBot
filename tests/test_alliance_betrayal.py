@@ -162,9 +162,6 @@ class TestAllianceBetrayal:
 
         monkeypatch.setattr("Buttons.Turn.GamestateHelper", lambda channel: game)
         monkeypatch.setattr(game, "release_lock", lambda: None)
-        monkeypatch.setattr(
-            game, "get_player", lambda player_id, interaction: game.getPlayerObjectFromColor("blue")
-        )
         rendered = {}
 
         def capture_restored_leave_window(game_arg, player, last_player_color):
