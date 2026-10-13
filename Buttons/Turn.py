@@ -46,7 +46,6 @@ class TurnButtons:
             color = player["color"]
             await interaction.message.delete()
             game.backUpToLastSaveFile()
-            game.release_lock()
             game = GamestateHelper(interaction.channel)
             player = game.getPlayerObjectFromColor(color)
             view = TurnButtons.getStartTurnButtons(game, player, "dummy")
