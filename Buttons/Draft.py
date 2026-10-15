@@ -3,6 +3,7 @@ import random
 import config
 import discord
 from Buttons.Turn import TurnButtons
+from Buttons.DiscoveryTile import DiscoveryTileButtons
 from helpers.EmojiHelper import Emoji
 from helpers.GamestateHelper import GamestateHelper
 from discord.ui import View, Button
@@ -74,6 +75,8 @@ class DraftButtons:
                              ("Terran Federation (Hydran)", "ter4"),
                              ("Terran Republic (Draco)", "ter5"),
                              ("Terran Union (Planta)", "ter6")]
+        if game.gamestate.get("community_factions", False):
+            factionsAvailable.append(("Atlantians", "atl"))
         bannedFactions = game.gamestate["bannedFactions"]
         for faction, key in factionsAvailable:
             colorsAlreadyChosen = []
@@ -145,11 +148,14 @@ class DraftButtons:
             return "brown"
         if faction == "exl":
             return "teal"
+        if faction == "atl":
+            return "blue"
         return "green"
 
     @staticmethod
     async def generalSetup(interaction: discord.Interaction, game: GamestateHelper,
                            temp_player_list, temp_faction_list):
+        is_initial_setup = game.gamestate["setup_finished"] != 1
         colors = ["blue", "red", "green", "yellow", "purple", "white", "pink", "brown", "teal"]
         count = 0
         listPlayerHomes = []
@@ -227,6 +233,14 @@ class DraftButtons:
             game.setup_finished()
         # game.fillInDiscTiles()
         await interaction.channel.send("Done With Setup!")
+
+        if is_initial_setup:
+            for player_id in temp_player_list:
+                player = game.get_player(player_id, interaction)
+                if player is not None and "anl" in player.get("nano_tech", []):
+                    home = game.getLocationFromID(player["home_planet"])
+                    game.addDiscTile(home)
+                    await DiscoveryTileButtons.exploreDiscoveryTile(game, home, interaction, player)
 
         asyncio.create_task(game.showUpdate("Start of Game", interaction))
         player = game.get_player(temp_player_list[0],interaction)
