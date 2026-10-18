@@ -1455,8 +1455,9 @@ class Combat:
         """Techno-Magic: at the start of a combat, one temporary Upgrade 1 per ship blueprint.
         The attacker chooses first, the defender last."""
         tile = game.gamestate["board"][pos]
-        for color in [tile.get("attacker"), tile.get("defender")]:
-            if not color or color == "ai":
+        pairing = Combat.sideOf(tile.get("attacker")) + Combat.sideOf(tile.get("defender"))
+        for color in pairing:
+            if color == "ai":
                 continue
             player = game.getPlayerObjectFromColor(color)
             if player["name"] != "Techno-Mages":
