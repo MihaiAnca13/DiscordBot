@@ -1,9 +1,10 @@
 from pathlib import Path
 
+from Buttons.Build import BuildButtons
 from Buttons.Research import ResearchButtons
 from helpers import FactionData
 from helpers.CombatHelper import Combat
-from tests.fakes import POS, player_stats
+from tests.fakes import FakeInteraction, POS, player_stats
 
 
 def test_every_faction_row_carries_its_artwork_and_colour():
@@ -29,11 +30,27 @@ def test_rho_trades_money_on_the_factions_own_ratio():
                                                                       materials=0), None) == 2
 
 
-def test_starting_ships_come_from_the_faction_data(start_game):
-    game, _channel = start_game(factions=["exl", "rho"])
+def test_rho_pays_two_resources_for_one_money_trade(run):
+    for faction, expected in (("rho", 2), ("hyd", 1)):
+        interaction = FakeInteraction()
+        run(BuildButtons.convertResource(None, player_stats(faction, color="blue", money=6), interaction,
+                                         "convertResource_none_4_201_4_0_6_0_Money"))
+        assert f"Resources spent: {expected}" in interaction.message.edited["content"]
 
-    assert game.gamestate["board"]["201"]["player_ships"] == ["blue-orb", "blue-int"]
-    assert game.gamestate["board"]["203"]["player_ships"] == ["red-int", "red-int"]
+
+def test_starting_ships_come_from_the_faction_data(make_game):
+    def home_ships(faction):
+        stats = player_stats(faction, color="blue")
+        game = make_game({
+            "players": {"1": stats},
+            "board": {"201": {"sector": stats["home_planet"], "orientation": 0, "player_ships": []}},
+        })
+        game.setup_finished()
+        return game.gamestate["board"]["201"]["player_ships"]
+
+    assert home_ships("exl") == ["blue-orb", "blue-int"]
+    assert home_ships("rho") == ["blue-int", "blue-int"]
+    assert home_ships("hyd") == ["blue-int"]
 
 
 def _tile_game(make_game, faction, owner="blue", **tile):
