@@ -44,12 +44,13 @@ implementation if nobody has it yet), not a branch. The fields in use:
 
 An ability whose behavior is a flow (Techno-Magic, Power of the Ancients,
 two discovery choices) keeps its implementation where the flow lives — the
-code only asks whether the player has it. Anything the same code would need to
-check by name belongs in the table above; if a quirk is genuinely one
-faction's own code with no data shape, leave it where it is and say so in the
-commit message. Numbers a faction accumulates during play live on the player
-instead (Magellan's `magPartPoints`, Lyra's `shrine_type`), as fields setup
-copies in for that faction only.
+code only asks whether the player has it. Grep for `FactionData.has` before
+inventing an id: an ability that already exists has a guard at its
+implementation. Anything the same code would need to check by name belongs in
+the table above; if a quirk is genuinely one faction's own code with no data
+shape, leave it where it is and say so in the commit message. Numbers a faction
+accumulates during play live on the player instead (Magellan's `magPartPoints`,
+Lyra's `shrine_type`), as fields setup copies in for that faction only.
 
 ## Shortcomings to expect (each one happened)
 
