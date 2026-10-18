@@ -18,9 +18,10 @@ POS = "101"  # the sector board_tile() builds by default
 class FakeMessage:
     _next_id = 1
 
-    def __init__(self):
+    def __init__(self, channel=None):
         self.id = FakeMessage._next_id
         FakeMessage._next_id += 1
+        self.channel = channel
         self.components = []
 
     async def delete(self):
@@ -28,6 +29,11 @@ class FakeMessage:
 
     async def edit(self, **kwargs):
         self.edited = kwargs
+
+    async def create_thread(self, name):
+        thread = FakeChannel(name)
+        self.channel.threads.append(thread)
+        return thread
 
 
 class FakeChannel:
@@ -38,7 +44,10 @@ class FakeChannel:
 
     async def send(self, content=None, **kwargs):
         self.sent.append((content, kwargs))
-        return FakeMessage()
+        return FakeMessage(self)
+
+    async def edit(self, **kwargs):
+        pass
 
 
 class FakeUser:
