@@ -6,6 +6,7 @@ from Buttons.Explore import ExploreButtons
 from Buttons.Population import PopulationButtons
 from Buttons.Pulsar import PulsarButtons
 from helpers.EmojiHelper import Emoji
+from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
 from helpers.PlayerHelper import PlayerHelper
 from helpers.DrawHelper import DrawHelper
@@ -218,7 +219,7 @@ class TurnButtons:
                     view.add_item(Button(label=f"Trade {trade_value} {resource_type.capitalize()}",
                                          style=button_style,
                                          custom_id=f"FCID{p1.stats['color']}_tradeAtRatio_{resource_type}_money"))
-            if p1.stats["colony_ships"] > 0 and game.get_short_faction_name(p1.stats["name"]) == "magellan":
+            if p1.stats["colony_ships"] > 0 and FactionData.has(p1.stats, "colony_ship_resources"):
                 emojiC = Emoji.getEmojiByName("colony_ship")
                 view.add_item(Button(label="Get 1 Money", style=discord.ButtonStyle.red, emoji=emojiC,
                                      custom_id=f"FCID{p1.stats['color']}_magColShipForResource_money"))
@@ -276,7 +277,7 @@ class TurnButtons:
                         view.add_item(Button(label=f"Trade {trade_value} {resource_type.capitalize()}",
                                              style=button_style,
                                              custom_id=f"FCID{p1.stats['color']}_tradeAtRatio_{resource_type}_money"))
-                if p1.stats["colony_ships"] > 0 and game.get_short_faction_name(p1.stats["name"]) == "magellan":
+                if p1.stats["colony_ships"] > 0 and FactionData.has(p1.stats, "colony_ship_resources"):
                     emojiC = Emoji.getEmojiByName("colony_ship")
                     view.add_item(Button(label="Get 1 Money", style=discord.ButtonStyle.red, emoji=emojiC,
                                          custom_id=f"FCID{p1.stats['color']}_magColShipForResource_money"))
@@ -414,7 +415,7 @@ class TurnButtons:
                 view.add_item(child)
         view.add_item(Button(label="Show Game", style=discord.ButtonStyle.gray, custom_id="showGame"))
         view.add_item(Button(label="Show Reputation", style=discord.ButtonStyle.gray, custom_id="showReputation"))
-        if p1["colony_ships"] > 0 and game.get_short_faction_name(p1["name"]) == "magellan":
+        if p1["colony_ships"] > 0 and FactionData.has(p1, "colony_ship_resources"):
             emojiC = Emoji.getEmojiByName("colony_ship")
             view.add_item(Button(label="Get 1 Science", style=discord.ButtonStyle.red, emoji=emojiC,
                                  custom_id=f"FCID{player['color']}_magColShipForResource_science"))
@@ -526,7 +527,7 @@ class TurnButtons:
         if len(PopulationButtons.findEmptyPopulation(game, player)) > 0 and player["colony_ships"] > 0:
             view.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                                  custom_id=f"FCID{player['color']}_startPopDrop"))
-        if player["colony_ships"] > 0 and game.get_short_faction_name(player["name"]) == "magellan":
+        if player["colony_ships"] > 0 and FactionData.has(player, "colony_ship_resources"):
             emojiC = Emoji.getEmojiByName("colony_ship")
             view.add_item(Button(label="Get 1 Science", style=discord.ButtonStyle.red, emoji=emojiC,
                                  custom_id=f"FCID{player['color']}_magColShipForResource_science"))

@@ -3,8 +3,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from helpers.DrawHelper import DrawHelper
-from helpers.GamestateHelper import GamestateHelper
+from helpers import FactionData
 
 TM_ARTWORK = {
     "images/resources/components/factions/tm_board.png": (4400, 2475),
@@ -30,6 +29,4 @@ def test_tm_artwork_exists_and_loads(path, size):
 def test_tm_artwork_key_matches_the_name_lookups():
     # DrawHelper asks for <key>_image.png, name_trade_<key>.png and the class images; the key
     # those lookups produce is what the files above are named after.
-    assert DrawHelper.get_short_faction_name(None, "Techno-Mages") == "tm"
-    assert GamestateHelper.getShortFactionNameFromFull(None, "Techno-Mages") == "tm"
-    assert GamestateHelper.get_short_faction_name(None, "Techno-Mages") == "tm"
+    assert FactionData.artwork_name("Techno-Mages") == "tm"

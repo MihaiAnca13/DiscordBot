@@ -1,6 +1,8 @@
 {
         "hyd": {
                 "name": "Hydran Progress",
+                "artwork": "hydran",
+                "setup_color": "blue",
                 "materials": 2,
                 "science": 6,
                 "money": 2,
@@ -135,6 +137,12 @@
         },
         "mag": {
                 "name": "Wardens of Magellan",
+                "artwork": "magellan",
+                "setup_color": "pink",
+                "influence_colony_ships": 1,
+                "abilities": [
+                        "colony_ship_resources"
+                ],
                 "materials": 3,
                 "science": 2,
                 "money": 2,
@@ -271,6 +279,9 @@
         },
         "lyr": {
                 "name": "Enlightened of Lyra",
+                "artwork": "lyra",
+                "setup_color": "orange",
+                "vp_per_shrine": 1,
                 "materials": 3,
                 "science": 4,
                 "money": 2,
@@ -438,6 +449,8 @@
         },
         "eri": {
                 "name": "Eridani Empire",
+                "artwork": "eridani",
+                "setup_color": "red",
                 "materials": 4,
                 "science": 2,
                 "money": 26,
@@ -576,6 +589,11 @@
         },
         "ori": {
                 "name": "Orion Hegemony",
+                "artwork": "orion",
+                "setup_color": "purple",
+                "starting_ships": [
+                        "cru"
+                ],
                 "materials": 4,
                 "science": 3,
                 "money": 3,
@@ -713,6 +731,9 @@
         },
         "dra": {
                 "name": "Descendants of Draco",
+                "artwork": "draco",
+                "setup_color": "yellow",
+                "vp_per_ancient_ship": 1,
                 "materials": 3,
                 "science": 4,
                 "money": 2,
@@ -847,6 +868,8 @@
         },
         "mec": {
                 "name": "Mechanema",
+                "artwork": "mechanema",
+                "setup_color": "white",
                 "materials": 4,
                 "science": 3,
                 "money": 3,
@@ -981,6 +1004,9 @@
         },
         "pla": {
                 "name": "Planta",
+                "artwork": "planta",
+                "setup_color": "green",
+                "vp_per_owned_tile": 1,
                 "materials": 4,
                 "science": 3,
                 "money": 2,
@@ -1111,6 +1137,8 @@
         },
         "ter1": {
                 "name": "Terran Alliance",
+                "artwork": "terran_alliance",
+                "setup_color": "purple",
                 "materials": 4,
                 "science": 3,
                 "money": 3,
@@ -1246,6 +1274,8 @@
         },
         "ter2": {
                 "name": "Terran Conglomerate",
+                "artwork": "terran_conglomerate",
+                "setup_color": "white",
                 "materials": 4,
                 "science": 3,
                 "money": 3,
@@ -1381,6 +1411,8 @@
         },
         "ter3": {
                 "name": "Terran Directorate",
+                "artwork": "terran_directorate",
+                "setup_color": "red",
                 "materials": 4,
                 "science": 3,
                 "money": 3,
@@ -1516,6 +1548,8 @@
         },
         "ter4": {
                 "name": "Terran Federation",
+                "artwork": "terran_federation",
+                "setup_color": "blue",
                 "materials": 4,
                 "science": 3,
                 "money": 3,
@@ -1651,6 +1685,8 @@
         },
         "ter5": {
                 "name": "Terran Republic",
+                "artwork": "terran_republic",
+                "setup_color": "yellow",
                 "materials": 4,
                 "science": 3,
                 "money": 3,
@@ -1786,6 +1822,8 @@
         },
         "ter6": {
                 "name": "Terran Union",
+                "artwork": "terran_union",
+                "setup_color": "green",
                 "materials": 4,
                 "science": 3,
                 "money": 3,
@@ -1921,6 +1959,13 @@
         },
         "exl": {
                 "name": "The Exiles",
+                "artwork": "exile",
+                "setup_color": "teal",
+                "starting_ships": [
+                        "orb",
+                        "int"
+                ],
+                "vp_per_orbital_pop": 1,
                 "materials": 4,
                 "science": 2,
                 "money": 3,
@@ -2056,6 +2101,12 @@
         },
         "rho": {
                 "name": "Rho Indi Syndicate",
+                "artwork": "rho",
+                "setup_color": "brown",
+                "starting_ships": [
+                        "int",
+                        "int"
+                ],
                 "materials": 3,
                 "science": 3,
                 "money": 2,
@@ -2187,6 +2238,19 @@
         },
         "atl": {
                 "name": "Atlantians",
+                "artwork": "atlantians",
+                "setup_color": "blue",
+                "community": true,
+                "reputation_only_slots": [
+                        0,
+                        1
+                ],
+                "discovery_part_vp": 1,
+                "discovery_part_ship_cost": 1,
+                "abilities": [
+                        "two_discovery_choices",
+                        "upgrade_after_research"
+                ],
                 "materials": 3,
                 "science": 3,
                 "money": 3,
@@ -2321,6 +2385,14 @@
         },
         "ra": {
                 "name": "Remnants of Ra",
+                "artwork": "ra",
+                "setup_color": "blue",
+                "community": true,
+                "influence_colony_ships": 1,
+                "vp_per_artifact_tile": 1,
+                "abilities": [
+                        "artifact_disc_pop"
+                ],
                 "materials": 3,
                 "science": 3,
                 "money": 2,
@@ -2455,6 +2527,15 @@
         },
         "tm": {
                 "name": "Techno-Mages",
+                "artwork": "tm",
+                "setup_color": "purple",
+                "community": true,
+                "influence_colony_ships": 1,
+                "abilities": [
+                        "setup_tech",
+                        "finds_a_way",
+                        "techno_magic"
+                ],
                 "materials": 2,
                 "science": 6,
                 "money": 3,

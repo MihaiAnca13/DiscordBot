@@ -5,6 +5,7 @@ import time
 import discord
 import config
 import shutil
+from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from helpers.EmojiHelper import Emoji
 from helpers.PlayerHelper import PlayerHelper
@@ -321,50 +322,9 @@ class GamestateHelper:
 
     @staticmethod
     def getShipsWithParts(player):
-        """Ship types this faction actually fields."""
-        ships = ["interceptor", "cruiser", "dread", "starbase", "orb"]
-        legal = []
-        for ship in ships:
-            if player['name'] == "Rho Indi Syndicate" and ship == "dread":
-                continue
-            if player['name'] == "The Exiles" and ship == "starbase":
-                continue
-            if player['name'] != "The Exiles" and ship == "orb":
-                continue
-            legal.append(ship)
-        return legal
-
-    def getShortFactionNameFromFull(self, fullName):
-        if fullName == "Descendants of Draco":
-            return "draco"
-        elif fullName == "Mechanema":
-            return "mechanema"
-        elif fullName == "Planta":
-            return "planta"
-        elif fullName == "Orian Hegemony" or fullName == "Orion Hegemony":
-            return "orion"
-        elif fullName == "Hydran Progress":
-            return "hydran"
-        elif fullName == "Eridani Empire" or fullName == "Eridian Empire":
-            return "eridani"
-        elif fullName == "Wardens of Magellan":
-            return "magellan"
-        elif fullName == "Enlightened of Lyra":
-            return "lyra"
-        elif fullName == "Rho Indi Syndicate":
-            return "rho"
-        elif fullName == "The Exiles":
-            return "exile"
-        elif fullName == "Atlantians":
-            return "atlantians"
-        elif fullName == "Remnants of Ra":
-            return "ra"
-        elif fullName == "Techno-Mages":
-            return "tm"
-        elif "Terran" in fullName:
-            return fullName.lower().replace(" ", "_")
-
-        return fullName
+        """Ship types this faction actually fields (its blueprints live in its data)."""
+        return [ship for ship in ("interceptor", "cruiser", "dread", "starbase", "orb")
+                if FactionData.of(player).get(f"{ship}_parts")]
 
     def find_player_faction_name_from_color(self, color):
         if color == "ai" or self.get_player_from_color(color) == color:
@@ -559,7 +519,7 @@ class GamestateHelper:
     def updatePlayerNames(self, interaction: discord.Interaction):
         if self.gamestate.get("communityMode",False):
             for player in self.gamestate["players"]:
-                shortFaction = self.getShortFactionNameFromFull(self.gamestate["players"][player]["name"])
+                shortFaction = FactionData.artwork_name(self.gamestate["players"][player]["name"])
                 if "terran" in shortFaction:
                     shortFaction += "_"
                 emoji = Emoji.getEmojiByName(f"{shortFaction}token")
@@ -1049,7 +1009,7 @@ class GamestateHelper:
         self.update()
 
     def getPlayerEmoji(self, player):
-        shortFaction = self.getShortFactionNameFromFull(player["name"])
+        shortFaction = FactionData.artwork_name(player["name"])
         if "terran" in shortFaction:
             shortFaction += "_"
         emoji = Emoji.getEmojiByName(f"{shortFaction}token")
@@ -1072,7 +1032,7 @@ class GamestateHelper:
         self.gamestate["players"][str(player_id)].update({"passed": False})
         self.gamestate["players"][str(player_id)].update({"perma_passed": False})
         name = self.gamestate["players"][str(player_id)]["player_name"]
-        shortFaction = self.getShortFactionNameFromFull(self.gamestate["players"][str(player_id)]["name"])
+        shortFaction = FactionData.artwork_name(self.gamestate["players"][str(player_id)]["name"])
         if "terran" in shortFaction:
             shortFaction += "_"
         emoji = Emoji.getEmojiByName(f"{shortFaction}token")
@@ -1092,15 +1052,8 @@ class GamestateHelper:
             else:
                 p1 = PlayerHelper(i, self.get_player(i))
                 home = self.get_system_coord(p1.stats["home_planet"])
-                if p1.stats["name"] == "Orion Hegemony":
-                    self.gamestate["board"][home]["player_ships"].append(p1.stats["color"] + "-cru")
-                elif p1.stats["name"] == "Rho Indi Syndicate":
-                    self.gamestate["board"][home]["player_ships"] = 2 * [p1.stats["color"] + "-int"]
-                elif p1.stats["name"] == "The Exiles":
-                    self.gamestate["board"][home]["player_ships"] = [p1.stats["color"] + "-orb",
-                                                                     p1.stats["color"] + "-int"]
-                else:
-                    self.gamestate["board"][home]["player_ships"].append(p1.stats["color"] + "-int")
+                for ship in FactionData.of(p1.stats).get("starting_ships", ["int"]):
+                    self.gamestate["board"][home]["player_ships"].append(f"{p1.stats['color']}-{ship}")
 
                 if p1.stats["name"] == "Eridani Empire":
                     random.shuffle(self.gamestate["reputation_tiles"])
@@ -1306,36 +1259,6 @@ class GamestateHelper:
     #     self.gamestate["discTiles"]= listOfDisc
     #     self.update()
 
-    def get_short_faction_name(self, full_name):
-        if full_name == "Descendants of Draco":
-            return "draco"
-        elif full_name == "Mechanema":
-            return "mechanema"
-        elif full_name == "Planta":
-            return "planta"
-        elif full_name == "Orian Hegemony" or full_name == "Orion Hegemony":
-            return "orion"
-        elif full_name == "Hydran Progress":
-            return "hydran"
-        elif full_name == "Eridani Empire":
-            return "eridani"
-        elif full_name == "Wardens of Magellan":
-            return "magellan"
-        elif full_name == "Enlightened of Lyra":
-            return "lyra"
-        elif full_name == "Rho Indi Syndicate":
-            return "rho"
-        elif full_name == "The Exiles":
-            return "exile"
-        elif full_name == "Atlantians":
-            return "atlantians"
-        elif full_name == "Remnants of Ra":
-            return "ra"
-        elif full_name == "Techno-Mages":
-            return "tm"
-        elif "Terran" in full_name:
-            return full_name.lower().replace(" ", "_")
-
     def formRelationsBetween(self, player1, player2):
         if not all(PlayerHelper.has_reputation_slot_for_relation(player)
                    for player in (player1, player2)):
@@ -1345,7 +1268,7 @@ class GamestateHelper:
         found = False
         for x, tile in enumerate(player1["reputation_track"]):
             if isinstance(tile, str) and (tile == "amb" or tile == "mixed"):
-                track = f"{tile}-{self.get_short_faction_name(player2['name'])}-{player2['color']}"
+                track = f"{tile}-{FactionData.artwork_name(player2['name'])}-{player2['color']}"
                 self.gamestate["players"][pID]["reputation_track"][x] = track
                 found = True
                 break
@@ -1358,14 +1281,14 @@ class GamestateHelper:
                 if isinstance(tile, int) and tile < lowest:
                     loc = x
                     lowest = tile
-            track = f"mixed-{self.get_short_faction_name(player2['name'])}-{player2['color']}"
+            track = f"mixed-{FactionData.artwork_name(player2['name'])}-{player2['color']}"
             self.gamestate["players"][pID]["reputation_track"][loc] = track
             self.gamestate["reputation_tiles"].append(lowest)
 
         found = False
         for x, tile in enumerate(player2["reputation_track"]):
             if isinstance(tile, str) and (tile == "amb" or tile == "mixed"):
-                track = f"{tile}-{self.get_short_faction_name(player1['name'])}-{player1['color']}"
+                track = f"{tile}-{FactionData.artwork_name(player1['name'])}-{player1['color']}"
                 self.gamestate["players"][pID2]["reputation_track"][x] = track
                 found = True
                 break
@@ -1378,7 +1301,7 @@ class GamestateHelper:
                 if isinstance(tile, int) and tile < lowest:
                     loc = x
                     lowest = tile
-            track = f"mixed-{self.get_short_faction_name(player1['name'])}-{player1['color']}"
+            track = f"mixed-{FactionData.artwork_name(player1['name'])}-{player1['color']}"
             self.gamestate["players"][pID2]["reputation_track"][loc] = track
             self.gamestate["reputation_tiles"].append(lowest)
 

@@ -7,6 +7,7 @@ import json
 import os
 from discord.ui import View, Button
 
+from helpers import FactionData
 from helpers.ImageCache import ImageCacheHelper
 from helpers.PlayerHelper import PlayerHelper
 from helpers.ShipHelper import PlayerShip
@@ -62,36 +63,6 @@ class DrawHelper:
                     return image.copy()
             else:
                 print(filename)
-
-    def get_short_faction_name(self, full_name):
-        if full_name == "Descendants of Draco":
-            return "draco"
-        elif full_name == "Mechanema":
-            return "mechanema"
-        elif full_name == "Planta":
-            return "planta"
-        elif full_name == "Orian Hegemony" or full_name == "Orion Hegemony":
-            return "orion"
-        elif full_name == "Hydran Progress":
-            return "hydran"
-        elif full_name == "Eridani Empire":
-            return "eridani"
-        elif full_name == "Wardens of Magellan":
-            return "magellan"
-        elif full_name == "Enlightened of Lyra":
-            return "lyra"
-        elif full_name == "Rho Indi Syndicate":
-            return "rho"
-        elif full_name == "The Exiles":
-            return "exile"
-        elif full_name == "Atlantians":
-            return "atlantians"
-        elif full_name == "Remnants of Ra":
-            return "ra"
-        elif full_name == "Techno-Mages":
-            return "tm"
-        elif "Terran" in full_name:
-            return full_name.lower().replace(" ", "_")
 
     def base_tile_image(self, sector):
         filepath = f"images/resources/hexes/{str(sector)}.png"
@@ -683,7 +654,7 @@ class DrawHelper:
 
         for n, player in enumerate(playerOrder):
             border = 6
-            faction = self.get_short_faction_name(player["name"])
+            faction = FactionData.artwork_name(player["name"])
             pop_path = f"images/resources/components/all_boards/popcube_{player['color']}.png"
             pop_image = self.use_image(pop_path)
             pop_image = pop_image.crop((32, 32, pop_image.width - 32, pop_image.height - 32))
@@ -712,7 +683,7 @@ class DrawHelper:
             if player is None:
                 continue
             border = 4
-            faction = self.get_short_faction_name(player["name"])
+            faction = FactionData.artwork_name(player["name"])
             pop_path = f"images/resources/components/all_boards/popcube_{player['color']}.png"
             pop_image = self.use_image(pop_path)
             pop_image = pop_image.crop((32, 32, pop_image.width - 32, pop_image.height - 32))
@@ -973,7 +944,7 @@ class DrawHelper:
 
     def player_area(self, player):
         
-        faction = self.get_short_faction_name(player["name"])
+        faction = FactionData.artwork_name(player["name"])
         context = Image.new("RGBA", (5000, 800), (0, 0, 0, 255))
         layout_path = f"images/resources/components/layouts/player_layout.png"
         layout_image = self.use_image(layout_path)
@@ -1210,7 +1181,7 @@ class DrawHelper:
             context.paste(alliance_image, (allianceX, 600), mask=alliance_image)
             allianceX += 130
 
-        faction = self.get_short_faction_name(player["name"])
+        faction = FactionData.artwork_name(player["name"])
         ships = ["int", "cru", "drd", "sb","orb"]
         stroke_color = (0, 0, 0)
         color = (255, 255, 255)
@@ -1371,7 +1342,7 @@ class DrawHelper:
         
 
     def player_area_old(self, player):
-        faction = self.get_short_faction_name(player["name"])
+        faction = FactionData.artwork_name(player["name"])
         filepath = "images/resources/components/factions/" + str(faction) + "_board.png"
         context = Image.new("RGBA", (1440, 625), (0, 0, 0, 255))
         board_image = self.use_image(filepath)

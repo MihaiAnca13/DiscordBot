@@ -134,8 +134,6 @@ class FakeGame:
             "draftedFactions": [],
         }
 
-    getShortFactionNameFromFull = GamestateHelper.getShortFactionNameFromFull
-
 
 def player_stats(faction, **overrides):
     """A faction's stats with the colour/identity fields the bot fills in at setup."""

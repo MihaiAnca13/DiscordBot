@@ -7,6 +7,7 @@ from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Population import PopulationButtons
 from Buttons.Research import ResearchButtons
 from helpers.EmojiHelper import Emoji
+from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
 from discord.ui import View, Button
 
@@ -77,9 +78,8 @@ class DraftButtons:
                              ("Terran Federation (Hydran)", "ter4"),
                              ("Terran Republic (Draco)", "ter5"),
                              ("Terran Union (Planta)", "ter6")]
-        communityFactions = [("Atlantians", "atl"),
-                             ("Remnants of Ra", "ra"),
-                             ("Techno-Mages", "tm")]
+        communityFactions = [(faction["name"], key) for key, faction in FactionData.FACTIONS.items()
+                             if faction.get("community")]
         communityFactionKeys = {key for faction, key in communityFactions}
         if game.gamestate.get("community_factions", False):
             factionsAvailable.extend(communityFactions)
@@ -97,7 +97,7 @@ class DraftButtons:
             shorterName = faction
             if "(" in faction:
                 shorterName = shorterName[:(faction.find("(")-1)]
-            shortFaction = game.getShortFactionNameFromFull(shorterName)
+            shortFaction = FactionData.artwork_name(shorterName)
             if "terran" in shortFaction:
                 shortFaction += "_"
             emoji = Emoji.getEmojiByName(shortFaction + "token")
@@ -136,33 +136,7 @@ class DraftButtons:
 
     @staticmethod
     def getColor(faction: str):
-        if faction == "ter6" or faction == "pla":
-            return "green"
-        if faction == "ter3" or faction == "eri":
-            return "red"
-        if faction == "ter1" or faction == "ori":
-            return "purple"
-        if faction == "ter2" or faction == "mec":
-            return "white"
-        if faction == "ter5" or faction == "dra":
-            return "yellow"
-        if faction == "ter4" or faction == "hyd":
-            return "blue"
-        if faction == "mag":
-            return "pink"
-        if faction == "lyr":
-            return "orange"
-        if faction == "rho":
-            return "brown"
-        if faction == "exl":
-            return "teal"
-        if faction == "atl":
-            return "blue"
-        if faction == "ra":
-            return "blue"
-        if faction == "tm":
-            return "purple"
-        return "green"
+        return FactionData.FACTIONS.get(faction, {}).get("setup_color", "green")
 
     @staticmethod
     async def generalSetup(interaction: discord.Interaction, game: GamestateHelper,
