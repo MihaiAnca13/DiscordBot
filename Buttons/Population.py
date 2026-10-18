@@ -1,6 +1,7 @@
 import asyncio
 import discord
 from helpers.GamestateHelper import GamestateHelper
+from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from discord.ui import View, Button
 
@@ -28,7 +29,7 @@ class PopulationButtons:
                     emptyPlanets.append(f"{tile}_orbital_0")
         allPlayerTechs = player["military_tech"] + player["grid_tech"] + player["nano_tech"]
         # Technology finds a Way: two colony ships reach an Advanced planet the techs do not unlock
-        finds_a_way = player.get("name") == "Techno-Mages" and player["colony_ships"] >= 2
+        finds_a_way = FactionData.has(player, "finds_a_way") and player["colony_ships"] >= 2
         if "met" not in allPlayerTechs:
             if "adl" not in allPlayerTechs and not finds_a_way:
                 emptyPlanets = [s for s in emptyPlanets if "scienceadv" not in s]
@@ -48,7 +49,7 @@ class PopulationButtons:
         techs = player["military_tech"] + player["grid_tech"] + player["nano_tech"]
         unlocking = {"scienceadv": ["adl"], "materialadv": ["adm"], "moneyadv": ["ade"],
                      "neutraladv": ["adl", "adm", "ade"]}.get(square)
-        return (player.get("name") == "Techno-Mages" and unlocking is not None and "met" not in techs
+        return (FactionData.has(player, "finds_a_way") and unlocking is not None and "met" not in techs
                 and not any(tech in techs for tech in unlocking))
 
     @staticmethod
@@ -157,7 +158,7 @@ class PopulationButtons:
     async def offerAncientsCube(game: GamestateHelper, player, interaction: discord.Interaction, tile: str):
         """Remnants of Ra: Power of the Ancients puts a cube on the influence disc of an artifact sector."""
         tileState = game.gamestate["board"][tile]
-        if player.get("name") != "Remnants of Ra" or not tileState.get("artifact"):
+        if not FactionData.has(player, "artifact_disc_pop") or not tileState.get("artifact"):
             return
         if tileState.get("disc_pop", [0])[0]:
             return

@@ -13,8 +13,13 @@ BY_NAME = {faction["name"]: faction for faction in FACTIONS.values()}
 
 
 def of(player):
-    """The faction row a player belongs to."""
-    return BY_NAME.get(player["name"], player)
+    """The faction row for a player: the player's own copy wins, the file fills in what a save predates."""
+    if not player:
+        return {}
+    row = BY_NAME.get(player.get("name"))
+    if row is None:
+        return player
+    return {**row, **player}
 
 
 def has(player, ability):

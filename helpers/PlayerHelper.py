@@ -1,5 +1,6 @@
 import json
 
+from helpers import FactionData
 from helpers.EmojiHelper import Emoji
 
 
@@ -17,7 +18,7 @@ class PlayerHelper:
 
     @staticmethod
     def is_reputation_only_slot(player, index):
-        return player["name"] == "Atlantians" and index < 2
+        return index in FactionData.of(player).get("reputation_only_slots", [])
 
     @staticmethod
     def has_reputation_slot_for_relation(player):
@@ -181,10 +182,11 @@ class PlayerHelper:
         cost_type = {"orb": "orbital", "mon": "monolith"}.get(ship_type, ship_type)
         if base_cost is None:
             base_cost = player[f"cost_{cost_type}"]
-        if player.get("name") != "Atlantians":
+        per_part = FactionData.of(player).get("discovery_part_ship_cost", 0)
+        if not per_part:
             return base_cost
         discovery_parts = PlayerHelper.installed_discovery_part_count(player, ship_type)
-        return base_cost + max(0, discovery_parts - 1)
+        return base_cost + per_part * max(0, discovery_parts - 1)
 
     def passTurn(self, passed: bool):
         self.stats["passed"] = passed

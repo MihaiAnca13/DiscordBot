@@ -69,10 +69,12 @@ class ResearchButtons:
                 return
             msg = player_helper.adjust_science(-paid)
             game.update_player(player_helper)
-            if player["name"] == "Rho Indi Syndicate":
+            money_ratio = FactionData.of(player).get("money_trade_ratio", 1)
+            if money_ratio > 1:
                 await interaction.channel.send(f"Attempted to pay a cost of {str(cost)}{msg}.\n"
                                                "Please pay the rest of the cost by trading other resources "
-                                               "at your materials ratio of 3:1 or your money ratio of 3:2.")
+                                               f"at your materials ratio of {trade_value}:1 or your money"
+                                               f" ratio of {trade_value}:{money_ratio}.")
             else:
                 await interaction.channel.send(f"Attempted to pay a cost of {str(cost)}{msg}.\n"
                                                "Please pay the rest of the cost by trading other resources"
@@ -123,7 +125,7 @@ class ResearchButtons:
     @staticmethod
     async def offerSetupTech(game: GamestateHelper, player, interaction: discord.Interaction):
         """Techno-Mages may spend part of their initial science on one technology before the game begins."""
-        if player.get("name") != "Techno-Mages":
+        if not FactionData.has(player, "setup_tech"):
             return
         view = View()
         view.add_item(Button(label="Buy 1 Technology", style=discord.ButtonStyle.blurple,
@@ -133,7 +135,7 @@ class ResearchButtons:
 
     @staticmethod
     async def offerAncientInstinctUpgrade(player, interaction: discord.Interaction, tech: str, tech_details):
-        if player["name"] != "Atlantians":
+        if not FactionData.has(player, "upgrade_after_research"):
             return
         with open("data/parts.json", "r") as f:
             if tech not in json.load(f):
@@ -178,8 +180,7 @@ class ResearchButtons:
         if player["colony_ships"] > 0 and FactionData.has(player, "colony_ship_resources"):
             extra += player["colony_ships"]
         money_value = player["money"] // player["trade_value"]
-        if player["name"] == "Rho Indi Syndicate":
-            money_value *= 2
+        money_value *= FactionData.of(player).get("money_trade_ratio", 1)
 
         return player["science"] + money_value + (player["materials"] // player["trade_value"]) + extra
 
@@ -246,11 +247,14 @@ class ResearchButtons:
                                               emoji=Emoji.getEmojiByName(techName),
                                               custom_id=f"FCID{player['color']}_getTech_{tech}_{tech_type}"))
                     buttonCount += 1
-        if player["name"] == "Rho Indi Syndicate":
+        money_ratio = FactionData.of(player).get("money_trade_ratio", 1)
+        if money_ratio > 1:
             await interaction.channel.send(f"{player['player_name']}, select the tech you would like to acquire. "
                                            "The discounted cost is in parentheses. You currently have "
-                                           f"{str(player['science'])} science, and can trade materials at a 3:1 "
-                                           "ratio or money at 3:2 ratio.", view=view)
+                                           f"{str(player['science'])} science, and can trade materials at a "
+                                           f"{player['trade_value']}:1 ratio or money at "
+                                           f"{player['trade_value']}:{money_ratio} ratio.",
+                                           view=view)
         else:
             await interaction.channel.send(f"{player['player_name']}, select the tech you would like to acquire. "
                                            "The discounted cost is in parentheses. "

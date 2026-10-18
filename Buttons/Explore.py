@@ -1,6 +1,7 @@
 import asyncio
 import discord
 from Buttons.DiscoveryTile import DiscoveryTileButtons
+from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
 from helpers.PlayerHelper import PlayerHelper
 from helpers.DrawHelper import DrawHelper
@@ -21,6 +22,7 @@ class ExploreButtons:
 
     @staticmethod
     def doesPlayerHaveUnpinnedShips(player, playerShips, game, tile):
+        from helpers.CombatHelper import Combat
         player_helper = PlayerHelper(game.get_player_from_color(player['color']), player)
         playerShipsCount = 0
         alliedShips = 0
@@ -40,16 +42,12 @@ class ExploreButtons:
                     if "orb" in ship:
                         
                         if game.gamestate["board"][tile]["owner"] != player["color"]:
-                            color = game.gamestate["board"][tile]["owner"]
-                            if all([game.find_player_faction_name_from_color(color) == "The Exiles",
-                                    game.gamestate["board"][tile].get("orbital_pop", [0])[0] == 1]):
+                            if Combat.exile_orbital_exists(game, tile):
                                 opponentShips += 1
                         else:
-                            color = player["color"]
-                            if all([game.find_player_faction_name_from_color(color) == "The Exiles",
-                                    game.gamestate["board"][tile].get("orbital_pop", [0])[0] == 1]):
+                            if Combat.exile_orbital_exists(game, tile):
                                 playerShipsCount += 1
-                    elif "anc" not in ship or "Draco" not in player["name"]:
+                    elif "anc" not in ship or FactionData.has(player, "may_not_fight_ancients"):
                         opponentShips = opponentShips + 1
         researchedTechs = player_helper.getTechs()
         if "clo" in researchedTechs or "cld" in researchedTechs:
@@ -132,7 +130,7 @@ class ExploreButtons:
             game.tile_discard(msg[3])
         else:
             tileID = game.tile_draw(msg[1])
-            if player["name"] == "Descendants of Draco":
+            if FactionData.has(player, "two_sector_choices"):
                 ring = min(3, int(msg[1]) // 100)
                 discard = 0
                 if "tile_discard_deck_300" in game.gamestate:
@@ -175,7 +173,8 @@ class ExploreButtons:
         view2 = View()
         game.update_player(player_helper)
         await interaction.channel.send(f"Tile added to position {msg[1]}")
-        if game.gamestate["board"][msg[1]]["ancient"] == 0 or player["name"] == "Descendants of Draco":
+        if (game.gamestate["board"][msg[1]]["ancient"] == 0
+                or FactionData.has(player, "may_not_fight_ancients")):
             view = View()
             if "bh" in game.gamestate["board"][msg[1]].get("type", ""):
                 await interaction.channel.send("This is a black hole tile, "

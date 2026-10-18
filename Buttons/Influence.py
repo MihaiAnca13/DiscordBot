@@ -4,6 +4,7 @@ from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Explore import ExploreButtons
 from Buttons.Population import PopulationButtons
 from Buttons.Turn import TurnButtons
+from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from helpers.GamestateHelper import GamestateHelper
 from helpers.PlayerHelper import PlayerHelper
@@ -120,7 +121,7 @@ class InfluenceButtons:
                         ExploreButtons.doesPlayerHaveUnpinnedShips(player, playerShips, game, tile)]):
                     if any("ai" in s for s in playerShips):
                         if any("anc" in s for s in playerShips):
-                            if "Draco" not in player["name"]:
+                            if not FactionData.has(player, "may_not_fight_ancients"):
                                 continue
                         else:
                             continue
@@ -156,12 +157,10 @@ class InfluenceButtons:
         if len(InfluenceButtons.getTilesToInfluence(game, p1)) > 0:
             view.add_item(Button(label="Add  Influence", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{p1['color']}_addInfluenceStart"))
-        if "Magellan" in p1["name"] or p1["name"] in ("Remnants of Ra", "Techno-Mages"):
-            view.add_item(Button(label="Refresh 1 Colony Ship", style=discord.ButtonStyle.blurple,
-                                 custom_id=f"FCID{p1['color']}_refreshPopShips"))
-        else:
-            view.add_item(Button(label="Refresh 2 Colony Ships", style=discord.ButtonStyle.blurple,
-                                 custom_id=f"FCID{p1['color']}_refreshPopShips"))
+        colony_ships = FactionData.of(p1).get("influence_colony_ships", 2)
+        view.add_item(Button(label=f"Refresh {colony_ships} Colony Ship{'s' if colony_ships > 1 else ''}",
+                             style=discord.ButtonStyle.blurple,
+                             custom_id=f"FCID{p1['color']}_refreshPopShips"))
         view.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{p1['color']}_startPopDrop"))
         view.add_item(Button(label="Conclude Influence Action", style=discord.ButtonStyle.red,
@@ -210,10 +209,8 @@ class InfluenceButtons:
 
     @staticmethod
     async def refreshPopShips(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str):
-        if "Magellan" in player["name"] or player["name"] in ("Remnants of Ra", "Techno-Mages"):
-            numShips = game.refresh_one_colony_ship(game.get_player_from_color(player["color"]))
-        else:
-            numShips = game.refresh_two_colony_ships(game.get_player_from_color(player["color"]))
+        count = FactionData.of(player).get("influence_colony_ships", 2)
+        numShips = game.refresh_colony_ships(game.get_player_from_color(player["color"]), count)
         view = View.from_message(interaction.message)
         for button in view.children:
             if buttonID in button.custom_id:

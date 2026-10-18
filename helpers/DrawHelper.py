@@ -358,9 +358,10 @@ class DrawHelper:
                         if ship_type == "orb":
                             size = int(110 * mult)
                             if ship_tile["owner"] != 0:
-                                if all([self.getPlayerObjectFromColor(ship_tile["owner"])['name'] == "The Exiles",
-                                            ship_tile.get("orbital_pop", [0])[0] == 1]):
-                                    ship = "exile_orb"
+                                owner = self.getPlayerObjectFromColor(ship_tile["owner"])
+                                if all([FactionData.has(owner, "orbital_pop_ships"),
+                                        ship_tile.get("orbital_pop", [0])[0] == 1]):
+                                    ship = f"{FactionData.artwork_name(owner['name'])}_orb"
                                 
                     filepathShip = f"images/resources/components/fancy_ships/fancy_{ship}.png"
                     if self.gamestate.get("fancy_ships") and os.path.exists(filepathShip):
@@ -1111,12 +1112,8 @@ class DrawHelper:
                                              stroke_width=stroke_width, stroke_fill=stroke_color)
         font = ImageFont.truetype("images/resources/arial.ttf", size=35)
         # the colony ships one Influence action may flip (Buttons/Influence.py)
-        if "magellan" in faction or faction in ("ra", "tm"):
-            text_drawable_image.text((618, 417), f"1", color, font=font,
-                                             stroke_width=stroke_width, stroke_fill=stroke_color)
-        else:
-            text_drawable_image.text((618, 417), f"2", color, font=font,
-                                             stroke_width=stroke_width, stroke_fill=stroke_color)
+        text_drawable_image.text((618, 417), f"{FactionData.of(player).get('influence_colony_ships', 2)}",
+                                 color, font=font, stroke_width=stroke_width, stroke_fill=stroke_color)
             
 
 
@@ -1608,13 +1605,14 @@ class DrawHelper:
         points = 0
         tile_map = self.gamestate["board"]
         color = player["color"]
+        vp = FactionData.of(player)
         for tile in tile_map:
             if tile_map[tile].get("owner") == color:
                 points += tile_map[tile]["vp"]
-                if "Lyra" in player["name"] and "shrines" in tile_map[tile]:
-                    points += tile_map[tile]["shrines"]
-                if player["name"] == "The Exiles" and tile_map[tile].get("orbital_pop", [0])[0] == 1:
-                    points += 1
+                if "shrines" in tile_map[tile]:
+                    points += vp.get("vp_per_shrine", 0) * tile_map[tile]["shrines"]
+                if tile_map[tile].get("orbital_pop", [0])[0] == 1:
+                    points += vp.get("vp_per_orbital_pop", 0)
                 if "warpPoint" in tile_map[tile]:
                     points += tile_map[tile]["warpPoint"]
                 if "warpDisc" in tile_map[tile]:
@@ -1626,14 +1624,13 @@ class DrawHelper:
                     for ship in tile_map[tile]["player_ships"]:
                         if "mon" in ship:
                             points += 3
-                if player["name"] == "Planta":
-                    points += 1
-                if player["name"] == "Remnants of Ra" and tile_map[tile]["artifact"] == 1:
-                    points += 1
-            if player["name"] == "Descendants of Draco" and "player_ships" in tile_map[tile]:
+                points += vp.get("vp_per_owned_tile", 0)
+                if tile_map[tile]["artifact"] == 1:
+                    points += vp.get("vp_per_artifact_tile", 0)
+            if vp.get("vp_per_ancient_ship") and "player_ships" in tile_map[tile]:
                 for ship in tile_map[tile]["player_ships"]:
                     if "anc" in ship:
-                        points += 1
+                        points += vp["vp_per_ancient_ship"]
         techTypes = ["military_tech", "grid_tech", "nano_tech"]
         for tType in techTypes:
             if len(player.get(tType, [])) > 3:
@@ -1643,8 +1640,7 @@ class DrawHelper:
                     points += len(player[tType]) - 3
         if "disc_tiles_for_points" in player:
             points += player["disc_tiles_for_points"] * 2
-        if player["name"] == "Atlantians":
-            points += PlayerHelper.installed_discovery_part_count(player)
+        points += vp.get("discovery_part_vp", 0) * PlayerHelper.installed_discovery_part_count(player)
         reputationPoints = 0
         ambass = 0
         repu = 0
@@ -1681,11 +1677,8 @@ class DrawHelper:
             # A faceup Alliance Tile is worth 2 VP, a Betrayer tile costs 3. Rho Indi
             # gets no exemption here, unlike the Traitor Card.
             points += -3 if betrayed else 2
-        if player.get("traitor"):
-            if player["name"] == "Rho Indi Syndicate":
-                pass
-            else:
-                points -= 2
+        if player.get("traitor") and not FactionData.has(player, "no_traitor_vp_penalty"):
+            points -= 2
         return points
 
     def show_game(self):

@@ -24,13 +24,13 @@ class FakeGame:
 
 
 @pytest.mark.parametrize("faction, tech, offered", [
-    ("Atlantians", "tad", True),
-    ("Atlantians", "wog", False),  # researchable, but not a ship part
-    ("Hydran Progress", "tad", False),
+    ("atl", "tad", True),
+    ("atl", "wog", False),  # researchable, but not a ship part
+    ("hyd", "tad", False),
 ])
 def test_ancient_instinct_offers_upgrade_for_researched_part(run, monkeypatch, faction, tech, offered):
     monkeypatch.setattr(DrawHelper, "show_tech_ref_image", lambda *args: None)
-    player = player_stats("atl", name=faction, science=20)
+    player = player_stats(faction, science=20)
     interaction = FakeInteraction()
 
     run(ResearchButtons.getTech(FakeGame(player), player, PlayerHelper("1", player), interaction,

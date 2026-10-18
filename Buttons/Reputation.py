@@ -2,6 +2,7 @@
 import asyncio
 import random
 import discord
+from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
 from helpers.PlayerHelper import PlayerHelper
 
@@ -30,12 +31,11 @@ class ReputationButtons:
                 opt = randomList.pop()
                 opts += " " + str(opt)
                 highest = max(opt, highest)
-        if player_helper.stats["name"] == "Rho Indi Syndicate":
-            player_helper.stats["money"] += (amount_of_options - 1)
-            msg = (f"{player_helper.stats['player_name']}, you drew the tiles{opts} and selected {str(highest)}. You "
-                   f"also gained {(amount_of_options - 1)} money.")
-        else:
-            msg = f"{player_helper.stats['player_name']}, you drew the tiles{opts} and selected {str(highest)}."
+        gained = FactionData.of(player_helper.stats).get("reputation_draw_money", 0) * (amount_of_options - 1)
+        msg = f"{player_helper.stats['player_name']}, you drew the tiles{opts} and selected {str(highest)}."
+        if gained:
+            player_helper.stats["money"] += gained
+            msg += f" You also gained {gained} money."
 
         found = False
         for x, tile in enumerate(player_helper.stats["reputation_track"]):

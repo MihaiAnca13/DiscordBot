@@ -7,6 +7,7 @@ from Buttons.Influence import InfluenceButtons
 from Buttons.Population import PopulationButtons
 from Buttons.Reputation import ReputationButtons
 from Buttons.Upgrade import UpgradeButtons
+from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from helpers.EmojiHelper import Emoji
 from helpers.GamestateHelper import GamestateHelper
@@ -18,8 +19,12 @@ from jproperties import Properties
 class Combat:
     @staticmethod
     def exile_orbital_exists(game: GamestateHelper, pos):
-        return all([game.find_player_faction_name_from_color(game.gamestate["board"][pos]["owner"]) == "The Exiles",
-                    game.gamestate["board"][pos].get("orbital_pop", [0])[0] == 1])
+        """A faction whose Orbitals count as Ships while they carry a Population Cube."""
+        tile = game.gamestate["board"][pos]
+        owner = game.getPlayerObjectFromColor(tile.get("owner"))
+        return all([owner is not None,
+                    tile.get("orbital_pop", [0])[0] == 1,
+                    FactionData.has(owner, "orbital_pop_ships")])
 
     @staticmethod
     def findPlayersInTile(game: GamestateHelper, pos: str):
@@ -57,7 +62,8 @@ class Combat:
             for ancients, other in ((0, 1), (1, 0)):
                 if "ai" in sides[ancients]:
                     allies = [color for color in sides[other]
-                              if "Draco" not in game.find_player_faction_name_from_color(color)]
+                              if not FactionData.has(game.getPlayerObjectFromColor(color),
+                                                     "may_not_fight_ancients")]
                     if allies:
                         sides[other] = allies
         return sides
@@ -67,7 +73,8 @@ class Combat:
         """FAQ: with nobody but Ancients left in the sector, Draco does not fight."""
         players = Combat.findPlayersInTile(game, pos)
         return (len(players) == 2 and "anc" in Combat.findShipTypesInTile(game, pos)
-                and any("Draco" in game.find_player_faction_name_from_color(color) for color in players))
+                and any(FactionData.has(game.getPlayerObjectFromColor(color), "may_not_fight_ancients")
+                        for color in players))
 
     @staticmethod
     def findSidesInTile(game: GamestateHelper, pos: str):
@@ -92,8 +99,7 @@ class Combat:
         player_ships = tile_map[pos]["player_ships"][:]
         ships = []
         for ship in player_ships:
-            if all([game.find_player_faction_name_from_color(tile_map[pos]["owner"]) == "The Exiles",
-                    tile_map[pos].get("orbital_pop", [0])[0] == 1]):
+            if Combat.exile_orbital_exists(game, pos):
                 pass
             elif "orb" in ship or "mon" in ship:
                 continue
@@ -228,7 +234,7 @@ class Combat:
             p2 = game.getPlayerObjectFromColor(owner)
             player_helper = PlayerHelper(game.get_player_from_color(playerColor), player)
             player_helper2 = PlayerHelper(game.get_player_from_color(p2["color"]), p2)
-            if any([p2["name"] == "Planta",
+            if any([FactionData.has(p2, "population_destroyed_in_combat"),
                     game.is_population_gone(pos),
                     "neb" in player_helper.getTechs() and "nea" not in player_helper2.getTechs()]):
                 view = View()
@@ -1128,7 +1134,7 @@ class Combat:
                                " was cancelled by the shields on each of the opponents ships.")
                     await interaction.channel.send(message)
                 if len(hittableShips) == 0 or oldNumPeeps > len(Combat.findPlayersInTile(game, pos)):
-                    if all(["Lyra" in player["name"],
+                    if all([FactionData.has(player, "reroll_dice_with_colony_ships"),
                             player["colony_ships"] > 0,
                             oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
                         viewLyr = View()
@@ -1149,7 +1155,7 @@ class Combat:
                 shipType = pendingDice.pop(dieId)
                 game.update()
                 if all([player is not None,
-                                        "Lyra" in player["name"],
+                                        FactionData.has(player, "reroll_dice_with_colony_ships"),
                                         player["colony_ships"] > 0,
                                     oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
                         viewLyr = View()
@@ -1404,7 +1410,7 @@ class Combat:
         for tile in playerObj["owned_tiles"]:
             players = Combat.findPlayersInTile(game, tile)
             if InfluenceButtons.areTwoTilesAdjacent(game, pos, tile, configs, wormHoleGen):
-                if "Draco" not in player_helper.stats["name"]:
+                if not FactionData.has(player_helper.stats, "may_not_fight_ancients"):
                     if any(player != color and not game.areAllied(color, player)
                            for player in players):
                         continue
@@ -1462,7 +1468,7 @@ class Combat:
             if color == "ai":
                 continue
             player = game.getPlayerObjectFromColor(color)
-            if player["name"] != "Techno-Mages":
+            if not FactionData.has(player, "techno_magic"):
                 continue
             view = View()
             for ship in game.getShipsWithParts(player):
@@ -1642,7 +1648,8 @@ class Combat:
                 p2 = game.getPlayerObjectFromColor(owner)
                 player_helper = PlayerHelper(game.get_player_from_color(player["color"]), player)
                 player_helper2 = PlayerHelper(game.get_player_from_color(p2["color"]), p2)
-                if (p2["name"] == "Planta" or game.is_population_gone(pos) or ("neb" in player_helper.getTechs() and "nea" not in player_helper2.getTechs())):
+                if (FactionData.has(p2, "population_destroyed_in_combat") or game.is_population_gone(pos)
+                        or ("neb" in player_helper.getTechs() and "nea" not in player_helper2.getTechs())):
                     if Combat.discoveryTileClaimable(game, pos):
                         await Combat.offerDiscoveryTile(game, interaction.channel, pos, winner)
                     view = View()
@@ -1663,7 +1670,8 @@ class Combat:
                                " you may use this to drop population after taking control of the sector.")
                     asyncio.create_task(interaction.channel.send(message, view=view3))
                 else:
-                    if p2["name"] == "Descendants of Draco" and game.gamestate["board"][pos]["disctile"] != 0:
+                    if (FactionData.has(p2, "may_not_fight_ancients")
+                            and game.gamestate["board"][pos]["disctile"] != 0):
                         await interaction.channel.send("**REMINDER: Do not resolve the discovery tile until bombing "
                                                        "population has been resolved. If Draco still controls the "
                                                        "sector afterwards, they will gain the discovery tile at the "

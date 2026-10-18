@@ -326,11 +326,6 @@ class GamestateHelper:
         return [ship for ship in ("interceptor", "cruiser", "dread", "starbase", "orb")
                 if FactionData.of(player).get(f"{ship}_parts")]
 
-    def find_player_faction_name_from_color(self, color):
-        if color == "ai" or self.get_player_from_color(color) == color:
-            return color
-        return self.gamestate["players"][self.get_player_from_color(color)]["name"]
-
     def rotate_tile(self, position, orientation):
         tile = self.gamestate["board"][position]
         tile.update({"orientation": (tile["orientation"] + orientation) % 360})
@@ -808,17 +803,9 @@ class GamestateHelper:
             else:
                 tileCount = tileCount + 1
 
-    def refresh_two_colony_ships(self,  playerID):
+    def refresh_colony_ships(self, playerID, count):
         # "base_colony_ships"
-        minNum = min(self.gamestate["players"][playerID]["colony_ships"] + 2,
-                     self.gamestate["players"][playerID]["base_colony_ships"])
-        self.gamestate["players"][playerID]["colony_ships"] = minNum
-        self.update()
-        return minNum
-
-    def refresh_one_colony_ship(self,  playerID):
-        # "base_colony_ships"
-        minNum = min(self.gamestate["players"][playerID]["colony_ships"] + 1,
+        minNum = min(self.gamestate["players"][playerID]["colony_ships"] + count,
                      self.gamestate["players"][playerID]["base_colony_ships"])
         self.gamestate["players"][playerID]["colony_ships"] = minNum
         self.update()
@@ -1055,7 +1042,7 @@ class GamestateHelper:
                 for ship in FactionData.of(p1.stats).get("starting_ships", ["int"]):
                     self.gamestate["board"][home]["player_ships"].append(f"{p1.stats['color']}-{ship}")
 
-                if p1.stats["name"] == "Eridani Empire":
+                if FactionData.has(p1.stats, "setup_reputation_tiles"):
                     random.shuffle(self.gamestate["reputation_tiles"])
                     p1.stats["reputation_track"][0] = self.gamestate["reputation_tiles"].pop(0)
                     p1.stats["reputation_track"][1] = self.gamestate["reputation_tiles"].pop(0)

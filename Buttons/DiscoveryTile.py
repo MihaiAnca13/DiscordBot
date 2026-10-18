@@ -4,13 +4,14 @@ import discord
 from Buttons.Upgrade import UpgradeButtons
 from helpers.GamestateHelper import GamestateHelper
 from helpers.PlayerHelper import PlayerHelper
+from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from discord.ui import View, Button
 
 
 class DiscoveryTileButtons:
     @staticmethod
-    def drawAtlantiansDiscoveryChoices(game: GamestateHelper, tile: str):
+    def drawDiscoveryChoices(game: GamestateHelper, tile: str):
         """Draw two choices, removing Material Gain and Ancient Cruiser from the deck."""
         choices = []
         is_nebula = game.gamestate["board"][tile].get("type", "") == "nebula"
@@ -50,9 +51,9 @@ class DiscoveryTileButtons:
         if game.gamestate["board"][tile]["disctile"] == 0:
             await interaction.followup.send("No discovery tile in tile " + tile)
             return
-        if player.get("name") == "Atlantians":
+        if FactionData.has(player, "two_discovery_choices"):
             # identical draws collapse to one choice
-            choices = list(dict.fromkeys(DiscoveryTileButtons.drawAtlantiansDiscoveryChoices(game, tile)))
+            choices = list(dict.fromkeys(DiscoveryTileButtons.drawDiscoveryChoices(game, tile)))
             if not choices:
                 await interaction.channel.send("No eligible discovery tiles remain in the deck.")
                 return
