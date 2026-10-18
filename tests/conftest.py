@@ -17,6 +17,12 @@ import random
 import pytest
 
 import config
+from helpers import CombatHelper
+from helpers.CombatHelper import Combat
+from helpers.GamestateHelper import GamestateHelper
+from listeners.ButtonListener import ButtonListener
+from setup.GameInit import GameInit
+from tests.fakes import FakeChannel, FakeInteraction
 
 
 @pytest.fixture
@@ -31,48 +37,47 @@ def games_dir(tmp_path, monkeypatch):
 @pytest.fixture
 def make_game(games_dir):
     """Write a gamestate dict to a temp file and return a GamestateHelper for it."""
-    from helpers.GamestateHelper import GamestateHelper
-
-    def _make(gamestate, game_id="t"):
+    def make(gamestate, game_id="t"):
         gamestate.setdefault("game_id", game_id)
         with open(games_dir / f"{game_id}.json", "w") as f:
             json.dump(gamestate, f)
         return GamestateHelper(None, game_id)
 
-    return _make
+    return make
 
 
 @pytest.fixture
 def no_random(monkeypatch):
     """Replace random.randint with a queue of canned rolls."""
-    from helpers import CombatHelper
-
-    def _use(values):
+    def use(values):
         dice = iter(values)
         monkeypatch.setattr(CombatHelper.random, "randint", lambda a, b: next(dice))
 
-    return _use
+    return use
 
 
 @pytest.fixture
 def quiet_combat(monkeypatch):
     """Keep combat resolution off Discord and off the filesystem."""
-    from helpers import CombatHelper
-    from helpers.CombatHelper import Combat
-
-    async def _noop(*args, **kwargs):
+    async def noop(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(Combat, "startCombat", staticmethod(_noop))
+    monkeypatch.setattr(Combat, "startCombat", staticmethod(noop))
     monkeypatch.setattr(CombatHelper, "DrawHelper", lambda *a, **k: None)
 
 
 @pytest.fixture
 def run():
-    """Await a coroutine and flush its create_task side effects."""
-    from tests.fakes import drain
-
-    return lambda coro: asyncio.run(drain(coro))
+    """Await a coroutine and all background tasks it starts."""
+    def run_coroutine(coro):
+        async def await_tasks():
+            result = await coro
+            current_task = asyncio.current_task()
+            while tasks := asyncio.all_tasks() - {current_task}:
+                await asyncio.gather(*tasks)
+            return result
+        return asyncio.run(await_tasks())
+    return run_coroutine
 
 
 @pytest.fixture
