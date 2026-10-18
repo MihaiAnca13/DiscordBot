@@ -4,6 +4,7 @@ from Buttons.Build import BuildButtons
 from Buttons.Research import ResearchButtons
 from helpers import FactionData
 from helpers.CombatHelper import Combat
+from helpers.DrawHelper import DrawHelper
 from tests.fakes import FakeInteraction, POS, player_stats
 
 
@@ -73,3 +74,19 @@ def test_only_the_draco_data_gives_a_pass_against_the_ancients(make_game):
     assert Combat.isDracoAgainstAncients(draco, POS)
     assert not Combat.isDracoAgainstAncients(
         _tile_game(make_game, "hyd", player_ships=["blue-int", "ai-anc"]), POS)
+
+
+def test_end_game_points_come_from_the_faction_data(make_game):
+    def points(faction, **tile):
+        stats = player_stats(faction, color="blue")
+        board_tile = {"sector": 101, "vp": 2, "owner": "blue", "artifact": 0, "player_ships": []}
+        board_tile.update(tile)
+        game = make_game({"players": {"1": stats}, "board": {POS: board_tile}})
+        return DrawHelper(game.gamestate).get_public_points(stats, False)
+
+    assert points("hyd") == 2
+    assert points("pla") == 3
+    assert points("ra", artifact=1) == 3
+    assert points("exl", orbital_pop=[1]) == 3
+    assert points("lyr", shrines=2) == 4
+    assert points("dra", player_ships=["blue-int", "ai-anc"]) == 3
