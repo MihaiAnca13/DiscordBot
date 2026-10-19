@@ -467,6 +467,91 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              " may only flip 1 Colony Ship with an Influence action."])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "tm_board.png"))
 
+        message = "\n".join(["# The Wulfen",
+                             "- **Spine Cannons:** Each ship has two dedicated Spine Cannon slots. The"
+                             " Cannon Slot fires normally; the Augment Slot's weapon does not fire, but"
+                             " before firing each turn choose +X to Hit or +X Damage, where X is that"
+                             " weapon's damage. Spine slots hold guns only (no Missiles or Rift weapons).",
+                             "- **Wolf Pack:** 3 Move activations. Anytime you roll a 6, convert a miss from"
+                             " the same attack pool into a Hit, or save a reroll for a ship firing later"
+                             " in the round.",
+                             "- No Interceptors. Cruisers: 6 maximum, one fewer ship part slot, cost 4.",
+                             "- Start with Fusion Source in the Grid tech track.",
+                             "- 5 reputation slots (2 can hold ambassadors).",
+                             "- Home sector Lupis (252)."])
+        await factionThread.send(message, file=drawing.get_file(boardPrefix + "wulfen_board.png"))
+
+        message = "\n".join(["# Turtugan",
+                             "- **Deep Space Explorers:** At the start of the game place 2 extra S3 sectors"
+                             " near your faction board. You may explore these at any time during the game,"
+                             " placing them in any available S3 sector you could explore.",
+                             "- **Harvesters:** Starbases are Harvesters, which can move, and at the end of"
+                             " any Turn can be placed over an unsettled planet in the sector they are in,"
+                             " generating 1 resource of any type that planet could generate (including"
+                             " Advanced Planets you could not otherwise populate). With each Explore action"
+                             " you may move a Harvester 1 activation. Harvester may not remove its Drive.",
+                             "- **Carapace Shields:** At the start of any combat or engagement round you may"
+                             " engage or disengage Carapace Shields for any class of ship in the battle."
+                             " Once engaged, that ship gets the following: -1 Damage from all its weapons"
+                             " (Min = 0); -1 Damage from all successful attacks against it (Min=1)."
+                             " Missiles may instead get -1 to Hit (attacker's choice).",
+                             "- Start with a Harvester (Starbase) instead of an Interceptor.",
+                             "- Modified ship designs: Slower, offboard Hull & Computer.",
+                             "- Initial Technology: Starbase."])
+        await factionThread.send(message, file=drawing.get_file(boardPrefix + "turtugan_board.png"))
+
+        message = "\n".join(["# Kurita Prefecture",
+                             "- Start with Phase Shields, 3 Colony Ships, and 2 Money / 3 Science / 4 Materials.",
+                             "- **Honour your enemy with the first shot:** Your opponents take their missile round"
+                             " & first engagement round BEFORE you shoot. Then you take your missile round &"
+                             " first engagement round. From the 2nd engagement round onwards normal speed rules apply.",
+                             "- **Honour the Victorious, Fight to the Death:**",
+                             "  - +1 to Battle Rep score for winning battles"
+                             " (a 2-value tile is 3 VP if you win, 1 if you lost). Place a Dmg Cube next to the"
+                             " Battle Rep tile if it was a win.",
+                             "  - -1 to Battle Rep score for losing battles.",
+                             "  - If you retreat any ship you do not draw Battle Reputation at all, regardless of"
+                             " ships destroyed.",
+                             "  - The Traitor card is worth -4 VPs.",
+                             "- **Elite Warriors:** +1 to Hit off-board on all ships.",
+                             "- **Ships:** Starbases have an extra Hull.",
+                             "- Standard trade (3:1). Home system Edo (#251)."])
+        await factionThread.send(message, file=drawing.get_file(boardPrefix + "kurita_board.png"))
+
+        message = "\n".join(["# Heralds of Ragnarok",
+                             "- Start with Neutron Bombs in the Military Tech track.",
+                             "- Start with a Cruiser in your starting sector instead of an Interceptor.",
+                             "- **Raid:** Move actions include a build activation.",
+                             "- **Regroup:** Build actions include a move activation.",
+                             "- **Interceptor:** Cost 4 Materials instead of 3. One additional blueprint slot"
+                             " containing a Hull. Initiative bonus 1 instead of 2.",
+                             "- **Cruiser:** Cost 4 Materials instead of 5. One less Hull blueprint slot."
+                             " Initiative bonus 2 instead of 1.",
+                             "- 5 reputation slots: 1 ambassador-only, 2 mixed, 2 reputation-only."])
+        await factionThread.send(message, file=drawing.get_file(boardPrefix + "heralds_board.png"))
+
+        message = "\n".join(["# The Wraith",
+                             "- Start with **Phase Module** in the Military Tech track.",
+                             "- **Phase Technology:** You may swap subsequent Build activations for Upgrade"
+                             " activations during any Build Action (you may swap all but the first).",
+                             "- **Ghosts:** The Wraith may retreat immediately when it is their turn to fire"
+                             " (there is no extra round of shooting).",
+                             "- **Soul-Hunters:** Wraith capture the souls of planets they attack. To use Neutron Bombs"
+                             " you must research and then pay 2 Power using the Phase Module. You get +1 offboard"
+                             " power and +1 VP per sector you destroy with enemy population cubes in it (increment"
+                             " the Dice on your faction board). It does not matter if you do not settle the sector"
+                             " or lose it later.",
+                             "- **Phase Module:** This is built into all your ships, and you use it for a range of"
+                             " benefits, limited by how much Power you have: **Always:** Cloaking Device;"
+                             " **for 1 Power each:** +1 to Hit, +1 Shield; **for 2 Power:** Neutron Bombs if"
+                             " researched, +2 Initiative; **for 3 Power:** Ignore Shields. Declare options at the"
+                             " start of each combat per blueprint.",
+                             "- **Ships:** +1 Cost, Phase Module. The board prints 1 Diplomat, 1 INF activation and"
+                             " 2 colony ships flipped per Influence action.",
+                             "- The board prints home sector 226; the bot uses the free sector 254"
+                             " (225 is the Terran Union home and 226 is the Planta home)."])
+        await factionThread.send(message, file=drawing.get_file(boardPrefix + "wraith_board.png"))
+
         message = "\n".join(["Rift Reference"])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "Rift_Reference.png"))
 
