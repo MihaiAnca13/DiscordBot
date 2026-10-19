@@ -112,6 +112,9 @@ class MoveButtons:
         if ship_filter == "sb":
             shipTypes = ["starbase"]
         for shipType in shipTypes:
+            key = {"dreadnought": "dread"}.get(shipType, shipType)
+            if not player.get(f"{key}_parts"):
+                continue
             player_color = player["color"]
             ship = PlayerShip(player, shipType)
             shipRange = ship.getRange()

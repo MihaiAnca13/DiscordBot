@@ -14,7 +14,7 @@ def test_heralds_only_appears_in_the_community_draft(community_mode):
 
     assert len(standard_buttons.children) == 16
     assert [button.label for button in community_buttons.children].count("Heralds of Ragnarok") == 1
-    assert len(community_buttons.children) == 22
+    assert len(community_buttons.children) == 23
 
 
 def test_heralds_faction_color_is_supported_setup_color():

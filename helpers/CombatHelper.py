@@ -164,6 +164,7 @@ class Combat:
         # a new pairing on the tile is a new combat: last pairing's Techno-Magic parts come off first
         await Combat.revertTechnoMagic(game, channel, pos)
         Carapace.clear(game, pos)
+        Combat.clearWolfPack(game, pos)
         drawing = DrawHelper(game.gamestate)
         sides = Combat.currentPairing(game, pos)
         game.setAttackerAndDefender(sides[1], sides[0], pos)
@@ -954,6 +955,8 @@ class Combat:
         pos = buttonID.split("_")[1]
         colorOrAI = buttonID.split("_")[2]
         speed = int(buttonID.split("_")[3])
+        spine_mode = ("spinehit" if "spinehit" in buttonID
+                      else "spinedmg" if "spinedmg" in buttonID else None)
         tile = game.gamestate["board"][pos]
         pairing = Combat.sideOf(tile.get("attacker")) + Combat.sideOf(tile.get("defender"))
         # Initiative 1000 is population bombing, which has no pairing.
@@ -973,6 +976,10 @@ class Combat:
         update = False
         popRiftProtector = True
         deferredEnd = False
+        wolf_sixes = {}
+        wolf_misses = []
+        wolf_miss_ids = set()
+        roll_id = 0
         counter = 0
         for ship in ships:
             if ship[0] == speed or speed == (ship[0]+99) or speed == 1000:
@@ -981,10 +988,16 @@ class Combat:
                 rollerType = ship[1]
                 shipModel = PlayerShip(game.gamestate["players"][player], rollerType)
                 dice = shipModel.dice
+                sources = shipModel.dice_sources
+                augment = shipModel.spine_augment()
+                spine_bonus = (Combat.translateColorToDamage(augment[2], 6)
+                               if augment and spine_mode else 0)
+                cannon_index = augment[0] if augment else None
                 missiles = ""
                 nonMissiles = " on initiative " + str(speed)
                 if speed > 90 and speed < 1000:
                     dice = shipModel.missile
+                    sources = [None] * len(dice)
                     if len(shipModel.missile) <1 and speed > 90 and speed < 1000:
                         continue
                     missiles = "missiles on initiative " + str(speed-99)+" "
@@ -998,9 +1011,15 @@ class Combat:
                 msg2 = "\n"
                 shipRiftBackfire = 0
                 for x in range(ship[2]):
-                    for die in dice:
+                    for die_index, die in enumerate(dice):
+                        source = sources[die_index] if die_index < len(sources) else None
+                        damage_bonus = (spine_bonus if spine_mode == "spinedmg"
+                                        and source == cannon_index else 0)
                         split = False
+                        roll_id += 1
                         random_number = random.randint(1, 6)
+                        if random_number == 6:
+                            wolf_sixes[rollerType] = wolf_sixes.get(rollerType, 0) + 1
                         num = str(random_number).replace("1", "Miss").replace("6", ":boom:")
                         emojiName = f"dice_{Combat.translateColorToName(die)}_{random_number}"
                         matching_emojis = ([Emoji._app[emojiName]] if emojiName in Emoji._app
@@ -1021,11 +1040,13 @@ class Combat:
                                 split = True
                         if speed == 1000:
                             split = True
+                        base_damage = Combat.translateColorToDamage(die, random_number)
+                        total_damage = base_damage + damage_bonus
                         if not split:
-                            dieNums.append([random_number, Combat.translateColorToDamage(die, random_number), die])
+                            dieNums.append([random_number, total_damage, die, source, roll_id, total_damage])
                         else:
-                            for i in range(Combat.translateColorToDamage(die, random_number)):
-                                dieNums.append([random_number, 1, die])
+                            for i in range(total_damage):
+                                dieNums.append([random_number, 1, die, source, roll_id, total_damage])
                 if shipModel.computer > 0:
                     msg += f"\nThis ship type has a +{shipModel.computer} computer."
 
@@ -1046,6 +1067,14 @@ class Combat:
                         dieNum = die[0]
                         dieDam = die[1]
                         dieColor = die[2]
+                        die_source = die[3]
+                        die_roll_id = die[4]
+                        die_wolf_damage = die[5]
+                        hit_bonus = (spine_bonus if spine_mode == "spinehit"
+                                     and die_source == cannon_index else 0)
+                        die_damage_bonus = (spine_bonus if spine_mode == "spinedmg"
+                                            and die_source == cannon_index else 0)
+                        computer_val = shipModel.computer + hit_bonus
                         hittableShips = []
                         if shielded and missiles and dieColor != "pink":
                             hittableShips = Combat.getOpponentUnitsThatCanBeHit(
@@ -1058,14 +1087,19 @@ class Combat:
                                 continue
                         if dieColor != "pink":
                             hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
-                                                                                dieNum, shipModel.computer, pos, speed)
-                            if all([dieNum + shipModel.computer > 5,
+                                                                                dieNum, computer_val, pos, speed)
+                            if all([dieNum + computer_val > 5,
                                     len(hittableShips) == 0,
                                     oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
                                 message = (f"The computer bonus for a die that rolled a {dieNum} was"
                                            " cancelled by the shields on each of the opponents ships.")
                                 asyncio.create_task( interaction.channel.send(message))
                             if len(hittableShips) == 0 or oldNumPeeps > len(Combat.findPlayersInTile(game, pos)):
+                                if (die_roll_id not in wolf_miss_ids and dieNum < 6
+                                        and oldNumPeeps == len(Combat.findPlayersInTile(game, pos))):
+                                    wolf_miss_ids.add(die_roll_id)
+                                    wolf_misses.append([rollerType, dieNum, die_wolf_damage, dieColor,
+                                                        computer_val, die_source, hit_bonus, die_damage_bonus])
                                 if all([player is not None,
                                         "Lyra" in game.gamestate["players"][player]["name"],
                                         game.gamestate["players"][player]["colony_ships"] > 0,
@@ -1157,7 +1191,210 @@ class Combat:
             if "unresolvedHits" in game.gamestate["board"][pos]:
                 hitsToAssign = game.gamestate["board"][pos]["unresolvedHits"]
             if hitsToAssign == 0 and oldLength == len(Combat.findPlayersInTile(game, pos)):
+                playerObj = game.getPlayerObjectFromColor(colorOrAI)
+                bank = game.gamestate["board"][pos].get("wolfPackRerolls", {}).get(colorOrAI, 0)
+                if FactionData.has(playerObj, "wolf_pack") and (wolf_sixes or (bank > 0 and wolf_misses)):
+                    state = {"color": colorOrAI, "speed": speed, "sixes": wolf_sixes,
+                             "misses": wolf_misses, "available": bank}
+                    await Combat.offerWolfPack(game, pos, interaction.channel, state)
+                    return
                 await Combat.promptNextSpeed(game, pos, interaction.channel, update)
+            elif hitsToAssign > 0:
+                playerObj = game.getPlayerObjectFromColor(colorOrAI)
+                bank = game.gamestate["board"][pos].get("wolfPackRerolls", {}).get(colorOrAI, 0)
+                if FactionData.has(playerObj, "wolf_pack") and (wolf_sixes or (bank > 0 and wolf_misses)):
+                    game.gamestate["board"][pos]["pendingWolfPack"] = {
+                        "color": colorOrAI, "speed": speed, "sixes": wolf_sixes,
+                        "misses": wolf_misses, "available": bank}
+                    game.update()
+
+    @staticmethod
+    def clearWolfPack(game: GamestateHelper, pos: str):
+        tile = game.gamestate["board"][pos]
+        if any(key in tile for key in ("wolfPack", "pendingWolfPack", "wolfPackRerolls")):
+            tile.pop("wolfPack", None)
+            tile.pop("pendingWolfPack", None)
+            tile.pop("wolfPackRerolls", None)
+            game.update()
+
+    @staticmethod
+    async def offerWolfPack(game: GamestateHelper, pos: str, channel, state: dict):
+        tile = game.gamestate["board"][pos]
+        tile["wolfPack"] = state
+        game.update()
+        await Combat.wolfPackPrompt(game, pos, channel)
+
+    @staticmethod
+    async def offerPendingWolfPack(game: GamestateHelper, pos: str, channel):
+        tile = game.gamestate["board"][pos]
+        state = tile.pop("pendingWolfPack", None)
+        if state is None:
+            return False
+        game.update()
+        if len(Combat.findSidesInTile(game, pos)) < 2 \
+                or state["color"] not in Combat.findPlayersInTile(game, pos):
+            return True
+        await Combat.offerWolfPack(game, pos, channel, state)
+        return True
+
+    @staticmethod
+    async def wolfPackPrompt(game: GamestateHelper, pos: str, channel):
+        tile = game.gamestate["board"][pos]
+        state = tile.get("wolfPack")
+        if state is None:
+            return
+        color = state["color"]
+        player = game.getPlayerObjectFromColor(color)
+        sixes = sum(state["sixes"].values())
+        if sixes > 0:
+            view = View()
+            for index, miss in enumerate(state["misses"]):
+                if miss[3] != "pink" and state["sixes"].get(miss[0], 0) > 0:
+                    view.add_item(Button(
+                        label=f"Convert a {Combat.translateShipAbrToName(miss[0])} miss ({miss[2]} damage)",
+                        style=discord.ButtonStyle.green,
+                        custom_id=f"FCID{color}_wolfPackConvert_{pos}_{index}"))
+            view.add_item(Button(label="Save a Reroll", style=discord.ButtonStyle.blurple,
+                                 custom_id=f"FCID{color}_wolfPackSave_{pos}"))
+            view.add_item(Button(label="Done", style=discord.ButtonStyle.gray,
+                                 custom_id=f"FCID{color}_wolfPackDone_{pos}"))
+            await channel.send(
+                f"{player['player_name']}, Wolf Pack: {sixes} six{'es' if sixes != 1 else ''}. "
+                "Convert a miss from the same attack pool into a hit, or save a reroll for a later ship.",
+                view=view)
+            return
+        if state["available"] > 0:
+            rerollable = [index for index, miss in enumerate(state["misses"]) if miss[3] != "pink"]
+            if rerollable:
+                view = View()
+                for index in rerollable:
+                    miss = state["misses"][index]
+                    view.add_item(Button(
+                        label=f"Reroll a {Combat.translateShipAbrToName(miss[0])} miss",
+                        style=discord.ButtonStyle.green,
+                        custom_id=f"FCID{color}_wolfPackReroll_{pos}_{index}"))
+                view.add_item(Button(label="Decline", style=discord.ButtonStyle.red,
+                                     custom_id=f"FCID{color}_wolfPackDecline_{pos}"))
+                await channel.send(
+                    f"{player['player_name']}, Wolf Pack: you have {state['available']} saved reroll"
+                    f"{'s' if state['available'] != 1 else ''}. Reroll a miss from this attack?", view=view)
+                return
+        await Combat.finishWolfPack(game, pos, channel)
+
+    @staticmethod
+    async def finishWolfPack(game: GamestateHelper, pos: str, channel):
+        tile = game.gamestate["board"][pos]
+        state = tile.pop("wolfPack", None)
+        tile.pop("pendingWolfPack", None)
+        game.update()
+        color = state["color"] if state else None
+        if color is not None and len(Combat.findSidesInTile(game, pos)) >= 2 \
+                and color in Combat.findPlayersInTile(game, pos):
+            await Combat.promptNextSpeed(game, pos, channel, True)
+
+    @staticmethod
+    async def wolfPackChoice(game: GamestateHelper, buttonID: str, interaction: discord.Interaction):
+        parts = buttonID.split("_")
+        kind, pos = parts[0], parts[1]
+        tile = game.gamestate["board"][pos]
+        state = tile.get("wolfPack")
+        if state is None:
+            return
+        if interaction.message is not None:
+            await interaction.message.delete()
+        color = state["color"]
+        player = game.getPlayerObjectFromColor(color)
+
+        def save():
+            tile["wolfPack"] = state
+            game.update()
+
+        async def targets_for(die_num, computer, damage, die_color, die_source, hit_bonus, damage_bonus):
+            ships = game.gamestate["board"][pos]["player_ships"][:]
+            targets = Combat.getOpponentUnitsThatCanBeHit(
+                game, color, ships, die_num, computer, pos, state["speed"])
+            state["pendingHit"] = {"dieNum": die_num, "dieDam": damage, "dieColor": die_color,
+                                   "targets": targets, "source": die_source,
+                                   "hitBonus": hit_bonus, "damageBonus": damage_bonus}
+            if not targets:
+                state.pop("pendingHit", None)
+                save()
+                await Combat.wolfPackPrompt(game, pos, interaction.channel)
+            elif len(targets) == 1:
+                await Combat.wolfPackHit(game, pos, interaction, color, targets[0],
+                                         die_num, damage)
+                if tile.get("wolfPack") is not state:
+                    return
+                save()
+                await Combat.wolfPackPrompt(game, pos, interaction.channel)
+            else:
+                save()
+                view = View()
+                for index, ship in enumerate(targets):
+                    label, emoji = Combat.getTargetButton(game, pos, ship)
+                    view.add_item(Button(label=label, emoji=emoji, style=discord.ButtonStyle.red,
+                                         custom_id=f"FCID{color}_wolfPackTarget_{pos}_{index}"))
+                await interaction.channel.send(
+                    f"{player['player_name']}, choose the ship your Wolf Pack hit damages.", view=view)
+
+        if kind == "wolfPackConvert":
+            index = int(parts[2])
+            miss = state["misses"][index]
+            pool = miss[0]
+            if state["sixes"].get(pool, 0) <= 0:
+                return
+            state["sixes"][pool] -= 1
+            state["misses"].pop(index)
+            save()
+            await targets_for(6, 0, miss[2], miss[3], miss[5], miss[6], miss[7])
+        elif kind == "wolfPackSave":
+            pool = next(pool for pool, count in state["sixes"].items() if count > 0)
+            state["sixes"][pool] -= 1
+            banks = tile.setdefault("wolfPackRerolls", {})
+            banks[color] = banks.get(color, 0) + 1
+            save()
+            await Combat.wolfPackPrompt(game, pos, interaction.channel)
+        elif kind == "wolfPackDone":
+            state["sixes"] = {pool: 0 for pool in state["sixes"]}
+            save()
+            await Combat.wolfPackPrompt(game, pos, interaction.channel)
+        elif kind == "wolfPackReroll":
+            if state["available"] <= 0:
+                return
+            index = int(parts[2])
+            miss = state["misses"].pop(index)
+            state["available"] -= 1
+            banks = tile.setdefault("wolfPackRerolls", {})
+            banks[color] = max(0, banks.get(color, 0) - 1)
+            roll = random.randint(1, 6)
+            if roll == 6:
+                state["sixes"][miss[0]] = state["sixes"].get(miss[0], 0) + 1
+            damage = Combat.translateColorToDamage(miss[3], roll) + miss[7]
+            save()
+            await targets_for(roll, miss[4], damage, miss[3], miss[5], miss[6], miss[7])
+        elif kind == "wolfPackTarget":
+            pending = state.get("pendingHit")
+            if pending is None:
+                return
+            targets = pending["targets"]
+            index = int(parts[2])
+            if index >= len(targets):
+                return
+            state.pop("pendingHit", None)
+            await Combat.wolfPackHit(game, pos, interaction, color, targets[index],
+                                     pending["dieNum"], pending["dieDam"])
+            if tile.get("wolfPack") is not state:
+                return
+            save()
+            await Combat.wolfPackPrompt(game, pos, interaction.channel)
+        elif kind == "wolfPackDecline":
+            await Combat.finishWolfPack(game, pos, interaction.channel)
+
+    @staticmethod
+    async def wolfPackHit(game: GamestateHelper, pos: str, interaction: discord.Interaction,
+                          color: str, ship: str, die_num: int, damage: int):
+        await Combat.assignHitTo(game, f"assignHitTo_{pos}_{color}_{ship}_{die_num}_{damage}",
+                                 interaction, False)
 
     @staticmethod
     async def rerollDie(game: GamestateHelper, buttonID: str, interaction: discord.Interaction,
@@ -1394,6 +1631,13 @@ class Combat:
         initiative = f"Initiative {nextSpeed}"
         if nextSpeed > 90:
             initiative = "Initiative " + str(nextSpeed-99)+" missiles"
+        spine_modes = False
+        if nextOwner not in ("", "ai") and nextSpeed < 99:
+            playerObj = game.getPlayerObjectFromColor(nextOwner)
+            spine_modes = FactionData.has(playerObj, "spine_cannons") and any(
+                speed2 == nextSpeed and len(FactionData.of(playerObj).get("spine_cannon_slots", {})
+                                              .get(shipType, [])) > 1
+                for speed2, shipType, _count in Combat.getCombatantShipsBySpeed(game, nextOwner, ships, pos))
 
         if [nextSpeed, nextOwner] in game.getRetreatingUnits(pos):
             checker = "FCID" + nextOwner + "_"
@@ -1413,8 +1657,19 @@ class Combat:
                 playerObj = game.getPlayerObjectFromColor(nextOwner)
                 msg = f"{playerObj['player_name']}, it is your turn to roll your ships with {initiative}. "
 
-                view.add_item(Button(label=f"Roll {initiative} Ships", style=discord.ButtonStyle.green,
-                                     custom_id=f"{checker}rollDice_{pos}_{nextOwner}_{str(nextSpeed)}_deleteMsg"))
+                if spine_modes:
+                    view.add_item(Button(label=f"Roll {initiative} (+X to Hit)", style=discord.ButtonStyle.green,
+                                         custom_id=(f"{checker}rollDice_{pos}_{nextOwner}_{str(nextSpeed)}"
+                                                    "_deleteMsg_spinehit")))
+                    view.add_item(Button(label=f"Roll {initiative} (+X Damage)", style=discord.ButtonStyle.green,
+                                         custom_id=(f"{checker}rollDice_{pos}_{nextOwner}_{str(nextSpeed)}"
+                                                    "_deleteMsg_spinedmg")))
+                    msg += ("Your Spine Cannon augment weapons can add to hit or damage this roll. "
+                            "Choose the mode before rolling. ")
+                else:
+                    view.add_item(Button(label=f"Roll {initiative} Ships", style=discord.ButtonStyle.green,
+                                         custom_id=(f"{checker}rollDice_{pos}_{nextOwner}_{str(nextSpeed)}"
+                                                    "_deleteMsg")))
                 if nextSpeed < 99 and len(Combat.getRetreatTiles(game, pos, nextOwner)) > 0:
                     msg += "You may also alternatively choose to start to retreat them. "
                     shipsSpeeds = Combat.getCombatantShipsBySpeed(game, nextOwner, ships, pos)
@@ -1650,6 +1905,7 @@ class Combat:
     @staticmethod
     async def declareAWinner(game: GamestateHelper, interaction: discord.Interaction, pos: str):
         game.updateSaveFile()
+        Combat.clearWolfPack(game, pos)
 
         actions_channel = discord.utils.get(interaction.guild.channels, name=game.game_id + "-actions")
         if actions_channel is not None and isinstance(actions_channel, discord.TextChannel):
@@ -1876,6 +2132,8 @@ class Combat:
         if button:
             await interaction.message.delete()
             if hitsToAssign == 0 and oldLength == len(Combat.findPlayersInTile(game, pos)):
+                if await Combat.offerPendingWolfPack(game, pos, interaction.channel):
+                    return
                 await Combat.promptNextSpeed(game, pos, interaction.channel, True)
 
     @staticmethod

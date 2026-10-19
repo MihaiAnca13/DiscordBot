@@ -3131,5 +3131,163 @@
                         "nus",
                         "nud"
                 ]
+        },
+        "wul": {
+                "name": "The Wulfen",
+                "artwork": "wulfen",
+                "setup_color": "brown",
+                "community": true,
+                "abilities": [
+                        "spine_cannons",
+                        "wolf_pack"
+                ],
+                "influence_colony_ships": 2,
+                "materials": 2,
+                "science": 3,
+                "money": 3,
+                "colony_ships": 3,
+                "base_colony_ships": 3,
+                "home_planet": "252",
+                "owned_tiles": [],
+                "explore_apt": 1,
+                "research_apt": 1,
+                "upgrade_apt": 2,
+                "build_apt": 2,
+                "move_apt": 3,
+                "influence_apt": 2,
+                "trade_value": 3,
+                "influence_discs": 12,
+                "influence_track": [
+                        30,
+                        25,
+                        21,
+                        17,
+                        13,
+                        10,
+                        7,
+                        5,
+                        3,
+                        2,
+                        1,
+                        0,
+                        0
+                ],
+                "explore_action_counters": 0,
+                "research_action_counters": 0,
+                "upgrade_action_counters": 0,
+                "build_action_counters": 0,
+                "move_action_counters": 0,
+                "influence_action_counters": 0,
+                "money_pop_cubes": 11,
+                "material_pop_cubes": 11,
+                "science_pop_cubes": 12,
+                "population_track": [
+                        28,
+                        24,
+                        21,
+                        18,
+                        15,
+                        12,
+                        10,
+                        8,
+                        6,
+                        4,
+                        3,
+                        2,
+                        0
+                ],
+                "military_tech": [],
+                "grid_tech": [
+                        "fus"
+                ],
+                "nano_tech": [],
+                "ancient_parts": [],
+                "tech_track": [
+                        -8,
+                        -6,
+                        -4,
+                        -3,
+                        -2,
+                        -1,
+                        0,
+                        0
+                ],
+                "reputation_track": [
+                        "mixed",
+                        "mixed",
+                        "rep",
+                        "rep",
+                        "rep"
+                ],
+                "reputation_only_slots": [
+                        2,
+                        3,
+                        4
+                ],
+                "cost_orbital": 4,
+                "cost_monolith": 10,
+                "cost_interceptor": 3,
+                "cost_cruiser": 4,
+                "cost_dread": 8,
+                "cost_starbase": 3,
+                "ship_stock": [
+                        0,
+                        5,
+                        2,
+                        4
+                ],
+                "starting_ships": [
+                        "cru"
+                ],
+                "base_interceptor_speed": 2,
+                "base_interceptor_nrg": 0,
+                "base_interceptor_comp": 0,
+                "base_cruiser_speed": 1,
+                "base_cruiser_nrg": 0,
+                "base_cruiser_comp": 0,
+                "base_dread_speed": 0,
+                "base_dread_nrg": 0,
+                "base_dread_comp": 0,
+                "base_starbase_speed": 3,
+                "base_starbase_nrg": 3,
+                "base_starbase_comp": 0,
+                "spine_cannon_slots": {
+                        "cruiser": [
+                                3,
+                                4
+                        ],
+                        "dread": [
+                                6,
+                                7
+                        ],
+                        "starbase": [
+                                3,
+                                4
+                        ]
+                },
+                "cruiser_parts": [
+                        "nus",
+                        "hul",
+                        "nud",
+                        "ioc",
+                        "ioc"
+                ],
+                "dread_parts": [
+                        "elc",
+                        "nus",
+                        "nud",
+                        "empty",
+                        "hul",
+                        "hul",
+                        "ioc",
+                        "ioc"
+                ],
+                "starbase_parts": [
+                        "empty",
+                        "hul",
+                        "hul",
+                        "ioc",
+                        "ioc"
+                ]
         }
 }

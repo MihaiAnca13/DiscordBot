@@ -111,6 +111,13 @@ class UpgradeButtons:
             # Techno-Magic: no removing ship parts, and no Ancient ship parts
             available_parts = {part for part in available_parts
                                if part != "empty" and part not in DISCOVERY_PART_IDS}
+        slot_note = ""
+        spine_slot = int(indexOfOldPart) in PlayerHelper.get_spine_cannon_slots(player, ship)
+        if spine_slot:
+            # a Spine Cannon slot may be upgraded, but only with a gun
+            available_parts = {part for part in available_parts
+                               if part != "empty" and PlayerHelper.is_spine_gun(part)}
+            slot_note = " This is a Spine Cannon slot, so it only accepts a gun (not a Missile or Rift Weapon)."
         drawing = DrawHelper(game.gamestate)
         with open("data/parts.json", "r") as f:
             part_stats = json.load(f)
@@ -126,10 +133,11 @@ class UpgradeButtons:
                                  custom_id=(f"FCID{player['color']}_chooseUpgrade_{actions}_{ship}_"
                                             f"{oldPart}_{i}_{indexOfOldPart}_{discTileUpgrade}"),
                                  emoji=Emoji.getEmojiByName(partName)))
-        removal_note = "" if discTileUpgrade.startswith("tm") else " Remove as a free action by selecting 'Empty'."
+        removal_note = "" if discTileUpgrade.startswith("tm") or spine_slot \
+            else " Remove as a free action by selecting 'Empty'."
         await UpgradeButtons.showMenu(interaction, f"{interaction.user.mention}, replace "
                                       f"{part_stats[oldPart]['name']} on your {ship} with which part?"
-                                      f"{removal_note}", view)
+                                      f"{removal_note}{slot_note}", view)
         if customID.endswith("_partsShown"):
             return
         await interaction.followup.send("Available parts",
