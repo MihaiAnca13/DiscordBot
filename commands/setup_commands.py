@@ -45,7 +45,8 @@ class SetupCommands(commands.GroupCog, name="setup"):
                       app_commands.Choice(name="Atlantians", value="atl"),
                       app_commands.Choice(name="Remnants of Ra", value="ra"),
                       app_commands.Choice(name="Techno-Mages", value="tm"),
-                      app_commands.Choice(name="Heralds of Ragnarok", value="her")]
+                      app_commands.Choice(name="Heralds of Ragnarok", value="her"),
+                      app_commands.Choice(name="Kurita Prefecture", value="kur")]
     
     @app_commands.choices(ai_ship_type=ai_choices2)
     @app_commands.choices(ai_ship=ai_ship_choices)

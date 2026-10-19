@@ -14,7 +14,7 @@ def test_tm_only_appears_in_community_draft(community_mode):
     assert len(standard_buttons.children) == 16
     assert [button.label for button in standard_buttons.children].count("Techno-Mages") == 0
     assert [button.label for button in community_buttons.children].count("Techno-Mages") == 1
-    assert len(community_buttons.children) == 20
+    assert len(community_buttons.children) == 21
 
 
 def test_tm_faction_color_is_supported_setup_color():

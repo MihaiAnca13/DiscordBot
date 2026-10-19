@@ -3873,10 +3873,22 @@
     "neutraladv_pop": [],
     "neutraladv1_snap": [],
     "neutraladv2_snap": [],
-    "int_snap": [800, 200],
-    "cru_snap": [800, 690],
-    "drd_snap": [860, 300],
-    "sb_snap": [770, 690],
+    "int_snap": [
+      800,
+      200
+    ],
+    "cru_snap": [
+      800,
+      690
+    ],
+    "drd_snap": [
+      860,
+      300
+    ],
+    "sb_snap": [
+      770,
+      690
+    ],
     "mon_snap": [
       513,
       450
@@ -3885,7 +3897,10 @@
       330,
       280
     ],
-    "ai_snap": [690, 443],
+    "ai_snap": [
+      690,
+      443
+    ],
     "wormholes": [
       0,
       1,
@@ -3901,52 +3916,52 @@
     "gcds": 0,
     "warp": 0,
     "subsectors": {
-        "b": {
-            "disctile": 1,
-            "int_snap": [
-                600,
-                110
-            ],
-            "cru_snap": [
-                480,
-                330
-            ],
-            "drd_snap": [
-                290,
-                110
-            ],
-            "sb_snap": [
-                480,
-                330
-            ],
-            "disc_snap": [
-                385,
-                217
-            ]
-        },
-        "c": {
-            "disctile": 1,
-            "int_snap": [
-                600,
-                776
-            ],
-            "cru_snap": [
-                480,
-                556
-            ],
-            "drd_snap": [
-                290,
-                776
-            ],
-            "sb_snap": [
-                480,
-                556
-            ],
-            "disc_snap": [
-                385,
-                660
-            ]
-        }
+      "b": {
+        "disctile": 1,
+        "int_snap": [
+          600,
+          110
+        ],
+        "cru_snap": [
+          480,
+          330
+        ],
+        "drd_snap": [
+          290,
+          110
+        ],
+        "sb_snap": [
+          480,
+          330
+        ],
+        "disc_snap": [
+          385,
+          217
+        ]
+      },
+      "c": {
+        "disctile": 1,
+        "int_snap": [
+          600,
+          776
+        ],
+        "cru_snap": [
+          480,
+          556
+        ],
+        "drd_snap": [
+          290,
+          776
+        ],
+        "sb_snap": [
+          480,
+          556
+        ],
+        "disc_snap": [
+          385,
+          660
+        ]
+      }
     },
     "type": "nebula"
   },
@@ -5721,10 +5736,22 @@
     "neutraladv_pop": [],
     "neutraladv1_snap": [],
     "neutraladv2_snap": [],
-    "int_snap": [800, 200],
-    "cru_snap": [800, 690],
-    "drd_snap": [860, 300],
-    "sb_snap": [770, 690],
+    "int_snap": [
+      800,
+      200
+    ],
+    "cru_snap": [
+      800,
+      690
+    ],
+    "drd_snap": [
+      860,
+      300
+    ],
+    "sb_snap": [
+      770,
+      690
+    ],
     "mon_snap": [
       513,
       450
@@ -5733,7 +5760,10 @@
       330,
       280
     ],
-    "ai_snap": [690, 443],
+    "ai_snap": [
+      690,
+      443
+    ],
     "wormholes": [
       0,
       1,
@@ -5749,52 +5779,52 @@
     "gcds": 0,
     "warp": 0,
     "subsectors": {
-        "b": {
-            "disctile": 1,
-            "int_snap": [
-                600,
-                110
-            ],
-            "cru_snap": [
-                480,
-                330
-            ],
-            "drd_snap": [
-                290,
-                110
-            ],
-            "sb_snap": [
-                480,
-                330
-            ],
-            "disc_snap": [
-                385,
-                217
-            ]
-        },
-        "c": {
-            "disctile": 1,
-            "int_snap": [
-                600,
-                776
-            ],
-            "cru_snap": [
-                480,
-                556
-            ],
-            "drd_snap": [
-                290,
-                776
-            ],
-            "sb_snap": [
-                480,
-                556
-            ],
-            "disc_snap": [
-                385,
-                660
-            ]
-        }
+      "b": {
+        "disctile": 1,
+        "int_snap": [
+          600,
+          110
+        ],
+        "cru_snap": [
+          480,
+          330
+        ],
+        "drd_snap": [
+          290,
+          110
+        ],
+        "sb_snap": [
+          480,
+          330
+        ],
+        "disc_snap": [
+          385,
+          217
+        ]
+      },
+      "c": {
+        "disctile": 1,
+        "int_snap": [
+          600,
+          776
+        ],
+        "cru_snap": [
+          480,
+          556
+        ],
+        "drd_snap": [
+          290,
+          776
+        ],
+        "sb_snap": [
+          480,
+          556
+        ],
+        "disc_snap": [
+          385,
+          660
+        ]
+      }
     },
     "type": "nebula"
   },
@@ -6526,6 +6556,98 @@
     "ai_snap": [
       520,
       600
+    ],
+    "wormholes": [
+      0,
+      1,
+      3,
+      4
+    ],
+    "vp": 3,
+    "artifact": 1,
+    "ancient": 0,
+    "guardian": 0,
+    "gcds": 0,
+    "warp": 0,
+    "type": "home"
+  },
+  "251": {
+    "owner": 0,
+    "name": "Edo",
+    "ring": 2,
+    "disctile": 0,
+    "player_ships": [],
+    "money_pop": [
+      1
+    ],
+    "money1_snap": [
+      333,
+      137
+    ],
+    "money2_snap": [],
+    "moneyadv_pop": [],
+    "moneyadv1_snap": [],
+    "moneyadv2_snap": [],
+    "science_pop": [
+      1
+    ],
+    "science1_snap": [
+      762,
+      203
+    ],
+    "science2_snap": [],
+    "scienceadv_pop": [
+      0
+    ],
+    "scienceadv1_snap": [
+      660,
+      195
+    ],
+    "scienceadv2_snap": [],
+    "material_pop": [],
+    "material1_snap": [],
+    "material2_snap": [],
+    "materialadv_pop": [
+      0
+    ],
+    "materialadv1_snap": [
+      334,
+      783
+    ],
+    "materialadv2_snap": [],
+    "neutral_pop": [],
+    "neutral1_snap": [],
+    "neutral2_snap": [],
+    "neutraladv_pop": [],
+    "neutraladv1_snap": [],
+    "neutraladv2_snap": [],
+    "int_snap": [
+      500,
+      120
+    ],
+    "cru_snap": [
+      300,
+      330
+    ],
+    "drd_snap": [
+      700,
+      650
+    ],
+    "sb_snap": [
+      320,
+      620
+    ],
+    "mon_snap": [
+      513,
+      760
+    ],
+    "orb_snap": [
+      180,
+      480
+    ],
+    "ai_snap": [
+      513,
+      445
     ],
     "wormholes": [
       0,

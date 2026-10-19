@@ -466,6 +466,8 @@ class GamestateHelper:
             self.gamestate["board"][position].pop("pendingRiftDice", None)
             self.gamestate["board"][position].pop("pendingRiftBackfire", None)
             self.gamestate["board"][position].pop("combatEntryOrder", None)
+            self.gamestate["board"][position].pop("firstShotPhase", None)
+            self.gamestate["board"][position].pop("firstShotSide", None)
             for player in self.gamestate["players"]:
                 color = self.gamestate["players"][player]["color"]
                 key = "ships_destroyed_by_" + color
@@ -473,6 +475,7 @@ class GamestateHelper:
                 self.gamestate["board"][position].pop("retreatPenalty" + color, None)
             if "player_ships" in self.gamestate["board"][position]:
                 self.fixshipsOrder(position)
+        self.gamestate.pop("battleRepAdjustments", None)
         self.update()
 
     def getReputationTilesToDraw(self, position, color):
@@ -482,6 +485,12 @@ class GamestateHelper:
             count = 0
         if "damage_tracker" in self.gamestate["board"][position]:
             del self.gamestate["board"][position]["damage_tracker"]
+        if ("retreatPenalty" + color in self.gamestate["board"][position]
+                and FactionData.has(self.getPlayerObjectFromColor(color), "honour_victorious")):
+            # Kurita's card removes every Battle Rep draw after any retreat, including destroyed ships.
+            self.gamestate["board"][position].pop(key, None)
+            self.update()
+            return 0
         if key not in self.gamestate["board"][position]:
             self.update()
             return count
