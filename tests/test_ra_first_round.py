@@ -52,21 +52,21 @@ def test_remnants_of_ra_and_atlantians_explore_then_pass(games_dir, run, press, 
     assert state["players"]["2"]["nano_tech"] == ["anl"]
     assert state["board"]["201"]["sector"] == "255"
     assert state["board"]["207"]["sector"] == "266"
-    assert state["activePlayerColor"] == ["blue"]
+    assert state["activePlayerColor"] == ["yellow"]
 
     # Power of the Ancients includes the home sector: the setup offers the disc cube.
-    press(channel, 1, find_button(channel, "FCIDblue_ancientsCube_science_"))
+    press(channel, 1, find_button(channel, "FCIDyellow_ancientsCube_science_"))
     state = reload(game).gamestate
     assert state["board"]["201"]["disc_pop"] == [1]
     assert state["players"]["1"]["science_pop_cubes"] == 11
 
     # The other community setup hook, Atlantians' discovery choice, runs in the same game.
-    press(channel, 2, find_button(channel, "FCIDred_selectDiscTile_"))
-    press(channel, 2, find_button(channel, "FCIDred_keepDiscForPoints"))
+    press(channel, 2, find_button(channel, "FCIDblue_selectDiscTile_"))
+    press(channel, 2, find_button(channel, "FCIDblue_keepDiscForPoints"))
     assert reload(game).get_player(2)["disc_tiles_for_points"] == 1
 
     explored_positions = []
-    for player_id, color in [(1, "blue"), (2, "red")]:
+    for player_id, color in [(1, "yellow"), (2, "blue")]:
         assert reload(game).gamestate["activePlayerColor"] == [color]
         press(channel, player_id, f"FCID{color}_startExplore")
         explore = next(custom_id for custom_id in buttons(channel)
@@ -81,9 +81,9 @@ def test_remnants_of_ra_and_atlantians_explore_then_pass(games_dir, run, press, 
         press(channel, player_id, f"FCID{color}_finishAction")
         press(channel, player_id, f"FCID{color}_endTurn")
 
-    press(channel, 1, "FCIDblue_passForRound")
-    assert reload(game).gamestate["activePlayerColor"] == ["red"]
-    press(channel, 2, "FCIDred_passForRound")
+    press(channel, 1, "FCIDyellow_passForRound")
+    assert reload(game).gamestate["activePlayerColor"] == ["blue"]
+    press(channel, 2, "FCIDblue_passForRound")
     final_game = reload(game)
     assert final_game.is_everyone_passed()
     assert "runUpkeep" in buttons(channel)
