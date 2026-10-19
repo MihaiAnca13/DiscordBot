@@ -44,7 +44,8 @@ class SetupCommands(commands.GroupCog, name="setup"):
                       app_commands.Choice(name="Terran Union (Planta)", value="ter6"),
                       app_commands.Choice(name="Atlantians", value="atl"),
                       app_commands.Choice(name="Remnants of Ra", value="ra"),
-                      app_commands.Choice(name="Techno-Mages", value="tm")]
+                      app_commands.Choice(name="Techno-Mages", value="tm"),
+                      app_commands.Choice(name="The Wraith", value="wra")]
     
     @app_commands.choices(ai_ship_type=ai_choices2)
     @app_commands.choices(ai_ship=ai_ship_choices)

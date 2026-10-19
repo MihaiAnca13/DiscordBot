@@ -652,6 +652,9 @@ class GamestateHelper:
         else:
             msg += "\nYou cannot place more money cubes because they have all been placed."
         msg += f"\nYou have {player['colony_ships']}/{player['base_colony_ships']} colony ships ready at this time."
+        if FactionData.has(player, "soul_hunters"):
+            souls = player.get("wraithSouls", 0)
+            msg += f"\nSouls captured: {souls} (+{souls} offboard power, +{souls} VP)"
         return msg
 
     def setCombatants(self, players, pos):

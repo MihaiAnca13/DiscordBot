@@ -1,0 +1,523 @@
+"""The Wraith species rules: Phase Technology, Ghosts and the Phase Module.
+
+Values come from the printed card and board: two Build activations may become one Build plus
+one Upgrade, a retreat happens before the ship fires, and the Phase Module declaration is made
+per blueprint before initiative is prompted. Soul-Hunters has its own test file.
+"""
+import pytest
+from PIL import Image
+
+from Buttons.Build import BuildButtons
+from Buttons.Explore import ExploreButtons
+from helpers.CombatHelper import Combat
+from helpers.DrawHelper import DrawHelper
+from helpers.PlayerHelper import PlayerHelper
+from tests.fakes import FakeInteraction, FakeMessage, board_tile, buttons, player_stats, reload
+
+
+@pytest.fixture(autouse=True)
+def _no_render(monkeypatch):
+    """These tests cover rules, not rendering; real art would pay a one-time image-cache load."""
+    monkeypatch.setattr(DrawHelper, "use_image",
+                        lambda self, filename: Image.new("RGBA", (1024, 890)))
+    monkeypatch.setattr(DrawHelper, "use_resized_image",
+                        lambda self, filename, size: Image.new("RGBA", size))
+    monkeypatch.setattr(DrawHelper, "board_tile_image_file", lambda self, position: None)
+    monkeypatch.setattr(DrawHelper, "mergeLocationsFile", lambda self, positions: None)
+    monkeypatch.setattr(DrawHelper, "player_area",
+                        lambda self, player: Image.new("RGBA", (5000, 800)))
+    monkeypatch.setattr(DrawHelper, "show_player_ship_area", lambda self, image: None)
+
+
+def view_ids(inter):
+    return {child.custom_id: child.label for child in inter.message.edited["view"].children}
+
+
+def start_build(press, channel, color="blue", first=True):
+    if first:
+        press(channel, 1, f"FCID{color}_startBuild")
+    else:
+        press(channel, 1, "startBuild2_deleteMsg")
+    press(channel, 1, f"FCID{color}_buildIn_201")
+
+
+def finish_build(press, channel, color="blue"):
+    inter = press(channel, 1, next(cid for cid in buttons(channel) if cid.endswith("_201_Interceptor")))
+    inter = press(channel, 1, next(cid for cid in view_ids(inter) if cid.startswith(f"FCID{color}_finishBuild_")))
+    inter = press(channel, 1, next(cid for cid in buttons(channel) if cid.startswith(f"FCID{color}_spendMaterial_")))
+    return press(channel, 1, next(cid for cid in view_ids(inter)
+                                   if cid.startswith(f"FCID{color}_finishSpendForBuild_")))
+
+
+def build_one_unit(press, channel, color="blue", first=True):
+    start_build(press, channel, color, first)
+    return finish_build(press, channel, color)
+
+
+# --- Phase Technology --------------------------------------------------------
+
+def test_phase_technology_swaps_the_second_build_activation_for_one_upgrade(start_game, press):
+    game, channel = start_game(factions=["wra", "eri"])
+
+    inter = build_one_unit(press, channel)
+    assert "FCIDblue_phaseTechUpgrade" in buttons(channel)
+
+    press(channel, 1, "FCIDblue_phaseTechUpgrade")
+    assert "FCIDblue_upgradeShip_1_interceptor_phase" in buttons(channel)
+    inter = press(channel, 1, "FCIDblue_upgradeShip_1_interceptor_phase")
+    inter = press(channel, 1, next(cid for cid in view_ids(inter)
+                                   if cid.startswith("FCIDblue_selectOldPart_") and "_empty_" in cid))
+    empty_slot = next(cid for cid in view_ids(inter)
+                      if cid.startswith("FCIDblue_chooseUpgrade_") and "_empty_hul_" in cid)
+    press(channel, 1, empty_slot)
+
+    state = reload(game).get_player(1)
+    assert state["interceptor_parts"] == ["ioc", "nus", "nud", "hul"]
+    assert state["influence_discs"] == 11          # the Build action's disc only
+    assert state["upgrade_action_counters"] == 0   # the swap is not an Upgrade action
+    assert state["phaseSwappedThisAction"] is True
+
+
+def test_phase_technology_is_not_offered_after_two_builds(start_game, press):
+    game, channel = start_game(factions=["wra", "eri"])
+    game.get_player(1)["materials"] = 8
+    game.update()
+
+    build_one_unit(press, channel)
+    assert "FCIDblue_phaseTechUpgrade" in buttons(channel)
+
+    build_one_unit(press, channel, first=False)
+    assert "FCIDblue_phaseTechUpgrade" not in buttons(channel)
+    assert reload(game).get_player(1)["phaseBuildsThisAction"] == 2
+
+
+def test_phase_technology_is_only_for_the_wraith(start_game, press):
+    game, channel = start_game(factions=["hyd", "eri"])
+    game.get_player(1)["materials"] = 4
+    game.update()
+
+    build_one_unit(press, channel)
+
+    assert "FCIDblue_phaseTechUpgrade" not in buttons(channel)
+
+
+def test_phase_technology_undo_restores_the_blueprint_without_spending_a_disc(start_game, press):
+    game, channel = start_game(factions=["wra", "eri"])
+    build_one_unit(press, channel)
+    press(channel, 1, "FCIDblue_phaseTechUpgrade")
+    inter = press(channel, 1, "FCIDblue_upgradeShip_1_interceptor_phase")
+    inter = press(channel, 1, next(cid for cid in view_ids(inter)
+                                   if cid.startswith("FCIDblue_selectOldPart_") and "_empty_" in cid))
+    press(channel, 1, next(cid for cid in view_ids(inter)
+                           if cid.startswith("FCIDblue_chooseUpgrade_") and "_empty_hul_" in cid))
+
+    press(channel, 1, "FCIDblue_undoUpgrade_1_phase")
+
+    state = reload(game).get_player(1)
+    assert state["interceptor_parts"] == ["ioc", "nus", "nud", "empty"]
+    assert state["influence_discs"] == 11
+    assert "FCIDblue_upgradeShip_1_interceptor_phase" in buttons(channel)
+
+
+def test_phase_technology_cannot_be_swapped_before_a_build(start_game, run):
+    game, channel = start_game(factions=["wra", "eri"])
+    inter = FakeInteraction(channel)
+
+    run(BuildButtons.phaseTechUpgrade(game, game.get_player(1), inter, "phaseTechUpgrade",
+                                      PlayerHelper(1, game.get_player(1))))
+
+    assert "Phase Technology swaps a later Build activation" in inter.followup.sent[0][0]
+    assert reload(game).get_player(1).get("phaseSwappedThisAction") is not True
+
+
+def test_phase_technology_resets_at_the_next_build_action(start_game, run):
+    game, channel = start_game(factions=["wra", "eri"])
+    player = game.get_player(1)
+    player["phaseBuildsThisAction"] = 2
+    player["phaseSwappedThisAction"] = True
+    game.update()
+
+    run(BuildButtons.startBuild(game, player, FakeInteraction(channel), "startBuild",
+                                PlayerHelper(1, player)))
+
+    state = reload(game).get_player(1)
+    assert state["phaseBuildsThisAction"] == 0
+    assert state["phaseSwappedThisAction"] is False
+
+
+# --- Ghosts ------------------------------------------------------------------
+
+def wraith_combat(game, ships=("blue-int", "red-int"), owner="blue"):
+    game.get_player(1)["owned_tiles"] = ["102"]
+    game.gamestate["board"]["101"] = {
+        "owner": owner, "sector": 101, "player_ships": list(ships),
+        "wormholes": [0, 1, 3, 4], "type": "", "disctile": 0, "orientation": 120}
+    game.gamestate["board"]["102"] = {
+        "owner": "blue", "sector": 102, "player_ships": [],
+        "wormholes": [0, 1, 3, 4], "type": "", "disctile": 0, "orientation": 60}
+    game.setAttackerAndDefender(["red"], ["blue"], "101")
+    game.gamestate["board"]["101"].pop("currentSpeed", None)
+    game.gamestate["board"]["101"].pop("currentRoller", None)
+    game.update()
+
+
+def test_ghosts_retreats_before_the_ship_fires_and_applies_the_all_retreat_penalty(
+        start_game, press, run, monkeypatch):
+    game, channel = start_game(factions=["wra", "eri"])
+    wraith_combat(game)
+    declared = []
+
+    async def declare(_game, _interaction, pos):
+        declared.append(pos)
+
+    monkeypatch.setattr(Combat, "declareAWinner", staticmethod(declare))
+    run(Combat.promptNextSpeed(game, "101", channel, False))
+    assert "FCIDblue_ghostsRetreat_101_blue_3" in buttons(channel)
+
+    press(channel, 1, "FCIDblue_ghostsRetreat_101_blue_3")
+    assert "FCIDblue_ghostsRetreatTo_101_blue_3_102" in buttons(channel)
+    press(channel, 1, "FCIDblue_ghostsRetreatTo_101_blue_3_102")
+
+    state = reload(game)
+    assert state.gamestate["board"]["101"]["player_ships"] == ["red-int"]
+    assert state.gamestate["board"]["102"]["player_ships"] == ["blue-int"]
+    assert state.gamestate["board"]["101"]["retreatPenaltyblue"] is True
+    assert declared == ["101"]
+
+
+def test_non_wraith_still_announces_a_retreat_and_waits_for_its_next_turn(start_game, press, run):
+    game, channel = start_game(factions=["hyd", "eri"])
+    wraith_combat(game)
+    run(Combat.promptNextSpeed(game, "101", channel, False))
+
+    assert "FCIDblue_startToRetreatUnits_101_blue_3" in buttons(channel)
+    assert "FCIDblue_ghostsRetreat_101_blue_3" not in buttons(channel)
+    press(channel, 1, "FCIDblue_startToRetreatUnits_101_blue_3")
+
+    state = reload(game)
+    assert state.gamestate["board"]["101"]["unitsToRetreat"] == [[3, "blue"]]
+    assert "blue-int" in state.gamestate["board"]["101"]["player_ships"]
+
+
+def test_ghosts_moves_a_phase_module_speed_boosted_ship(start_game, press, run, monkeypatch):
+    game, channel = start_game(factions=["wra", "eri"])
+    wraith_combat(game)
+    game.gamestate["board"]["101"]["phaseModes"] = {"blue": {"interceptor": {
+        "comp": 0, "shield": 0, "speed": 2, "planets": False, "ignore": False, "cost": 2}}}
+
+    async def declare(_game, _interaction, _pos):
+        return None
+
+    monkeypatch.setattr(Combat, "declareAWinner", staticmethod(declare))
+    run(Combat.promptNextSpeed(game, "101", channel, False))
+    assert "FCIDblue_ghostsRetreat_101_blue_5" in buttons(channel)
+    press(channel, 1, "FCIDblue_ghostsRetreat_101_blue_5")
+    press(channel, 1, "FCIDblue_ghostsRetreatTo_101_blue_5_102")
+
+    assert reload(game).gamestate["board"]["102"]["player_ships"] == ["blue-int"]
+
+
+def test_ghosts_is_not_offered_without_a_legal_retreat_destination(start_game, run):
+    game, channel = start_game(factions=["wra", "eri"])
+    wraith_combat(game)
+    game.get_player(1)["owned_tiles"] = []
+    game.update()
+
+    run(Combat.promptNextSpeed(game, "101", channel, False))
+
+    assert not [cid for cid in buttons(channel) if "ghostsRetreat" in cid]
+    assert not [cid for cid in buttons(channel) if "startToRetreatUnits" in cid]
+
+
+# --- Phase Module ------------------------------------------------------------
+
+def phase_combat(make_game, souls=0, blue_ships=("blue-int",), red_ships=("red-cru",),
+                 red_parts=None, game_id="t"):
+    blue = player_stats("wra", color="blue")
+    blue["wraithSouls"] = souls
+    red = player_stats("hyd", color="red")
+    if red_parts:
+        red["cruiser_parts"] = red_parts
+    board = board_tile(list(blue_ships) + list(red_ships), owner="blue", sector=101)
+    game = make_game({"player_count": 2, "players": {"1": blue, "2": red}, "board": board,
+                      "advanced_ai": False, "wa_ai": False, "reputation_tiles": [1, 2, 3]},
+                     game_id=game_id)
+    game.setAttackerAndDefender(["red"], ["blue"], "101")
+    return game
+
+
+def offer_phase(game, channel, pos="101"):
+    assert run_offer(game, channel, pos)
+    return channel.message_with(f"FCIDblue_phaseModuleDone_{pos}_blue")
+
+
+def run_offer(game, channel, pos="101"):
+    import asyncio
+    return asyncio.run(Combat.offerPhaseModule(game, channel, pos))
+
+
+def test_phase_module_is_offered_only_to_the_wraith_with_ships_in_the_tile(make_game):
+    wraith = phase_combat(make_game)
+    channel = FakeInteraction().channel
+    assert run_offer(wraith, channel) is True
+    assert "FCIDblue_phaseModuleShip_101_blue_interceptor" in buttons(channel)
+
+    blue = player_stats("hyd", color="blue")
+    red = player_stats("eri", color="red")
+    hydran = make_game({"player_count": 2, "players": {"1": blue, "2": red},
+                        "board": board_tile(["blue-int", "red-cru"], owner="blue", sector=101),
+                        "advanced_ai": False, "wa_ai": False}, game_id="h")
+    hydran.setAttackerAndDefender(["red"], ["blue"], "101")
+    hydran_channel = FakeInteraction().channel
+    assert run_offer(hydran, hydran_channel) is False
+    assert not hydran_channel.sent
+
+
+def test_phase_module_menu_lists_only_the_blueprints_in_the_tile(make_game):
+    game = phase_combat(make_game, blue_ships=("blue-int", "blue-cru"))
+    channel = FakeInteraction().channel
+    run_offer(game, channel)
+
+    labels = [cid for cid in buttons(channel) if "phaseModuleShip" in cid]
+    assert any(cid.endswith("_interceptor") for cid in labels)
+    assert any(cid.endswith("_cruiser") for cid in labels)
+    assert not any(cid.endswith("_starbase") for cid in labels)
+
+
+def test_stock_interceptor_can_pay_for_one_power_but_not_two(make_game):
+    game = phase_combat(make_game, souls=0)
+    channel = FakeInteraction().channel
+    message = offer_phase(game, channel)
+
+    speed = FakeInteraction(channel, message=message)
+    import asyncio
+    asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_speed", speed))
+    assert "Not enough power" in speed.followup.sent[0][0]
+    assert not game.gamestate["board"]["101"].get("phaseModes", {}).get("blue")
+
+    comp = FakeInteraction(channel, message=message)
+    asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_comp", comp))
+    assert game.gamestate["board"]["101"]["phaseModes"]["blue"]["interceptor"]["comp"] == 1
+
+
+def test_offboard_power_is_shared_between_blueprints_and_reset_refunds_it(make_game):
+    game = phase_combat(make_game, souls=1, blue_ships=("blue-int", "blue-cru"))
+    channel = FakeInteraction().channel
+    message = offer_phase(game, channel)
+
+    import asyncio
+    spd = FakeInteraction(channel, message=message)
+    asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_speed", spd))
+    assert "speed" in game.gamestate["board"]["101"]["phaseModes"]["blue"]["interceptor"]
+
+    cruiser = FakeInteraction(channel, message=message)
+    asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_cruiser_speed", cruiser))
+    assert "Not enough power" in cruiser.followup.sent[0][0]
+
+    reset = FakeInteraction(channel, message=message)
+    asyncio.run(Combat.phaseModuleReset(game, "phaseModuleReset_101_blue_interceptor", reset))
+    assert "interceptor" not in game.gamestate["board"]["101"].get("phaseModes", {}).get("blue", {})
+
+    cruiser = FakeInteraction(channel, message=message)
+    asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_cruiser_speed", cruiser))
+    assert game.gamestate["board"]["101"]["phaseModes"]["blue"]["cruiser"]["speed"] == 2
+
+
+def test_phase_module_done_starts_combat_once(make_game, monkeypatch):
+    import asyncio
+    game = phase_combat(make_game)
+    channel = FakeInteraction().channel
+    message = offer_phase(game, channel)
+    prompted = []
+
+    async def prompt(_game, pos, _channel, _update):
+        prompted.append(pos)
+
+    monkeypatch.setattr(Combat, "promptNextSpeed", prompt)
+    asyncio.run(Combat.phaseModuleDone(game, "phaseModuleDone_101_blue",
+                                       FakeInteraction(channel, message=message)))
+    asyncio.run(Combat.phaseModuleDone(game, "phaseModuleDone_101_blue",
+                                       FakeInteraction(channel, message=FakeMessage(channel))))
+
+    assert prompted == ["101"]
+
+
+def test_phase_module_clear_all_refunds_and_starts_combat(make_game, monkeypatch):
+    import asyncio
+    game = phase_combat(make_game, souls=2)
+    channel = FakeInteraction().channel
+    message = offer_phase(game, channel)
+    asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_comp",
+                                         FakeInteraction(channel, message=message)))
+    prompted = []
+
+    async def prompt(_game, pos, _channel, _update):
+        prompted.append(pos)
+
+    monkeypatch.setattr(Combat, "promptNextSpeed", prompt)
+    asyncio.run(Combat.phaseModuleDone(game, "phaseModuleNone_101_blue",
+                                       FakeInteraction(channel, message=message), clear=True))
+
+    assert prompted == ["101"]
+    assert "blue" not in game.gamestate["board"]["101"].get("phaseModes", {})
+
+
+def test_a_new_pairing_clears_the_previous_declaration(make_game, run):
+    game = phase_combat(make_game)
+    tile = game.gamestate["board"]["101"]
+    tile["phaseModes"] = {"blue": {"interceptor": {
+        "comp": 1, "shield": 0, "speed": 0, "planets": False, "ignore": False, "cost": 1}}}
+    channel = FakeInteraction().channel
+
+    run(Combat.startCombat(game, channel, "101"))
+
+    assert "blue" not in game.gamestate["board"]["101"].get("phaseModes", {})
+
+
+def test_phase_module_speed_changes_initiative(make_game):
+    game = phase_combat(make_game)
+    game.gamestate["board"]["101"]["phaseModes"] = {"blue": {"interceptor": {
+        "comp": 0, "shield": 0, "speed": 2, "planets": False, "ignore": False, "cost": 2}}}
+
+    assert Combat.getCombatantShipsBySpeed(
+        game, "blue", game.gamestate["board"]["101"]["player_ships"], "101") == [(5, "int", 1)]
+    assert Combat.getBothCombatantShipsBySpeed(
+        game, ["blue"], ["red"], game.gamestate["board"]["101"]["player_ships"], "101")[0] == (5, "blue")
+    game.gamestate["board"]["102"] = {"owner": "blue", "sector": 102, "player_ships": ["blue-int"],
+                                      "wormholes": [0, 1, 3, 4], "type": "", "disctile": 0}
+    assert Combat.getCombatantShipsBySpeed(game, "blue", ["blue-int"], "102") == [(3, "int", 1)]
+
+
+def test_phase_module_shield_applies_to_the_target(make_game):
+    game = phase_combat(make_game)
+    ships = game.gamestate["board"]["101"]["player_ships"]
+
+    assert Combat.getOpponentUnitsThatCanBeHit(game, "red", ships, 5, 1, "101", 3) == ["blue-int"]
+    game.gamestate["board"]["101"]["phaseModes"] = {"blue": {"interceptor": {
+        "comp": 0, "shield": 1, "speed": 0, "planets": False, "ignore": False, "cost": 1}}}
+    assert Combat.getOpponentUnitsThatCanBeHit(game, "red", ships, 5, 1, "101", 3) == []
+
+
+def test_phase_module_ignore_shields_lets_a_computer_hit_through(make_game):
+    game = phase_combat(make_game, souls=3, red_parts=["elc", "ioc", "gas", "nus", "hul", "nud"])
+    ships = game.gamestate["board"]["101"]["player_ships"]
+    game.gamestate["board"]["101"]["phaseModes"] = {"blue": {"interceptor": {
+        "comp": 1, "shield": 0, "speed": 0, "planets": False, "ignore": True, "cost": 4}}}
+
+    assert Combat.getOpponentUnitsThatCanBeHit(game, "blue", ships, 5, 1, "101", 3) == []
+    assert Combat.getOpponentUnitsThatCanBeHit(
+        game, "blue", ships, 5, 1, "101", 3, ignore_shields=True) == ["red-cru"]
+
+
+def test_phase_module_offboard_power_defaults_to_zero_for_old_saves(make_game):
+    game = phase_combat(make_game)
+    del game.gamestate["players"]["1"]["wraithSouls"]
+
+    assert Combat.phase_offboard_remaining(game, "blue", "101") == 0
+
+
+def winning_wraith_game(make_game, planets):
+    blue = player_stats("wra", color="blue")
+    blue["military_tech"] = ["phm", "neb"]
+    red = player_stats("hyd", color="red")
+    red["owned_tiles"] = ["101"]
+    game = make_game({"player_count": 2, "players": {"1": blue, "2": red},
+                      "board": board_tile(["blue-int"], owner="red", sector=101,
+                                          money_pop=[1], science_pop=[1], material_pop=[1]),
+                      "advanced_ai": False, "wa_ai": False, "reputation_tiles": [1, 2, 3]})
+    game.setAttackerAndDefender(["blue"], ["red"], "101")
+    game.gamestate["board"]["101"]["phaseModes"] = {"blue": {"interceptor": {
+        "comp": 0, "shield": 0, "speed": 0, "planets": planets,
+        "ignore": False, "cost": 2 if planets else 0}}}
+    return game
+
+
+def test_phase_module_planets_is_required_before_the_auto_destroy(make_game, run):
+    from tests.fakes import offered_labels
+    no_planets = winning_wraith_game(make_game, False)
+    channel = FakeInteraction().channel
+    run(Combat.declareAWinner(no_planets, FakeInteraction(channel), "101"))
+    assert "Roll to Destroy Population" in offered_labels(FakeInteraction(channel))
+    assert "phaseModes" not in no_planets.gamestate["board"]["101"]
+
+    planets = winning_wraith_game(make_game, True)
+    channel = FakeInteraction().channel
+    run(Combat.declareAWinner(planets, FakeInteraction(channel), "101"))
+    labels = [button.label for _content, kwargs in channel.sent
+              for button in getattr(kwargs.get("view"), "children", [])]
+    assert "Destroy All Population" in labels
+    assert "phaseModes" not in planets.gamestate["board"]["101"]
+
+
+def test_phase_module_always_cloaking_pins_like_the_cloaking_device(make_game):
+    game = phase_combat(make_game)
+    wraith = game.getPlayerObjectFromColor("blue")
+    hydran = player_stats("hyd", color="red")
+
+    assert ExploreButtons.doesPlayerHaveUnpinnedShips(wraith, ["blue-int", "red-int"], game, "101") is True
+    assert ExploreButtons.doesPlayerHaveUnpinnedShips(wraith, ["blue-int", "red-int", "red-cru"],
+                                                      game, "101") is False
+    assert ExploreButtons.doesPlayerHaveUnpinnedShips(hydran, ["red-int", "blue-int"], game, "101") is False
+
+
+def test_phase_module_bombing_only_tile_leaves_only_the_roll(make_game, run):
+    blue = player_stats("wra", color="blue")
+    blue["military_tech"] = ["phm", "neb"]
+    red = player_stats("hyd", color="red")
+    game = make_game({"player_count": 2, "players": {"1": blue, "2": red},
+                      "board": board_tile(["blue-int"], owner="red", sector=101,
+                                          money_pop=[1], science_pop=[1], material_pop=[1]),
+                      "advanced_ai": False, "wa_ai": False, "reputation_tiles": [1, 2, 3],
+                      "game_id": "t", "roundNum": 1})
+    channel = FakeInteraction(role_names=["t"]).channel
+    run(Combat.startCombatThreads(game, FakeInteraction(channel, role_names=["t"])))
+
+    bombing = channel.threads[0]
+    labels = [button.label for _content, kwargs in bombing.sent
+              for button in getattr(kwargs.get("view"), "children", [])]
+    assert labels == ["Roll to Destroy Population"]
+    assert any("Phase Module Planets option must be declared" in content
+               for content, _kwargs in bombing.sent)
+
+
+def test_phase_module_done_is_an_answer_button():
+    from listeners.ButtonListener import ANSWER_BUTTONS
+    assert "phaseModuleDone" in ANSWER_BUTTONS
+
+
+def test_rolling_is_refused_until_the_phase_module_declaration_is_done(make_game, monkeypatch):
+    import asyncio
+    game = phase_combat(make_game, souls=1)
+    channel = FakeInteraction().channel
+    message = offer_phase(game, channel)
+    before = FakeInteraction(channel)
+
+    asyncio.run(Combat.rollDice(game, "rollDice_101_blue_3_deleteMsg", before))
+    assert "Declare Phase Module options before rolling initiative" in before.channel.sent[-1][0]
+    assert "currentSpeed" not in game.gamestate["board"]["101"]
+
+    asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_speed",
+                                         FakeInteraction(channel, message=message)))
+    async def prompt(_game, _pos, _channel, _update):
+        return None
+    monkeypatch.setattr(Combat, "promptNextSpeed", prompt)
+    asyncio.run(Combat.phaseModuleDone(game, "phaseModuleDone_101_blue",
+                                       FakeInteraction(channel, message=message)))
+    stale = FakeInteraction(channel)
+    asyncio.run(Combat.rollDice(game, "rollDice_101_blue_3_deleteMsg", stale))
+    assert "no longer valid" in stale.channel.sent[-1][0]
+
+
+def test_ghosts_retreat_blocks_a_manual_roll_until_the_destination_is_chosen(
+        start_game, press, run, monkeypatch):
+    import asyncio
+    game, channel = start_game(factions=["wra", "eri"])
+    wraith_combat(game)
+    run(Combat.promptNextSpeed(game, "101", channel, False))
+    press(channel, 1, "FCIDblue_ghostsRetreat_101_blue_3")
+
+    stale = FakeInteraction(channel)
+    state = reload(game)
+    asyncio.run(Combat.rollDice(state, "rollDice_101_blue_3_deleteMsg", stale))
+    assert "A retreat is being resolved" in stale.channel.sent[-1][0]
+    assert state.gamestate["board"]["101"]["player_ships"] == ["blue-int", "red-int"]

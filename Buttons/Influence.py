@@ -243,7 +243,7 @@ class InfluenceButtons:
 
     @staticmethod
     async def removeInfluenceFinish(game: GamestateHelper, interaction: discord.Interaction,
-                                    buttonID: str, delete: bool):
+                                    buttonID: str, delete: bool, player=None):
         tileLoc = buttonID.split("_")[1]
         owner = game.gamestate["board"][tileLoc]["owner"]
         if owner == 0:
@@ -251,8 +251,13 @@ class InfluenceButtons:
             return
         p1 = game.getPlayerObjectFromColor(owner)
         graveYard = buttonID.split("_")[2] == "graveYard"
+        soulCaptured = (graveYard and player is not None
+                        and PlayerHelper.capture_wraith_soul(player, game.gamestate["board"][tileLoc], last_cube=False))
         game.remove_control(p1["color"], tileLoc)
         await interaction.channel.send(f"{p1['player_name']} lost control of {tileLoc}.")
+        if soulCaptured:
+            game.update_player(PlayerHelper(game.get_player_from_color(player["color"]), player))
+            await interaction.channel.send(f"{player['player_name']} captured a soul from the destroyed sector.")
         for pop in PopulationButtons.findFullPopulation(game, tileLoc):
             neutralCubes, orbitalCubes = game.remove_pop([f"{pop}_pop"], tileLoc,
                                                          game.get_player_from_color(p1["color"]), graveYard)

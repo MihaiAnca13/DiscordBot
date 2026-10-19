@@ -38,7 +38,7 @@ ANSWER_BUTTONS = ("selectDiscTile", "exploreDiscoveryTile", "keepDiscForPoints",
                   "getTech", "getFreeTech", "placeWarpPortal",
                   "offerRelationsTo", "acceptRelationsWith", "declineRelationsWith", "formMinorRelations",
                   "reducePopFor", "addCubeToTrack", "drawReputation", "dontDrawReputation",
-                  "ancientsCube", "setupTech")
+                  "ancientsCube", "setupTech", "phaseModuleDone", "phaseModuleNone")
 
 
 class ButtonListener(commands.Cog):
@@ -295,6 +295,8 @@ class ButtonListener(commands.Cog):
             await BuildButtons.finishBuild(game, player, interaction, customID)
         elif customID.startswith("finishSpendForBuild"):
             await BuildButtons.finishSpendForBuild(game, player, interaction, customID, player_helper)
+        elif customID.startswith("phaseTechUpgrade"):
+            await BuildButtons.phaseTechUpgrade(game, player, interaction, customID, player_helper)
         elif customID.startswith("startUpgrade"):
             game.updateSaveFile()
             await UpgradeButtons.startUpgrade(game, player, interaction, True, "dummy","dum")
@@ -313,6 +315,18 @@ class ButtonListener(commands.Cog):
             await UpgradeButtons.undoUpgrade(game, player, interaction, customID, player_helper)
         elif customID.startswith("technoMagic"):
             await Combat.technoMagicUpgrade(game, customID, player, interaction, player_helper)
+        elif customID.startswith("phaseModuleShip"):
+            await Combat.phaseModuleShip(game, customID, interaction)
+        elif customID.startswith("phaseModuleBack"):
+            await Combat.phaseModuleBack(game, customID, interaction)
+        elif customID.startswith("phaseModuleOption"):
+            await Combat.phaseModuleOption(game, customID, interaction)
+        elif customID.startswith("phaseModuleReset"):
+            await Combat.phaseModuleReset(game, customID, interaction)
+        elif customID.startswith("phaseModuleDone"):
+            await Combat.phaseModuleDone(game, customID, interaction)
+        elif customID.startswith("phaseModuleNone"):
+            await Combat.phaseModuleDone(game, customID, interaction, True)
         elif customID.startswith("startPopDrop"):
             await PopulationButtons.startPopDrop(game, player, interaction)
         elif customID.startswith("fillPopulation"):
@@ -331,7 +345,7 @@ class ButtonListener(commands.Cog):
         elif customID.startswith("removeInfluenceStart"):
             await InfluenceButtons.removeInfluenceStart(game, player, interaction)
         elif customID.startswith("removeInfluenceFinish"):
-            await InfluenceButtons.removeInfluenceFinish(game, interaction, customID, True)
+            await InfluenceButtons.removeInfluenceFinish(game, interaction, customID, True, player)
         elif customID.startswith("addCubeToTrack"):
             await InfluenceButtons.addCubeToTrack(game, player, interaction, customID)
         elif customID.startswith("refreshPopShips"):
@@ -400,6 +414,10 @@ class ButtonListener(commands.Cog):
             await Combat.removeThisUnit(game, customID, player, interaction)
         elif customID.startswith("startToRetreatUnits"):
             await Combat.startToRetreatUnits(game, customID, interaction)
+        elif customID.startswith("ghostsRetreatTo"):
+            await Combat.ghostsRetreatTo(game, customID, interaction)
+        elif customID.startswith("ghostsRetreat"):
+            await Combat.ghostsRetreat(game, customID, interaction)
         elif customID.startswith("finishRetreatingUnits"):
             await Combat.finishRetreatingUnits(game, customID, interaction, player)
         elif customID.startswith("killPop"):

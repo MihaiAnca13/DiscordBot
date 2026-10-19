@@ -593,7 +593,7 @@ class DrawHelper:
         return context
 
     def faction_portrait(self, faction):
-        if faction == "atlantians" or faction == "ra" or faction == "tm":
+        if faction in ("atlantians", "ra", "tm", "wraith"):
             return self.use_image(f"images/resources/components/layouts/factionImages/{faction}_image.png")
         return self.use_image(f"images/resources/components/factions/{faction}_board.png").crop((49, 252, 154, 357))
 
@@ -1115,6 +1115,9 @@ class DrawHelper:
         # the colony ships one Influence action may flip (Buttons/Influence.py)
         text_drawable_image.text((618, 417), f"{FactionData.of(player).get('influence_colony_ships', 2)}",
                                  color, font=font, stroke_width=stroke_width, stroke_fill=stroke_color)
+        if FactionData.has(player, "soul_hunters"):
+            text_drawable_image.text((3850, 740), f"Souls: {player.get('wraithSouls', 0)}",
+                                     color, font=font, stroke_width=stroke_width, stroke_fill=stroke_color)
             
 
 
@@ -1671,6 +1674,7 @@ class DrawHelper:
             points += repu
         if "magPartPoints" in player:
             points += player["magPartPoints"]
+        points += player.get("wraithSouls", 0)
 
         if "rep" in player.get("discoveryTileBonusPointTiles", []):
             points += reputationPoints // 3

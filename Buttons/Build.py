@@ -19,6 +19,9 @@ class BuildButtons:
         await interaction.channel.send(f"{player['player_name']} is using their turn to build")
         if "2" not in buttonID:
             player_helper.spend_influence_on_action("build")
+            if FactionData.has(player, "phase_technology"):
+                player_helper.stats["phaseBuildsThisAction"] = 0
+                player_helper.stats["phaseSwappedThisAction"] = False
             game.update_player(player_helper)
             await interaction.message.delete()
         for tile in tiles:
@@ -247,8 +250,43 @@ class BuildButtons:
         if len(build) < buildApt:
             view2.add_item(Button(label="Build Somewhere Else", style=discord.ButtonStyle.red,
                                   custom_id="startBuild2_deleteMsg"))
+        if FactionData.has(player, "phase_technology"):
+            player_helper.stats["phaseBuildsThisAction"] = (
+                player_helper.stats.get("phaseBuildsThisAction", 0) + len(build))
+            game.update_player(player_helper)
+            if (not player_helper.stats.get("phaseSwappedThisAction", False)
+                    and player_helper.stats["phaseBuildsThisAction"] < buildApt):
+                view2.add_item(Button(label="Swap for Upgrade", style=discord.ButtonStyle.green,
+                                      custom_id=f"FCID{player['color']}_phaseTechUpgrade"))
         view2.add_item(Button(label="Finish Action", style=discord.ButtonStyle.red,
                               custom_id=f"FCID{player['color']}_finishAction"))
         await interaction.channel.send(f"{player['player_name']} use buttons to finish the action or"
                                        " potentially build somewhere else.", view=view2)
         await interaction.message.delete()
+
+    @staticmethod
+    async def phaseTechUpgrade(game: GamestateHelper, player, interaction: discord.Interaction,
+                               buttonID: str, player_helper: PlayerHelper):
+        """Phase Technology: spend the remaining Build activation as an Upgrade 1 activation."""
+        from Buttons.Upgrade import UpgradeButtons
+        buildApt = player["build_apt"]
+        if player.get("passed") or player.get("pulsarBuild"):
+            buildApt = 1
+        if not FactionData.has(player, "phase_technology"):
+            await interaction.followup.send("Your faction cannot swap a Build activation for an Upgrade.",
+                                            ephemeral=True)
+            return
+        if player_helper.stats.get("phaseSwappedThisAction", False):
+            await interaction.followup.send("You already swapped a Build activation this action.", ephemeral=True)
+            return
+        if player_helper.stats.get("phaseBuildsThisAction", 0) < 1:
+            await interaction.followup.send("Phase Technology swaps a later Build activation, not the first.",
+                                            ephemeral=True)
+            return
+        if player_helper.stats.get("phaseBuildsThisAction", 0) >= buildApt:
+            await interaction.followup.send("This action has no Build activation left to swap.", ephemeral=True)
+            return
+        player_helper.stats["phaseSwappedThisAction"] = True
+        player_helper.stats["phaseBuildsThisAction"] += 1
+        game.update_player(player_helper)
+        await UpgradeButtons.startUpgrade(game, player, interaction, True, "phase", "1")
