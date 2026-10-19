@@ -1,11 +1,22 @@
 from pathlib import Path
 
+import pytest
+
 from Buttons.Build import BuildButtons
 from Buttons.Research import ResearchButtons
 from helpers import FactionData
 from helpers.CombatHelper import Combat
 from helpers.DrawHelper import DrawHelper
 from tests.fakes import FakeInteraction, POS, player_stats
+
+
+@pytest.mark.parametrize("alias, canonical", [
+    ("Orian Hegemony", "Orion Hegemony"),
+    ("Eridian Empire", "Eridani Empire"),
+])
+def test_old_faction_names_resolve_to_the_same_artwork_and_facts(alias, canonical):
+    assert FactionData.artwork_name(alias) == FactionData.artwork_name(canonical)
+    assert FactionData.of({"name": alias}) == {**FactionData.of({"name": canonical}), "name": alias}
 
 
 def test_every_faction_row_carries_its_artwork_and_colour():

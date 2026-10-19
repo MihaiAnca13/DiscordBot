@@ -9,7 +9,8 @@ import json
 with open("data/factions.json", "r") as f:
     FACTIONS = json.load(f)
 
-BY_NAME = {faction["name"]: faction for faction in FACTIONS.values()}
+BY_NAME = {name: faction for faction in FACTIONS.values()
+           for name in [faction["name"], *faction.get("name_aliases", [])]}
 
 
 def of(player):

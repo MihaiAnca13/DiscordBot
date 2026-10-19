@@ -11,14 +11,14 @@ what has gone wrong before, not what any one faction is.
 - **Source inventory.** List the faction folder first. The usual set is `<key>_{info,board,home,ambassador,icon}`, in mixed `.jpg`/`.png`, and folders do ship files missing. Note what exists; if something the implementation needs is missing (a home tile, a portrait), say so and ask — never improvise an asset.
 - **Rules text.** The card and the board are the only rules source. Transcribe the card verbatim (setup resources, colony ships, technologies, sector contents, activations, trade value, reputation track, every ability with its exact wording) and flag anything illegible instead of guessing. Read the card yourself as well as delegating the transcription: crop the card at native resolution and zoom on the numbers that matter. Do this for every image that carries rules text.
 - **Decode the board against an implemented faction's board.** Faction boards are made from a shared template: put the new board next to an implemented one of the same size and the *differences are the rule deltas*. This is how the reputation-slot frames (ambassador frame present or absent) and the action bubbles above the action circles (how many colony ships an Influence action flips) are read; neither is written anywhere else.
-- **Faction data** in `data/factions.json`: starting resources and colony ships, home sector, action limits, trade value, influence discs and tracks, technologies, reputation track, ship costs, stock, blueprints, population cube counts. Match the existing field set and key order. The file is also where a faction's identity and quirks live (see *Faction facts in the data* below) — from a player dict they are read with `helpers/FactionData.py`, never with a name comparison.
+- **Faction data** in `data/factions.json`: starting resources and colony ships, home sector, action limits, trade value, influence discs and tracks, technologies, reputation track, ship costs, stock, blueprints, population cube counts. Match the existing field set and key order. Put shared facts and reusable capabilities in the file (see *Faction facts in the data* below) and read them through `helpers/FactionData.py`. Keep unique behavior in its existing handler when that is simpler.
 - **Home sector** in `data/sectors.json` plus `images/resources/hexes/<id>.png`. Pick the number the artwork prints if it is free, otherwise a free one; a printed "SECTOR nnn" can be template art. Give the tile its VP value, artifact flag, population squares with their snap coordinates, wormholes and the ship structure snaps. The tile image recipe used so far: crop the source square image to the hexagon (dropping the black margins) and resize to 1024x890 RGBA. Derive each `*_snap` from the printed square and verify by rendering the tile.
 - **Population cube counts are not printed.** Every existing faction's track starts at 12 cubes per resource, minus one cube for every cube the setup places on the home sector's squares, including an Advanced square that a starting technology unlocks. Verify against the other factions' data before copying a number.
 - **Selection.** Set `"community": true` and a `"setup_color"` in the faction's data (it then appears only with `community_factions` enabled, respects drafted-away factions and explicit bans, and neither causes nor receives colour blocks), and add it to the faction choices in `commands/setup_commands.py`. Post its board plus its rules as text in the faction reference thread; do not post a separate reference/card image.
 - **Colours.** New colours are not supported; prefer one of the existing setup colours (blue, red, green, yellow, purple, white, pink, brown, teal). A community faction may share a colour with a standard faction — the draft allows both — and setup hands the second one another free colour. Standard factions share colours with their Terran equivalents on purpose.
 - **Name lookups.** Give the faction an `"artwork"` key in its data; `helpers/FactionData.py` derives images, emoji and blueprint keys from it (data key and artwork key may differ, e.g. `exl`/`exile`). Do not add a name table anywhere.
 - **Artwork.** Under `images/resources/components/`: `factions/<art>_{board,info,ambassador}.png`, `layouts/factionImages/<art>_image.png` (the icon), `layouts/faction_titles/name_trade_<art>.png`, `layouts/blueprints/classes/<art>_{interceptor,cruiser,dreadnought,starbase}_class.png`. The class images are 300x115 (dreadnought 315x148), transparent, white silhouette + two-line class name + initiative chevrons, and are pasted over the blueprint art — they usually have to be composed from the board and then verified by rendering them at the paste offset. In `DrawHelper.faction_portrait`, return the dedicated `factionImages/<art>_image.png` instead of the crop used for standard boards.
-- **Abilities: reuse before building.** For every ability, grep for the closest existing flow *before* writing anything and route the ability through it; only add shared logic when the grep comes up empty. Name the flow each ability reuses in the commit message. Declare the ability in the faction's data (see below) and guard the implementation with it — never with the faction's name. Write down the shared state machines the abilities can reach (see below) and check each one by hand.
+- **Abilities: reuse before building.** For every ability, grep for the closest existing flow *before* writing anything and route the ability through it; only add shared logic when the grep comes up empty. Name the flow each ability reuses in the commit message. Prefer a declared ability and a shared implementation when the behavior fits an existing pattern; a unique faction behavior can keep a direct name check in its existing handler. Write down the shared state machines the abilities can reach (see below) and check each one by hand.
 - **Tests.** Data (fields, tech, parts), home sector (data, tile art, a render), draft visibility/colour/bans, artwork existence and size, each ability, and a real first round through setup. Add the faction as another player to the existing multi-faction first-round test rather than writing a new round test; it also catches setup hooks clashing. The first round loads some art only inside fire-and-forget render tasks, where a failure is swallowed — the artwork existence/size test is what actually covers those files. Any test that counts factions (draft buttons) needs updating in the same change.
 - **Verify.** Run the *full* suite, not the faction's tests. Grep the callers of every shared file touched and confirm existing factions are unchanged, including the shared population-removal paths and the draft. Re-read the ability text next to the code. Confirm every referenced artwork path exists and matches its source. Report anything uncertain from the transcription for a human to check against the physical card.
 - **Look at the render.** Run the first-round test with `--basetemp=<dir>`, then `local_debug/render_show_game.py <game_id> <dir>` on the saved game, and check the home tile, the player area and the blueprints by eye. Tests stub the art, so only this shows the picture.
@@ -26,13 +26,15 @@ what has gone wrong before, not what any one faction is.
 
 ## Faction facts in the data
 
-A faction's quirks are declared in `data/factions.json` and read through
-`helpers/FactionData.py`; a new faction adds to the file (and to the ability's
-implementation if nobody has it yet), not a branch. The fields in use:
+Shared faction facts and reusable capabilities belong in `data/factions.json`
+and are read through `helpers/FactionData.py`. Reuse existing fields and flows
+when they fit; do not invent a data shape or hook for hypothetical factions.
+The fields in use:
 
 | Field | Read by | Meaning |
 |---|---|---|
 | `artwork` | `FactionData.artwork_name` | image/emoji/blueprint key (differs from the data key: `exl`/`exile`) |
+| `name_aliases` | `FactionData.BY_NAME` | optional old names that resolve to the same faction facts and artwork |
 | `setup_color` | `DraftButtons.getColor` | colour the draft hands the faction |
 | `community` | `DraftButtons.getDraftButtons` | draft only with `community_factions` on |
 | `starting_ships` | `GamestateHelper.setup_finished` | ships on the home sector at setup (default `["int"]`) |
@@ -46,10 +48,10 @@ An ability whose behavior is a flow (Techno-Magic, Power of the Ancients,
 two discovery choices) keeps its implementation where the flow lives — the
 code only asks whether the player has it. Grep for `FactionData.has` before
 inventing an id: an ability that already exists has a guard at its
-implementation. Anything the same code would need to check by name belongs in
-the table above; if a quirk is genuinely one faction's own code with no data
-shape, leave it where it is and say so in the commit message. Numbers a faction
-accumulates during play live on the player instead (Magellan's `magPartPoints`,
+implementation. Move repeated name checks into data when that simplifies the
+existing code. If a quirk is unique and has no useful shared data shape, keep
+it in its existing handler and explain the choice in the commit message.
+Numbers a faction accumulates during play live on the player instead (Magellan's `magPartPoints`,
 Lyra's `shrine_type`), as fields setup copies in for that faction only.
 
 ## Shortcomings to expect (each one happened)

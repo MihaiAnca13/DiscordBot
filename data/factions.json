@@ -452,6 +452,9 @@
         },
         "eri": {
                 "name": "Eridani Empire",
+                "name_aliases": [
+                        "Eridian Empire"
+                ],
                 "artwork": "eridani",
                 "setup_color": "red",
                 "abilities": [
@@ -595,6 +598,9 @@
         },
         "ori": {
                 "name": "Orion Hegemony",
+                "name_aliases": [
+                        "Orian Hegemony"
+                ],
                 "artwork": "orion",
                 "setup_color": "purple",
                 "starting_ships": [
