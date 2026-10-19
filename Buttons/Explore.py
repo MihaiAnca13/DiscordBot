@@ -5,6 +5,7 @@ from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
 from helpers.PlayerHelper import PlayerHelper
 from helpers.DrawHelper import DrawHelper
+from helpers.Turtugan import DeepSpace, Harvester
 from discord.ui import View, Button
 from jproperties import Properties
 
@@ -81,7 +82,8 @@ class ExploreButtons:
                 if all([adjTile not in tilesViewed,
                         stored is not None or tile_orientation_index in tile_entry["wormholes"],
                         "back" in game.gamestate.get("board", {}).get(str(adjTile), {}).get("sector", [])]):
-                    if int(adjTile) > 299 and len(game.gamestate["tile_deck_300"]) == 0:
+                    if (int(adjTile) > 299 and len(game.gamestate["tile_deck_300"]) == 0
+                            and not DeepSpace.has_reserve(player)):
                         continue
                     tilesViewed.append(adjTile)
         return tilesViewed
@@ -95,6 +97,10 @@ class ExploreButtons:
             game.update_player(player_helper)
         else:
             await interaction.channel.send(f"{player['player_name']} is resolving their second explore")
+        if FactionData.has(player, "harvester"):
+            # each Explore action grants a fresh free Harvester move
+            player_helper.stats["harvester_free_move_used"] = False
+            game.update_player(player_helper)
         view = View()
         for tile in ExploreButtons.getTilesToExplore(game, player):
             view.add_item(Button(label=str(tile), style=discord.ButtonStyle.blurple,
@@ -125,6 +131,10 @@ class ExploreButtons:
                                            f" position {position} right now.")
             await interaction.message.delete()
             return
+        if len(msg) == 2 and DeepSpace.can_offer(player, position):
+            await DeepSpace.offer(game, player, interaction, position)
+            await interaction.message.delete()
+            return
         if len(msg) > 2:
             tileID = msg[2]
             game.tile_discard(msg[3])
@@ -151,6 +161,14 @@ class ExploreButtons:
                                                    view=view)
                     await interaction.message.delete()
                     return
+        await ExploreButtons.showExploredTile(game, player, interaction, position, tileID)
+        await interaction.message.delete()
+
+    @staticmethod
+    async def showExploredTile(game: GamestateHelper, player, interaction: discord.Interaction,
+                               position: str, tileID: str):
+        drawing = DrawHelper(game.gamestate)
+        view = View()
         image = await asyncio.to_thread(drawing.base_tile_image, tileID)
         file2 = await asyncio.to_thread(drawing.show_single_tile, image)
         await interaction.channel.send(f"Tile explored in position {position}: Tile {tileID}.", file=file2)
@@ -162,7 +180,33 @@ class ExploreButtons:
                              custom_id=f"FCID{player['color']}_discardTile_{tileID}"))
         asyncio.create_task(interaction.channel.send(f"{player['player_name']} select the orientation you prefer"
                                                      " or discard the tile.", view=view, file=file))
+
+    @staticmethod
+    async def reservedTile(game: GamestateHelper, player, interaction: discord.Interaction, customID: str):
+        position, choice, token = customID.split("_")[1:4]
+        if not DeepSpace.can_offer(player, position) and choice != "random":
+            await interaction.followup.send("That sector is no longer in your Deep Space reserve.", ephemeral=True)
+            return
+        tileID, error = DeepSpace.take(game, player, position, choice, token)
+        if error == "stale":
+            await interaction.followup.send("That Deep Space Explorers choice was already resolved.", ephemeral=True)
+            return
+        if error == "empty":
+            await interaction.followup.send("The S3 deck is empty, so choose a reserved sector instead.",
+                                            ephemeral=True)
+            return
+        if error == "missing":
+            await interaction.followup.send("That sector is no longer in your Deep Space reserve.", ephemeral=True)
+            return
+        await ExploreButtons.showExploredTile(game, player, interaction, position, tileID)
         await interaction.message.delete()
+
+    @staticmethod
+    def addHarvesterMoveButton(game: GamestateHelper, player, view: View):
+        if (FactionData.has(player, "harvester") and not player.get("harvester_free_move_used")
+                and Harvester.sectors_with_harvester(game, player)):
+            view.add_item(Button(label="Move Harvester (free)", style=discord.ButtonStyle.green,
+                                 custom_id=f"FCID{player['color']}_startMoveHarvester"))
 
     @staticmethod
     async def placeTile(game: GamestateHelper, interaction: discord.Interaction, player,
@@ -203,6 +247,7 @@ class ExploreButtons:
                 await interaction.channel.send(f"There are {ancients} ancients in this tile, "
                                                "so you will not be able to claim it until you fight and destroy them.")
 
+        ExploreButtons.addHarvesterMoveButton(game, player, view2)
         view2.add_item(Button(label="Finish Action", style=discord.ButtonStyle.red,
                               custom_id=f"FCID{player['color']}_finishAction"))
         await interaction.channel.send(f"{player['player_name']} when you're finished resolving your action, "
@@ -215,6 +260,7 @@ class ExploreButtons:
         game.tile_discard(msg[1])
         await interaction.channel.send("Tile discarded")
         view = View()
+        ExploreButtons.addHarvesterMoveButton(game, player, view)
         view.add_item(Button(label="Finish Action", style=discord.ButtonStyle.red,
                              custom_id=f"FCID{player['color']}_finishAction"))
         await interaction.channel.send(f"{player['player_name']} when finished you may resolve your action "

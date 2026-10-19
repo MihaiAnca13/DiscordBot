@@ -1,4 +1,5 @@
 import json
+from helpers import FactionData
 from helpers.PlayerHelper import PlayerHelper
 
 
@@ -124,7 +125,8 @@ class PlayerShip(Ship):
     def check_valid_ship(self):
         return not any([self.range <= 0 and self.ship_type not in ["starbase", "orb"],
                         self.energy < 0,
-                        self.range > 0 and self.ship_type in ["starbase", "orb"]])
+                        self.range > 0 and self.ship_type in ["starbase", "orb"]
+                        and not (self.ship_type == "starbase" and FactionData.has(self.player, "harvester"))])
 
 
 class AI_Ship(Ship):

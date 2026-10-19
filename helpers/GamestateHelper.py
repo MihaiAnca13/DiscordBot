@@ -9,6 +9,7 @@ from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from helpers.EmojiHelper import Emoji
 from helpers.PlayerHelper import PlayerHelper
+from helpers.Turtugan import DeepSpace, Harvester
 import os
 from jproperties import Properties
 import random
@@ -465,6 +466,9 @@ class GamestateHelper:
             self.gamestate["board"][position].pop("unitsToRetreat", None)
             self.gamestate["board"][position].pop("pendingRiftDice", None)
             self.gamestate["board"][position].pop("pendingRiftBackfire", None)
+            self.gamestate["board"][position].pop("carapaceShields", None)
+            self.gamestate["board"][position].pop("carapacePendingMissiles", None)
+            self.gamestate["board"][position].pop("carapaceRollOldLength", None)
             self.gamestate["board"][position].pop("combatEntryOrder", None)
             self.gamestate["board"][position].pop("firstShotPhase", None)
             self.gamestate["board"][position].pop("firstShotSide", None)
@@ -555,7 +559,7 @@ class GamestateHelper:
                 if role:
                     await interaction.channel.send(role.mention +
                                                    " shuffling the discarded outer rim tiles back into the deck")
-            else:
+            elif not DeepSpace.keep_outer_rim(self):
                 keysToRemove = []
                 for key, value in self.gamestate["board"].items():
                     if value["sector"] == "sector3back":
@@ -661,6 +665,13 @@ class GamestateHelper:
         else:
             msg += "\nYou cannot place more money cubes because they have all been placed."
         msg += f"\nYou have {player['colony_ships']}/{player['base_colony_ships']} colony ships ready at this time."
+        if FactionData.has(player, "deep_space_explorers"):
+            reserve = player.get("deep_space_sectors", [])
+            msg += f"\nDeep Space Sectors: {', '.join(reserve) if reserve else 'none'}"
+        harvesters = player.get("harvester_placements", [])
+        if harvesters:
+            msg += "\nHarvesters: " + ", ".join(f"{item['position']} {item['square']} (+1 {item['resource']})"
+                                                for item in harvesters)
         return msg
 
     def setCombatants(self, players, pos):
@@ -898,6 +909,7 @@ class GamestateHelper:
                     self.gamestate["players"][player]["ship_stock"][2] += 1
                 if "sb" in i:
                     self.gamestate["players"][player]["ship_stock"][3] += 1
+                    Harvester.clear(self, position, color)
                 self.gamestate["board"][position]["player_ships"].remove(i)
             else:
                 if i + "adv" in self.gamestate["board"][position]["player_ships"]:
@@ -911,6 +923,10 @@ class GamestateHelper:
         for player in self.gamestate["players"]:
             p1 = PlayerHelper(player, self.get_player(player))
             neutrals, orbitals = p1.upkeep()
+            harvested = Harvester.produce(self, p1.stats)
+            if harvested:
+                await interaction.channel.send(f"{p1.stats['player_name']}'s Harvesters produced "
+                                               f"{', '.join(harvested)}.")
             for cube in range(orbitals):
                 view = View()
                 planetTypes = ["money", "science"]
@@ -1050,6 +1066,7 @@ class GamestateHelper:
                 home = self.get_system_coord(p1.stats["home_planet"])
                 for ship in FactionData.of(p1.stats).get("starting_ships", ["int"]):
                     self.gamestate["board"][home]["player_ships"].append(f"{p1.stats['color']}-{ship}")
+                DeepSpace.draw_reserve(self, p1.stats)
 
                 if FactionData.has(p1.stats, "setup_reputation_tiles"):
                     random.shuffle(self.gamestate["reputation_tiles"])

@@ -293,6 +293,8 @@ class InfluenceButtons:
     async def eliminatePlayer(game: GamestateHelper, player, interaction: discord.Interaction,
                                     player_helper: PlayerHelper, delete:bool):
         player_helper.setEliminated(True)
+        if FactionData.has(player, "harvester"):
+            player["harvester_placements"] = []
         game.update_player(player_helper)
         if delete:
             await interaction.message.delete()
