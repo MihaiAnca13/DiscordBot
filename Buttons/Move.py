@@ -53,7 +53,8 @@ class MoveButtons:
         ship_filter = "all"
         if "_" in buttonID:
             moveCount = buttonID.split("_")[1]
-        if buttonID == "startMove":
+        if buttonID == "startMove" and (FactionData.has(player, "raid")
+                                        or FactionData.has(player, "regroup")):
             player["herCrossUsed"] = False
             player["herRaidCharged"] = False
             game.update()
@@ -62,6 +63,8 @@ class MoveButtons:
         view = View()
         tiles = MoveButtons.getListOfUnpinnedShipTiles(game, player, ship_filter)
         suffix = f"_herRegroup_{phase}" if nested else ""
+        if not nested and ship_filter != "all":
+            suffix = f"_{ship_filter}"
         for tile in tiles:
             view.add_item(Button(label=tile, style=discord.ButtonStyle.red,
                                  custom_id=f"FCID{player['color']}_moveFrom_{tile}_{moveCount}{suffix}"))
@@ -200,7 +203,7 @@ class MoveButtons:
         moveCount = buttonID.split("_")[3]
         nested = "herRegroup" in buttonID
         phase = buttonID.rsplit("_", 1)[1] if nested else ""
-        ship_filter = "all" if nested else (buttonID.split("_")[5] if len(buttonID.split("_")) > 5 else "all")
+        ship_filter = "all" if nested else (buttonID.split("_")[4] if len(buttonID.split("_")) > 4 else "all")
         suffix = f"_herRegroup_{phase}" if nested else f"_{ship_filter}"
         ship = PlayerShip(player, shipType)
         shipRange = ship.getRange()

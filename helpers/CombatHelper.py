@@ -2390,6 +2390,8 @@ class Combat:
                                     " combat, so only the roll is available.")
                     asyncio.create_task(interaction.channel.send(message, view=view))
         game.gamestate["board"][pos].pop("ghostsRetreatPending", None)
+        game.gamestate["board"][pos].pop("firstShotPhase", None)
+        game.gamestate["board"][pos].pop("firstShotSide", None)
         Combat.clear_phase_module(game, pos)
 
 
@@ -2486,10 +2488,14 @@ class Combat:
             await interaction.channel.send(msg)
         if button:
             await interaction.message.delete()
-            if hitsToAssign == 0 and oldLength == len(Combat.findPlayersInTile(game, pos)):
-                if await Combat.offerPendingWolfPack(game, pos, interaction.channel):
-                    return
-                await Combat.promptNextSpeed(game, pos, interaction.channel, True)
+            if hitsToAssign == 0:
+                playersAfter = len(Combat.findPlayersInTile(game, pos))
+                if deferEnd and oldLength != playersAfter:
+                    await Combat.checkCombatEnd(game, interaction, pos, oldLength)
+                elif oldLength == playersAfter:
+                    if await Combat.offerPendingWolfPack(game, pos, interaction.channel):
+                        return
+                    await Combat.promptNextSpeed(game, pos, interaction.channel, True)
 
     @staticmethod
     async def resolveQueue(game: GamestateHelper, interaction: discord.Interaction, forcedResolve=False):

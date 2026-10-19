@@ -34,7 +34,8 @@ class BuildButtons:
                 player_helper.stats["phaseSwappedThisAction"] = False
             game.update_player(player_helper)
             await interaction.message.delete()
-        if buttonID == "startBuild":
+        if buttonID == "startBuild" and (FactionData.has(player, "raid")
+                                         or FactionData.has(player, "regroup")):
             player_helper.stats["herCrossUsed"] = False
             player_helper.stats["herRaidCharged"] = False
             game.update_player(player_helper)

@@ -489,8 +489,7 @@ class GamestateHelper:
             count = 0
         if "damage_tracker" in self.gamestate["board"][position]:
             del self.gamestate["board"][position]["damage_tracker"]
-        if ("retreatPenalty" + color in self.gamestate["board"][position]
-                and FactionData.has(self.getPlayerObjectFromColor(color), "honour_victorious")):
+        if count == 0 and FactionData.has(self.getPlayerObjectFromColor(color), "honour_victorious"):
             # Kurita's card removes every Battle Rep draw after any retreat, including destroyed ships.
             self.gamestate["board"][position].pop(key, None)
             self.update()

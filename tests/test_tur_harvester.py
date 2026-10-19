@@ -48,6 +48,23 @@ def test_turtugan_can_move_the_harvester_and_spends_influence(start_game, press)
     assert state.get_player(1)["move_action_counters"] == 1
 
 
+def test_free_harvester_move_only_offers_the_harvester(start_game, run, press):
+    game, channel = start_game(factions=["tur", "eri"])
+    game.add_tile("301", 0, "102")
+    game.gamestate["board"]["201"]["player_ships"].append("blue-cru")
+    game.update()
+    view = View()
+    ExploreButtons.addHarvesterMoveButton(game, game.get_player(1), view)
+    run(channel.send("free move", view=view))
+
+    press(channel, 1, "FCIDblue_startMoveHarvester")
+    press(channel, 1, "FCIDblue_moveFrom_201_0_sb")
+
+    labels = buttons(channel).values()
+    assert "Starbase (Range: 1)" in labels
+    assert "Cruiser (Range: 1)" not in labels
+
+
 def test_the_explore_free_move_is_once_per_action(start_game, run, press):
     game, channel = start_game(factions=["tur", "eri"])
     game.add_tile("301", 0, "102")

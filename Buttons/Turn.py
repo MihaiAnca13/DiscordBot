@@ -522,6 +522,9 @@ class TurnButtons:
     async def finishAction(player, game: GamestateHelper, interaction: discord.Interaction,
                            player_helper: PlayerHelper):
         player_helper.stats["allianceLeaveClosed"] = True
+        if FactionData.has(player, "phase_technology"):
+            player_helper.stats.pop("phaseBuildsThisAction", None)
+            player_helper.stats.pop("phaseSwappedThisAction", None)
         game.update_player(player_helper)
         await TurnButtons.checkTraitor(game, player, interaction, player_helper)
         view = View()

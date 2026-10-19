@@ -300,6 +300,8 @@ class InfluenceButtons:
         player_helper.setEliminated(True)
         if FactionData.has(player, "harvester"):
             player["harvester_placements"] = []
+        if FactionData.has(player, "deep_space_explorers"):
+            player["deep_space_sectors"] = []
         game.update_player(player_helper)
         if delete:
             await interaction.message.delete()
