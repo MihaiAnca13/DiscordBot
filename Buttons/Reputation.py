@@ -10,7 +10,8 @@ from helpers.PlayerHelper import PlayerHelper
 class ReputationButtons:
     @staticmethod
     async def resolveGainingReputation(game: GamestateHelper, amount_of_options: int,
-                                       interaction: discord.Interaction, player_helper: PlayerHelper, queue: bool):
+                                       interaction: discord.Interaction, player_helper: PlayerHelper, queue: bool,
+                                       battle_rep_adjustment: int = 0):
         randomList = game.gamestate["reputation_tiles"][:]
         random.shuffle(randomList)
         opts = ""
@@ -42,6 +43,9 @@ class ReputationButtons:
             if tile in ("rep", "mixed"):
                 player_helper.stats["reputation_track"][x] = highest
                 game.gamestate["reputation_tiles"].remove(highest)
+                if battle_rep_adjustment:
+                    player_helper.stats["battleRepPoints"] = (
+                        player_helper.stats.get("battleRepPoints", 0) + battle_rep_adjustment)
                 found = True
                 break
         if not found:
@@ -56,6 +60,9 @@ class ReputationButtons:
                 player_helper.stats["reputation_track"][loc] = highest
                 game.gamestate["reputation_tiles"].append(lowest)
                 game.gamestate["reputation_tiles"].remove(highest)
+                if battle_rep_adjustment:
+                    player_helper.stats["battleRepPoints"] = (
+                        player_helper.stats.get("battleRepPoints", 0) + battle_rep_adjustment)
             else:
                 msg += " It was lower or equal to your highest value reputation tile, so you put it back in the bag."
         game.update_player(player_helper)

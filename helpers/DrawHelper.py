@@ -593,7 +593,7 @@ class DrawHelper:
         return context
 
     def faction_portrait(self, faction):
-        if faction == "atlantians" or faction == "ra" or faction == "tm":
+        if faction in ("atlantians", "ra", "tm", "kurita"):
             return self.use_image(f"images/resources/components/layouts/factionImages/{faction}_image.png")
         return self.use_image(f"images/resources/components/factions/{faction}_board.png").crop((49, 252, 154, 357))
 
@@ -1671,6 +1671,8 @@ class DrawHelper:
             points += repu
         if "magPartPoints" in player:
             points += player["magPartPoints"]
+        if "gameEnded" in self.gamestate or showPrivateRegardless:
+            points += player.get("battleRepPoints", 0)
 
         if "rep" in player.get("discoveryTileBonusPointTiles", []):
             points += reputationPoints // 3
@@ -1679,7 +1681,7 @@ class DrawHelper:
             # gets no exemption here, unlike the Traitor Card.
             points += -3 if betrayed else 2
         if player.get("traitor") and not FactionData.has(player, "no_traitor_vp_penalty"):
-            points -= 2
+            points += vp.get("traitor_vp_penalty", -2)
         return points
 
     def show_game(self):

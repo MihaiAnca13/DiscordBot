@@ -165,6 +165,9 @@ class Combat:
         drawing = DrawHelper(game.gamestate)
         sides = Combat.currentPairing(game, pos)
         game.setAttackerAndDefender(sides[1], sides[0], pos)
+        tile = game.gamestate["board"][pos]
+        tile["firstShotSide"] = Combat.firstShotSideOf(game, tile["attacker"], tile["defender"])
+        tile["firstShotPhase"] = "opponent" if tile["firstShotSide"] else None
         game.setCurrentRoller(None, pos)
         game.setCurrentRoller(None, pos)
         for side in sides:
@@ -350,6 +353,43 @@ class Combat:
                 sorted_ships_grouped.append((ship[0], ship[1], amount))
 
         return sorted_ships_grouped
+
+    @staticmethod
+    def firstShotSideOf(game: GamestateHelper, attacker, defender):
+        """The side that shoots second, or [] when both or neither side has first shot."""
+        attacker = Combat.sideOf(attacker)
+        defender = Combat.sideOf(defender)
+
+        def has_first_shot(side):
+            return any(color != "ai"
+                       and FactionData.has(game.getPlayerObjectFromColor(color), "first_shot")
+                       for color in side)
+
+        attacker_has = has_first_shot(attacker)
+        defender_has = has_first_shot(defender)
+        if attacker_has == defender_has:
+            return []
+        return list(attacker if attacker_has else defender)
+
+    @staticmethod
+    def firstShotSide(game: GamestateHelper, pos):
+        """The delayed side of this pairing, derived from the pairing until startCombat records it."""
+        tile = game.gamestate["board"][pos]
+        if "firstShotPhase" in tile:
+            return list(tile.get("firstShotSide") or []) if tile["firstShotPhase"] else []
+        return Combat.firstShotSideOf(game, tile.get("attacker"), tile.get("defender"))
+
+    @staticmethod
+    def nextSpeedPair(sortedSpeeds, currentSpeed, currentRoller):
+        """The pair after (currentSpeed, currentRoller) in a descending-speed list."""
+        found = False
+        for speed, owner in sortedSpeeds:
+            if any([found, currentSpeed is None, currentRoller is None,
+                    currentSpeed is not None and speed < currentSpeed]):
+                return speed, owner
+            if speed == currentSpeed and currentRoller == owner:
+                found = True
+        return None
 
     @staticmethod
     def getBothCombatantShipsBySpeed(game: GamestateHelper, defender, attacker, playerShipsList, pos):
@@ -570,6 +610,10 @@ class Combat:
             defender = Combat.sideOf(game.gamestate["board"][pos]["defender"])
             ships = game.gamestate["board"][pos]["player_ships"][:]
             sortedSpeeds = Combat.getBothCombatantShipsBySpeed(game, defender, attacker, ships, pos)
+            delayedSide = Combat.firstShotSide(game, pos)
+            if delayedSide:
+                sortedSpeeds = ([pair for pair in sortedSpeeds if pair[1] not in delayedSide]
+                                + [pair for pair in sortedSpeeds if pair[1] in delayedSide])
             for speed, owner in sortedSpeeds:
                 # Each ship rolls for its own colour, even when its side is an Alliance.
                 checker = "" if owner == "ai" else f"FCID{owner}_"
@@ -1276,17 +1320,26 @@ class Combat:
         ships = game.gamestate["board"][pos]["player_ships"]
         sortedSpeeds = Combat.getBothCombatantShipsBySpeed(game, defender, attacker, ships, pos)
 
-        found = False
+        nextPair = Combat.nextSpeedPair(sortedSpeeds, currentSpeed, currentRoller)
+        phase = game.gamestate["board"][pos].get("firstShotPhase")
+        if phase is not None:
+            firstShotSide = game.gamestate["board"][pos].get("firstShotSide") or []
+            phaseSpeeds = [pair for pair in sortedSpeeds
+                           if (pair[1] in firstShotSide) == (phase == "kurita")]
+            nextPair = Combat.nextSpeedPair(phaseSpeeds, currentSpeed, currentRoller)
+            if nextPair is None:
+                # The delayed side only starts after the other side's whole first pass.
+                game.gamestate["board"][pos]["firstShotPhase"] = (
+                    "kurita" if phase == "opponent" else None)
+                game.setCurrentRoller(None, pos)
+                game.setCurrentSpeed(None, pos)
+                currentSpeed = currentRoller = None
+                if game.gamestate["board"][pos]["firstShotPhase"] == "kurita":
+                    nextPair = next((pair for pair in sortedSpeeds if pair[1] in firstShotSide), None)
         nextSpeed = -20
         nextOwner = ""
-        for speed, owner in sortedSpeeds:
-            if any([found, currentSpeed is None, currentRoller is None,
-                    currentSpeed is not None and speed < currentSpeed]):
-                nextSpeed = speed
-                nextOwner = owner
-                break
-            if speed == currentSpeed and currentRoller == owner:
-                found = True
+        if nextPair is not None:
+            nextSpeed, nextOwner = nextPair
         if nextSpeed == -20:
             await Combat.checkForMorphShield(game, pos, channel, ships, list(attacker) + list(defender))
             for speed, owner in sortedSpeeds:
@@ -1332,7 +1385,7 @@ class Combat:
                     newSpeeds = 0
                     for ship in shipsSpeeds:
                         speed2 = ship[0]
-                        if speed2 < 99 and speed2 != int(speed):
+                        if speed2 < 99 and speed2 != int(nextSpeed):
                             newSpeeds += 1
                             break
                     if newSpeeds < 1:
@@ -1451,10 +1504,14 @@ class Combat:
             if speed2 < 99 and speed2 != int(speed):
                 newSpeeds += 1
                 break
-        if newSpeeds < 1:
+        if newSpeeds < 1 or FactionData.has(player, "honour_victorious"):
             game.setRetreatingPenalty(colorOrAI, pos)
-            message = (f"{interaction.user.mention} is attempting  to retreat all their remaining ships"
-                       " and will thus not receive the default 1 reputation tile draw at the end of combat")
+            if FactionData.has(player, "honour_victorious"):
+                message = (f"{interaction.user.mention}'s honour: retreating any ship means no Battle Reputation"
+                           " at all this battle.")
+            else:
+                message = (f"{interaction.user.mention} is attempting  to retreat all their remaining ships"
+                           " and will thus not receive the default 1 reputation tile draw at the end of combat")
             await interaction.channel.send(message)
         await Combat.promptNextSpeed(game, pos, interaction.channel, False)
 
@@ -1583,6 +1640,7 @@ class Combat:
         entry_order = game.getCombatEntryOrder(pos)
         players = sorted(players, key=lambda color: (entry_order.index(color) if color in entry_order
                                                       else len(entry_order), players.index(color)))
+        survivors = [color for color in Combat.findPlayersInTile(game, pos) if color != "ai"]
         for playerColor in players:
             if playerColor == "ai":
                 continue
@@ -1602,12 +1660,16 @@ class Combat:
                    "If other battles/players need to resolve first, "
                    "your draw will be queued after you click this button")
             if int(count) > 0:
+                if FactionData.has(player, "honour_victorious"):
+                    side_survived = any(color == playerColor or game.areAllied(playerColor, color)
+                                        for color in survivors)
+                    game.gamestate.setdefault("battleRepAdjustments", {})[
+                        f"{system}-{countDraw}-{playerColor}"] = 1 if side_survived else -1
                 if "tilesToResolve" in game.gamestate:
                     game.addToKey("queuedQuestions", [int(game.gamestate["board"][pos]["sector"]),
                                                       countDraw, playerColor])
                     countDraw += 1
                 asyncio.create_task(interaction.channel.send(msg, view=view))
-        survivors = [color for color in Combat.findPlayersInTile(game, pos) if color != "ai"]
         # An Alliance wins as a side. Its members decide who drops the disc in
         # order of entry to the sector, so offer it to the earliest first.
         entryOrder = game.getCombatEntryOrder(pos)
@@ -1795,8 +1857,11 @@ class Combat:
                         foundNoSuccess = False
                         player_helper = PlayerHelper(game.get_player_from_color(color),
                                                      game.getPlayerObjectFromColor(color))
-                        await ReputationButtons.resolveGainingReputation(game, num_options, interaction,
-                                                                         player_helper, True)
+                        adjustment = game.gamestate.get("battleRepAdjustments", {}).pop(
+                            f"{int(system)}-{drawOrder}-{color}", 0)
+                        await ReputationButtons.resolveGainingReputation(
+                            game, num_options, interaction, player_helper, True,
+                            battle_rep_adjustment=adjustment)
                         game.removeFromKey("queuedDraws", [system, drawOrder, color, num_options])
                         success += 1
 
@@ -1805,6 +1870,7 @@ class Combat:
         system = int(buttonID.split("_")[1])
         drawOrder = int(buttonID.split("_")[2])
         color = buttonID.split("_")[3]
+        game.gamestate.get("battleRepAdjustments", {}).pop(f"{system}-{drawOrder}-{color}", None)
         if "tilesToResolve" in game.gamestate:
             game.removeFromKey("queuedQuestions", [system, drawOrder, color])
             await Combat.resolveQueue(game, interaction)
@@ -1826,7 +1892,10 @@ class Combat:
                 asyncio.create_task(interaction.channel.send(f"{interaction.user.name} drew {num_options} reputation tiles."))
             asyncio.create_task(interaction.message.delete())
         else:
-            await ReputationButtons.resolveGainingReputation(game, num_options, interaction, player_helper, False)
+            adjustment = game.gamestate.get("battleRepAdjustments", {}).pop(
+                f"{system}-{drawOrder}-{color}", 0)
+            await ReputationButtons.resolveGainingReputation(game, num_options, interaction, player_helper, False,
+                                                             battle_rep_adjustment=adjustment)
             asyncio.create_task(interaction.channel.send(f"{interaction.user.name} drew {num_options} reputation tiles."))
             asyncio.create_task(interaction.message.delete())
 
