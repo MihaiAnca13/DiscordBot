@@ -21,6 +21,12 @@ class PlayerHelper:
         return index in FactionData.of(player).get("reputation_only_slots", [])
 
     @staticmethod
+    def get_phase_module_slots(player, ship_type):
+        ship_type = {"int": "interceptor", "cru": "cruiser", "drd": "dread", "sb": "starbase"}.get(
+            ship_type, ship_type)
+        return FactionData.of(player).get("phase_module_slots", {}).get(ship_type, [])
+
+    @staticmethod
     def get_spine_cannon_slots(player, ship_type):
         ship_type = {"int": "interceptor", "cru": "cruiser", "drd": "dread", "sb": "starbase"}.get(
             ship_type, ship_type)
@@ -139,7 +145,8 @@ class PlayerHelper:
         if not isinstance(owner, str) or owner == "ai" or owner == player.get("color"):
             return False
         has_player_pop = any(sum(tile.get(f"{kind}_pop", [])) > 0 for kind in (
-            "money", "science", "material", "moneyadv", "scienceadv", "materialadv"))
+            "money", "science", "material", "moneyadv", "scienceadv", "materialadv",
+            "orbital", "disc"))
         if has_player_pop == last_cube:
             return False
         PlayerHelper(player.get("color"), player).adjust_wraith_souls(1)

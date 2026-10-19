@@ -173,18 +173,25 @@ class Harvester:
         player = game.gamestate.get("players", {}).get(player_id)
         if player is None:
             return
-        for placement in player.get("harvester_placements", []):
-            if placement["position"] == position:
-                player["harvester_placements"].remove(placement)
-                game.update()
-                return
+        placements = player.get("harvester_placements", [])
+        in_sector = [placement for placement in placements if placement["position"] == position]
+        # remove_units calls this before dropping the starbase, so one is about to leave.
+        remaining = Harvester.starbases(game, player, position) - 1
+        if len(in_sector) > remaining:
+            placements.remove(in_sector[-1])
+            game.update()
 
     @staticmethod
     def produce(game, player):
         """Upkeep: one resource per Harvester still over an unsettled planet."""
         produced = []
+        round_num = game.gamestate.get("roundNum", 0)
+        if player.get("harvester_produced_round") == round_num:
+            return produced
         if player.get("eliminated"):
             player["harvester_placements"] = []
+            player["harvester_produced_round"] = round_num
+            game.update()
             return produced
         placements = player.get("harvester_placements", [])
         for placement in placements[:]:
@@ -202,8 +209,8 @@ class Harvester:
                 continue
             player["materials" if resource == "material" else resource] += 1
             produced.append(f"+1 {resource} in {placement['position']}")
-        if produced:
-            game.update()
+        player["harvester_produced_round"] = round_num
+        game.update()
         return produced
 
     @staticmethod

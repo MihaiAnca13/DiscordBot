@@ -7,6 +7,7 @@ from Buttons.Upgrade import UpgradeButtons
 from helpers.CombatHelper import Combat
 from helpers.DrawHelper import DrawHelper
 from helpers.Turtugan import Harvester
+from helpers.PlayerHelper import PlayerHelper
 from helpers.ShipHelper import PlayerShip
 from tests.fakes import (FakeChannel, FakeInteraction, board_tile, buttons, player_helper,
                          player_stats, reload)
@@ -93,6 +94,47 @@ def test_the_explore_free_move_is_once_per_action(start_game, run, press):
     view.add_item(Button(label="Move Harvester (free)", custom_id="FCIDblue_startMoveHarvester"))
     run(channel.send("stale free move", view=view))
     press(channel, 1, "FCIDblue_startMoveHarvester")
+
+
+def test_removing_one_of_two_harvesters_keeps_a_single_placement(make_game):
+    player = player_stats("tur", color="teal")
+    player["harvester_placements"] = [
+        {"position": "201", "square": "money", "index": 0, "resource": "money"}]
+    game = make_game({
+        "player_count": 2,
+        "players": {"1": player},
+        "board": {"201": {"sector": "253", "orientation": 0, "owner": "teal",
+                          "player_ships": ["teal-sb", "teal-sb"], "money_pop": [0]}},
+    })
+
+    game.remove_units(["teal-sb"], "201")
+
+    assert game.get_player(1)["harvester_placements"] == [
+        {"position": "201", "square": "money", "index": 0, "resource": "money"}]
+
+
+def test_harvester_money_counts_before_bankruptcy(make_game):
+    player = player_stats("tur", color="teal")
+    player.update({
+        "money": 0,
+        "money_pop_cubes": 13,
+        "influence_discs": 10,
+        "harvester_placements": [
+            {"position": "201", "square": "money", "index": 0, "resource": "money"}],
+    })
+    game = make_game({
+        "roundNum": 1,
+        "player_count": 2,
+        "players": {"1": player},
+        "board": {"201": {"sector": "253", "orientation": 0, "owner": "teal",
+                          "player_ships": ["teal-sb"], "money_pop": [0]}},
+    })
+    helper = PlayerHelper(1, game.get_player(1))
+    assert helper.checkBankrupt() is True
+
+    Harvester.produce(game, helper.stats)
+
+    assert helper.checkBankrupt() is False
 
 
 def test_harvester_placement_stores_the_planet_and_produces_at_upkeep(start_game, run, press, monkeypatch):

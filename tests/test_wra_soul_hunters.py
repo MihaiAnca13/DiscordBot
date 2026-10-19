@@ -4,6 +4,7 @@ from PIL import Image, ImageDraw
 from Buttons.Influence import InfluenceButtons
 from helpers.CombatHelper import Combat
 from helpers.DrawHelper import DrawHelper
+from helpers.PlayerHelper import PlayerHelper
 from tests.fakes import FakeInteraction, board_tile, player_stats, reload
 
 
@@ -17,6 +18,25 @@ def soul_game(make_game, money_pop=(1, 1), science_pop=(), owner="red", game_id=
                                           science_pop=list(science_pop)),
                       "advanced_ai": False, "wa_ai": False}, game_id=game_id)
     return game
+
+
+def test_orbital_population_counts_as_enemy_population(make_game):
+    blue = player_stats("wra", color="blue")
+    tile = {"owner": "red", "money_pop": [0], "orbital_pop": [1]}
+
+    assert PlayerHelper.capture_wraith_soul(blue, tile, last_cube=True) is False
+    assert PlayerHelper.capture_wraith_soul(blue, tile, last_cube=False) is True
+
+
+def test_killing_an_orbital_population_captures_a_soul(make_game, run):
+    game = soul_game(make_game, money_pop=())
+    game.gamestate["board"]["101"]["orbital_pop"] = [1]
+    game.update()
+    blue = game.getPlayerObjectFromColor("blue")
+
+    run(Combat.killPop(game, "killPop_101_orbital_0", FakeInteraction(), blue))
+
+    assert reload(game).get_player(1)["wraithSouls"] == 1
 
 
 def test_one_soul_for_the_last_enemy_player_cube(make_game, run):

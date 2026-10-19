@@ -67,8 +67,9 @@ class UpgradeButtons:
             return
         with open("data/parts.json", "r") as f:
             part_stats = json.load(f)
+        phase_slots = PlayerHelper.get_phase_module_slots(player, ship)
         for index,i in enumerate(player[f"{ship}_parts"]):
-            if i == "mus" or UpgradeButtons.is_locked_drive(player, ship, i):
+            if i == "mus" or index in phase_slots or UpgradeButtons.is_locked_drive(player, ship, i):
                 continue
             oldPart = player_helper.stats[f"old_{ship}_parts"][index]
             lab = part_stats[i]["name"]
@@ -100,6 +101,9 @@ class UpgradeButtons:
         indexOfOldPart = customID.split("_")[5]
         if UpgradeButtons.is_locked_drive(player, ship, oldPart):
             await interaction.followup.send("A Harvester may not remove its Drive.", ephemeral=True)
+            return
+        if int(indexOfOldPart) in PlayerHelper.get_phase_module_slots(player, ship):
+            await interaction.followup.send("The Phase Module is built in and cannot be replaced.", ephemeral=True)
             return
         if discTileUpgrade not in ("dummy", "free", "phase") and not discTileUpgrade.startswith("tm"):
             await UpgradeButtons.chooseUpgrade(game, player, interaction,

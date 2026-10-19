@@ -112,10 +112,11 @@ def test_double_press_does_not_remove_two_reserved_sectors(make_game, run, monke
     monkeypatch.setattr(ExploreButtons, "showExploredTile", no_placement)
     stats = {"name": "Turtugan", "artwork": "turtugan", "color": "blue", "home_planet": "253",
              "player_name": "blue", "deep_space_sectors": ["301", "302"],
-             "deep_space_choice": None, "deep_space_choice_token": 0}
+             "deep_space_choice": None, "deep_space_choice_token": 0,
+             "owned_tiles": ["201"]}
     game = make_game({"players": {"1": stats},
                       "board": {"201": {"sector": "253", "orientation": 0, "player_ships": [],
-                                        "wormholes": [0, 1, 3, 4]},
+                                        "owner": "blue", "wormholes": [0, 1, 3, 4]},
                                 "301": {"sector": "sector3back", "orientation": 0, "player_ships": []}},
                       "tile_deck_300": ["303"], "player_count": 2})
     player = game.get_player(1)

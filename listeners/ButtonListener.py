@@ -41,7 +41,7 @@ ANSWER_BUTTONS = ("selectDiscTile", "exploreDiscoveryTile", "keepDiscForPoints",
                   "offerRelationsTo", "acceptRelationsWith", "declineRelationsWith", "formMinorRelations",
                   "reducePopFor", "addCubeToTrack", "drawReputation", "dontDrawReputation",
                   "ancientsCube", "setupTech", "reservedTile", "carapaceDone", "carapaceMissile",
-                  "wolfPack", "phaseModuleDone", "phaseModuleNone")
+                  "wolfPack", "phaseModuleDone", "phaseModuleNone", "phaseBombing")
 
 
 class ButtonListener(commands.Cog):
@@ -340,6 +340,8 @@ class ButtonListener(commands.Cog):
             await Combat.phaseModuleBack(game, customID, interaction)
         elif customID.startswith("phaseModuleOption"):
             await Combat.phaseModuleOption(game, customID, interaction)
+        elif customID.startswith("phaseBombing"):
+            await Combat.phaseBombing(game, player, interaction, customID)
         elif customID.startswith("phaseModuleReset"):
             await Combat.phaseModuleReset(game, customID, interaction)
         elif customID.startswith("phaseModuleDone"):

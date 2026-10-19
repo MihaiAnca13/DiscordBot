@@ -65,14 +65,17 @@ def test_phase_technology_swaps_the_second_build_activation_for_one_upgrade(star
     press(channel, 1, "FCIDblue_phaseTechUpgrade")
     assert "FCIDblue_upgradeShip_1_interceptor_phase" in buttons(channel)
     inter = press(channel, 1, "FCIDblue_upgradeShip_1_interceptor_phase")
-    inter = press(channel, 1, next(cid for cid in view_ids(inter)
-                                   if cid.startswith("FCIDblue_selectOldPart_") and "_empty_" in cid))
-    empty_slot = next(cid for cid in view_ids(inter)
-                      if cid.startswith("FCIDblue_chooseUpgrade_") and "_empty_hul_" in cid)
-    press(channel, 1, empty_slot)
+    parts_menu = view_ids(inter)
+    assert not [cid for cid in parts_menu
+                if cid.startswith("FCIDblue_selectOldPart_") and "_empty_" in cid]
+    inter = press(channel, 1, next(cid for cid in parts_menu
+                                   if cid.startswith("FCIDblue_selectOldPart_") and "_ioc_" in cid))
+    replacement = next(cid for cid in view_ids(inter)
+                       if cid.startswith("FCIDblue_chooseUpgrade_") and "_hul_" in cid)
+    press(channel, 1, replacement)
 
     state = reload(game).get_player(1)
-    assert state["interceptor_parts"] == ["ioc", "nus", "nud", "hul"]
+    assert state["interceptor_parts"] == ["hul", "nus", "nud", "empty"]
     assert state["influence_discs"] == 11          # the Build action's disc only
     assert state["upgrade_action_counters"] == 0   # the swap is not an Upgrade action
     assert state["phaseSwappedThisAction"] is True
@@ -91,6 +94,22 @@ def test_phase_technology_is_not_offered_after_two_builds(start_game, press):
     assert reload(game).get_player(1)["phaseBuildsThisAction"] == 2
 
 
+def test_wraith_influence_action_uses_one_activation(start_game, press):
+    game, channel = start_game(factions=["wra", "eri"])
+    game.add_tile("301", 0, "102")
+    game.add_tile("302", 0, "102")
+    game.update()
+
+    press(channel, 1, "FCIDblue_startInfluence")
+    press(channel, 1, "FCIDblue_addInfluenceFinish_301")
+    press(channel, 1, "FCIDblue_addInfluenceFinish_302")
+
+    state = reload(game)
+    assert state.gamestate["board"]["301"]["owner"] == "blue"
+    assert state.gamestate["board"]["302"]["owner"] == 0
+    assert state.get_player(1)["influence_discs"] == 11
+
+
 def test_phase_technology_is_only_for_the_wraith(start_game, press):
     game, channel = start_game(factions=["hyd", "eri"])
     game.get_player(1)["materials"] = 4
@@ -107,9 +126,9 @@ def test_phase_technology_undo_restores_the_blueprint_without_spending_a_disc(st
     press(channel, 1, "FCIDblue_phaseTechUpgrade")
     inter = press(channel, 1, "FCIDblue_upgradeShip_1_interceptor_phase")
     inter = press(channel, 1, next(cid for cid in view_ids(inter)
-                                   if cid.startswith("FCIDblue_selectOldPart_") and "_empty_" in cid))
+                                   if cid.startswith("FCIDblue_selectOldPart_") and "_ioc_" in cid))
     press(channel, 1, next(cid for cid in view_ids(inter)
-                           if cid.startswith("FCIDblue_chooseUpgrade_") and "_empty_hul_" in cid))
+                           if cid.startswith("FCIDblue_chooseUpgrade_") and "_hul_" in cid))
 
     press(channel, 1, "FCIDblue_undoUpgrade_1_phase")
 
@@ -460,9 +479,10 @@ def test_phase_module_always_cloaking_pins_like_the_cloaking_device(make_game):
     assert ExploreButtons.doesPlayerHaveUnpinnedShips(hydran, ["red-int", "blue-int"], game, "101") is False
 
 
-def test_phase_module_bombing_only_tile_leaves_only_the_roll(make_game, run):
+def test_phase_module_bombing_only_tile_offers_neutron_bombs_when_powered(make_game, run):
     blue = player_stats("wra", color="blue")
     blue["military_tech"] = ["phm", "neb"]
+    blue["wraithSouls"] = 2
     red = player_stats("hyd", color="red")
     game = make_game({"player_count": 2, "players": {"1": blue, "2": red},
                       "board": board_tile(["blue-int"], owner="red", sector=101,
@@ -475,9 +495,45 @@ def test_phase_module_bombing_only_tile_leaves_only_the_roll(make_game, run):
     bombing = channel.threads[0]
     labels = [button.label for _content, kwargs in bombing.sent
               for button in getattr(kwargs.get("view"), "children", [])]
+    assert labels == ["Roll to Destroy Population", "Use Phase Module: Neutron Bombs (2 Power)"]
+    assert any("spend 2 Power" in content for content, _kwargs in bombing.sent)
+
+
+def test_phase_module_bombing_only_tile_without_power_leaves_only_the_roll(make_game, run):
+    blue = player_stats("wra", color="blue")
+    blue["military_tech"] = ["phm", "neb"]
+    blue["wraithSouls"] = 1
+    red = player_stats("hyd", color="red")
+    game = make_game({"player_count": 2, "players": {"1": blue, "2": red},
+                      "board": board_tile(["blue-int"], owner="red", sector=101, money_pop=[1]),
+                      "advanced_ai": False, "wa_ai": False, "reputation_tiles": [1, 2, 3],
+                      "game_id": "t", "roundNum": 1})
+    channel = FakeInteraction(role_names=["t"]).channel
+    run(Combat.startCombatThreads(game, FakeInteraction(channel, role_names=["t"])))
+
+    bombing = channel.threads[0]
+    labels = [button.label for _content, kwargs in bombing.sent
+              for button in getattr(kwargs.get("view"), "children", [])]
     assert labels == ["Roll to Destroy Population"]
-    assert any("Phase Module Planets option must be declared" in content
-               for content, _kwargs in bombing.sent)
+    assert any("needs 2 Power" in content for content, _kwargs in bombing.sent)
+
+
+def test_phase_module_bombs_a_sector_without_combat(make_game, run):
+    blue = player_stats("wra", color="blue")
+    blue["military_tech"] = ["phm", "neb"]
+    blue["wraithSouls"] = 2
+    red = player_stats("hyd", color="red")
+    red["owned_tiles"] = ["101"]
+    game = make_game({"player_count": 2, "players": {"1": blue, "2": red},
+                      "board": board_tile(["blue-int"], owner="red", sector=101, money_pop=[1]),
+                      "advanced_ai": False, "wa_ai": False, "reputation_tiles": [1, 2, 3],
+                      "game_id": "t", "roundNum": 1})
+
+    run(Combat.phaseBombing(game, blue, FakeInteraction(), "phaseBombing_101"))
+
+    state = reload(game)
+    assert state.gamestate["board"]["101"]["owner"] == 0
+    assert state.get_player(1)["wraithSouls"] == 3
 
 
 def test_phase_module_done_is_an_answer_button():

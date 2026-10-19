@@ -10,6 +10,7 @@ from helpers.EmojiHelper import Emoji
 from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
 from helpers.PlayerHelper import PlayerHelper
+from helpers.Turtugan import Harvester
 from helpers.DrawHelper import DrawHelper
 from discord.ui import View, Button
 import asyncio
@@ -267,6 +268,10 @@ class TurnButtons:
             if game.gamestate["players"][player].get("eliminated"):
                 continue
             p1 = PlayerHelper(player, game.get_player(player))
+            harvested = Harvester.produce(game, p1.stats)
+            if harvested:
+                await interaction.channel.send(f"{p1.stats['player_name']}'s Harvesters produced "
+                                               f"{', '.join(harvested)}.")
             if p1.checkBankrupt():
                 view = View()
                 trade_value = p1.stats['trade_value']
@@ -522,6 +527,8 @@ class TurnButtons:
     async def finishAction(player, game: GamestateHelper, interaction: discord.Interaction,
                            player_helper: PlayerHelper):
         player_helper.stats["allianceLeaveClosed"] = True
+        player_helper.stats.pop("influenceActionActive", None)
+        player_helper.stats.pop("influenceActionUsed", None)
         if FactionData.has(player, "phase_technology"):
             player_helper.stats.pop("phaseBuildsThisAction", None)
             player_helper.stats.pop("phaseSwappedThisAction", None)

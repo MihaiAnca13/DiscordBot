@@ -83,6 +83,7 @@ class ExploreButtons:
                         stored is not None or tile_orientation_index in tile_entry["wormholes"],
                         "back" in game.gamestate.get("board", {}).get(str(adjTile), {}).get("sector", [])]):
                     if (int(adjTile) > 299 and len(game.gamestate["tile_deck_300"]) == 0
+                            and len(game.gamestate.get("tile_discard_deck_300", [])) == 0
                             and not DeepSpace.has_reserve(player)):
                         continue
                     tilesViewed.append(adjTile)
@@ -184,6 +185,10 @@ class ExploreButtons:
     @staticmethod
     async def reservedTile(game: GamestateHelper, player, interaction: discord.Interaction, customID: str):
         position, choice, token = customID.split("_")[1:4]
+        if position not in ExploreButtons.getTilesToExplore(game, player):
+            await interaction.followup.send(f"{player['player_name']}, you cannot explore position {position} right now.",
+                                            ephemeral=True)
+            return
         if not DeepSpace.can_offer(player, position) and choice != "random":
             await interaction.followup.send("That sector is no longer in your Deep Space reserve.", ephemeral=True)
             return

@@ -3306,6 +3306,20 @@
                         2,
                         3
                 ],
+                "phase_module_slots": {
+                        "interceptor": [
+                                3
+                        ],
+                        "cruiser": [
+                                2
+                        ],
+                        "dread": [
+                                3
+                        ],
+                        "starbase": [
+                                3
+                        ]
+                },
                 "materials": 4,
                 "science": 4,
                 "money": 2,

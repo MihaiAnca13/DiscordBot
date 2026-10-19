@@ -185,6 +185,24 @@ class Combat:
         return max(0, player.get("wraithSouls", 0) - Combat.phase_offboard_used(game, color, pos))
 
     @staticmethod
+    async def phaseBombing(game: GamestateHelper, player, interaction: discord.Interaction, customID: str):
+        """Spend 2 Power to use Neutron Bombs on a sector with no combat."""
+        pos = customID.split("_")[1]
+        if not FactionData.has(player, "phase_module"):
+            return
+        player_helper = PlayerHelper(game.get_player_from_color(player["color"]), player)
+        if "neb" not in player_helper.getTechs():
+            await interaction.followup.send("Research Neutron Bombs before using them.", ephemeral=True)
+            return
+        if player.get("wraithSouls", 0) < 2:
+            await interaction.followup.send("The Phase Module needs 2 Power for Neutron Bombs.",
+                                            ephemeral=True)
+            return
+        from Buttons.Influence import InfluenceButtons
+        await InfluenceButtons.removeInfluenceFinish(
+            game, interaction, f"removeInfluenceFinish_{pos}_graveYard", True, player)
+
+    @staticmethod
     def phase_declared_planets(game: GamestateHelper, color: str, pos: str):
         modes = game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {})
         return any(mode.get("planets") for mode in modes.values())
@@ -311,8 +329,14 @@ class Combat:
                                      custom_id=f"FCID{winner}_rollDice_{pos}_{winner}_1000_deleteMsg"))
                 message = f"{playerName}, you may roll to attempt to kill enemy population."
                 if wraithNeedsDeclaration:
-                    message += (" Your Phase Module Planets option must be declared at the start of a combat,"
-                                " so only the roll is available here.")
+                    if player.get("wraithSouls", 0) >= 2:
+                        view.add_item(Button(label="Use Phase Module: Neutron Bombs (2 Power)",
+                                             style=discord.ButtonStyle.blurple,
+                                             custom_id=f"FCID{winner}_phaseBombing_{pos}"))
+                        message += " You may spend 2 Power to use Neutron Bombs on the population."
+                    else:
+                        message += (" The Phase Module needs 2 Power for Neutron Bombs,"
+                                    " so only the roll is available here.")
                 asyncio.create_task(thread2.send(message, view=view))
             for combatatant in Combat.findPlayersInTile(game, tile2[1]):
                 if combatatant not in game.gamestate["peopleToCheckWith"] and combatatant != "ai":
@@ -1628,7 +1652,7 @@ class Combat:
         msg = f"{player['username']} hit {advanced + cube.replace('adv', '')} population."
         await interaction.channel.send(msg)
         game.remove_pop([cube + "_pop"], pos, game.get_player_from_color(owner), True)
-        if (cube.replace("adv", "") in ("money", "science", "material")
+        if (cube.replace("adv", "") in ("money", "science", "material", "orbital", "disc")
                 and PlayerHelper.capture_wraith_soul(player, game.gamestate["board"][pos])):
             game.update_player(PlayerHelper(game.get_player_from_color(player["color"]), player))
             await interaction.channel.send(f"{player['player_name']} captured a soul from the destroyed sector.")
@@ -2156,6 +2180,10 @@ class Combat:
             await interaction.followup.send("Research Neutron Bombs before declaring that option.", ephemeral=True)
             return
         tile = game.gamestate["board"][pos]
+        if color not in tile.get("phaseModuleColors", []):
+            await interaction.followup.send("That Phase Module declaration is no longer current.",
+                                            ephemeral=True)
+            return
         modes = tile.setdefault("phaseModes", {}).setdefault(color, {})
         mode = dict(modes.get(ship_type, {"comp": 0, "shield": 0, "speed": 0,
                                           "planets": False, "ignore": False, "cost": 0}))
