@@ -6453,5 +6453,92 @@
     "gcds": 0,
     "warp": 0,
     "type": "home"
+  },
+  "299": {
+    "owner": 0,
+    "name": "Yggdrasil",
+    "ring": 2,
+    "disctile": 0,
+    "player_ships": [],
+    "money_pop": [
+      1
+    ],
+    "money1_snap": [
+      261,
+      319
+    ],
+    "money2_snap": [],
+    "moneyadv_pop": [
+      0
+    ],
+    "moneyadv1_snap": [
+      660,
+      147
+    ],
+    "moneyadv2_snap": [],
+    "science_pop": [
+      1
+    ],
+    "science1_snap": [
+      646,
+      742
+    ],
+    "science2_snap": [],
+    "scienceadv_pop": [],
+    "scienceadv1_snap": [],
+    "scienceadv2_snap": [],
+    "material_pop": [],
+    "material1_snap": [],
+    "material2_snap": [],
+    "materialadv_pop": [],
+    "materialadv1_snap": [],
+    "materialadv2_snap": [],
+    "neutral_pop": [],
+    "neutral1_snap": [],
+    "neutral2_snap": [],
+    "neutraladv_pop": [],
+    "neutraladv1_snap": [],
+    "neutraladv2_snap": [],
+    "int_snap": [
+      300,
+      150
+    ],
+    "cru_snap": [
+      500,
+      280
+    ],
+    "drd_snap": [
+      820,
+      700
+    ],
+    "sb_snap": [
+      300,
+      650
+    ],
+    "mon_snap": [
+      500,
+      780
+    ],
+    "orb_snap": [
+      170,
+      520
+    ],
+    "ai_snap": [
+      520,
+      600
+    ],
+    "wormholes": [
+      0,
+      1,
+      3,
+      4
+    ],
+    "vp": 3,
+    "artifact": 1,
+    "ancient": 0,
+    "guardian": 0,
+    "gcds": 0,
+    "warp": 0,
+    "type": "home"
   }
 }

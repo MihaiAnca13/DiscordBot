@@ -235,6 +235,20 @@ class ButtonListener(commands.Cog):
                 await interaction.message.delete()
         elif customID.startswith("finishAction"):
             await TurnButtons.finishAction(player, game, interaction, player_helper)
+        elif customID.startswith("herRaidBuild"):
+            moveCount = customID.rsplit("_", 1)[1]
+            await BuildButtons.startBuild(game, player, interaction, f"startBuild2_herRaidBuild_{moveCount}",
+                                          player_helper)
+        elif customID.startswith("herRegroupMove"):
+            phase = customID.rsplit("_", 1)[1]
+            await MoveButtons.startMove(game, player, interaction, f"startMove_1_herRegroup_{phase}", True)
+        elif customID.startswith("herBackToMove"):
+            moveCount = customID.rsplit("_", 1)[1]
+            await interaction.message.delete()
+            await MoveButtons.startMove(game, player, interaction, f"startMove_{moveCount}", False)
+        elif customID.startswith("herBackToBuild"):
+            await interaction.message.delete()
+            await BuildButtons.startBuild(game, player, interaction, "startBuild2_herRegroupResume", player_helper)
         elif customID.startswith("magColShipForResource"):
             await TurnButtons.magColShipForResource(game, interaction, player, customID, player_helper)
         elif customID.startswith("magColShipForSpentResource"):

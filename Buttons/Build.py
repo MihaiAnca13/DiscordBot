@@ -11,19 +11,47 @@ from discord.ui import View, Button
 class BuildButtons:
 
     @staticmethod
+    def raidSuffix(buttonID: str):
+        """The trailing marker that keeps a nested Raid build inside its Move action."""
+        if "herRaid_" not in buttonID:
+            return ""
+        return "_herRaid_" + buttonID.rsplit("_", 1)[1]
+
+    @staticmethod
     async def startBuild(game: GamestateHelper, player, interaction: discord.Interaction,
                          buttonID: str, player_helper: PlayerHelper):
         tiles = game.get_owned_tiles(player)
         tiles.sort()
         view = View()
-        await interaction.channel.send(f"{player['player_name']} is using their turn to build")
+        nested_raid = "herRaidBuild" in buttonID
+        resume_build = "herRegroupResume" in buttonID
+        if not nested_raid and not resume_build:
+            await interaction.channel.send(f"{player['player_name']} is using their turn to build")
         if "2" not in buttonID:
             player_helper.spend_influence_on_action("build")
             game.update_player(player_helper)
             await interaction.message.delete()
+        if buttonID == "startBuild":
+            player_helper.stats["herCrossUsed"] = False
+            player_helper.stats["herRaidCharged"] = False
+            game.update_player(player_helper)
+        if nested_raid:
+            await interaction.message.delete()
+            moveCount = buttonID.rsplit("_", 1)[1]
+            suffix = f"_herRaid_{moveCount}"
+        else:
+            suffix = ""
         for tile in tiles:
             view.add_item(Button(label=tile, style=discord.ButtonStyle.blurple,
-                                 custom_id=f"FCID{player['color']}_buildIn_{tile}"))
+                                 custom_id=f"FCID{player['color']}_buildIn_{tile}{suffix}"))
+        if nested_raid:
+            view.add_item(Button(label="Back to Move", style=discord.ButtonStyle.gray,
+                                 custom_id=f"FCID{player['color']}_herBackToMove_{moveCount}"))
+        elif (not player.get("passed") and FactionData.has(player, "regroup")
+              and not player.get("herCrossUsed")
+              and (buttonID == "startBuild" or resume_build)):
+            view.add_item(Button(label="Move Activation (1)", style=discord.ButtonStyle.green,
+                                 custom_id=f"FCID{player['color']}_herRegroupMove_before"))
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
         await interaction.channel.send(f"{player['player_name']}, choose which tile you would like to build in.",
@@ -36,11 +64,12 @@ class BuildButtons:
     @staticmethod
     async def buildIn(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str):
         loc = buttonID.split("_")[1]
+        suffix = BuildButtons.raidSuffix(buttonID)
         view = View()
-        view = BuildButtons.buildBuildButtonsView(interaction, "", 0, loc, view, player, game)
+        view = BuildButtons.buildBuildButtonsView(interaction, "", 0, loc, view, player, game, suffix)
         await interaction.message.delete()
         buildApt = player["build_apt"]
-        if player.get("passed") or player.get("pulsarBuild"):
+        if suffix or player.get("passed") or player.get("pulsarBuild"):
             buildApt = 1
         await interaction.channel.send(f"{player['player_name']}, you have {player['materials']} materials to "
                                        f"spend on up to {str(buildApt)} units in this system.", view=view)
@@ -53,8 +82,9 @@ class BuildButtons:
         cost = int(buttonID.split("_")[2])
         loc = buttonID.split("_")[3]
         ship = str(buttonID.split("_")[4])
+        suffix = BuildButtons.raidSuffix(buttonID)
         buildApt = player["build_apt"]
-        if player.get("passed") or player.get("pulsarBuild"):
+        if suffix or player.get("passed") or player.get("pulsarBuild"):
             buildApt = 1
         if len(build) == buildApt:
             await interaction.message.edit(content=(f"You cannot build any more units. Current build is:\n"
@@ -63,11 +93,12 @@ class BuildButtons:
         build.append(f"{player['color']}-{GamestateHelper.getShipShortName(ship)}")
         cost += PlayerHelper.get_ship_cost(player, game.getShipShortName(ship))
         view = View()
-        view = BuildButtons.buildBuildButtonsView(interaction, ";".join(build), cost, loc, view, player, game)
+        view = BuildButtons.buildBuildButtonsView(interaction, ";".join(build), cost, loc, view, player, game, suffix)
         await interaction.message.edit(content=f"Total cost so far of {cost}", view=view)
 
     @staticmethod
-    def buildBuildButtonsView(interaction: discord.Interaction, build: str, cost, build_loc, view: View, player, game:GamestateHelper):
+    def buildBuildButtonsView(interaction: discord.Interaction, build: str, cost, build_loc, view: View, player,
+                              game: GamestateHelper, suffix: str = ""):
         ships = ["Interceptor", "Cruiser", "Dreadnought", "Starbase", "Orbital", "Monolith"]
         if build == "":
             build = "none"
@@ -100,16 +131,21 @@ class BuildButtons:
                     if ship == "Orbital":
                         shipEmoji = Emoji.getEmojiByName("orb")
                     view.add_item(Button(label=f"{ship} ({ship_cost})", emoji=shipEmoji,
-                                         style=discord.ButtonStyle.blurple, custom_id="_".join(buttonElements)))
+                                         style=discord.ButtonStyle.blurple,
+                                         custom_id="_".join(buttonElements) + suffix))
                 else:
                     view.add_item(Button(label=f"{ship} ({ship_cost})",
-                                         style=discord.ButtonStyle.blurple, custom_id="_".join(buttonElements)))
+                                         style=discord.ButtonStyle.blurple,
+                                         custom_id="_".join(buttonElements) + suffix))
         buttonElements = [f"FCID{player['color']}", "finishBuild", build, str(cost), build_loc]
         if build != "none":
             view.add_item(Button(label="Finished In This System", style=discord.ButtonStyle.red,
-                                 custom_id="_".join(buttonElements)))
+                                 custom_id="_".join(buttonElements) + suffix))
         view.add_item(Button(label="Reset Build", style=discord.ButtonStyle.gray,
-                             custom_id=f"FCID{player['color']}_buildIn_{build_loc}"))
+                             custom_id=f"FCID{player['color']}_buildIn_{build_loc}" + suffix))
+        if suffix:
+            view.add_item(Button(label="Back to Move", style=discord.ButtonStyle.gray,
+                                 custom_id=f"FCID{player['color']}_herBackToMove_{suffix.rsplit('_', 1)[1]}"))
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
         return view
@@ -119,10 +155,11 @@ class BuildButtons:
         build = buttonID.split("_")[1].replace("none", "").split(";")
         cost = buttonID.split("_")[2]
         loc = buttonID.split("_")[3]
+        suffix = BuildButtons.raidSuffix(buttonID)
         view = View()
         view = BuildButtons.buildBuildSpendButtonsView(game, interaction, player, ";".join(build),
                                                        cost, loc, view, str(player['materials']),
-                                                       str(player['science']), str(player['money']), "0")
+                                                       str(player['science']), str(player['money']), "0", suffix)
         await interaction.message.delete()
         await interaction.channel.send(f"Total cost: {cost}\n"
                                        f"Available resources: Materials-{player['materials']}"
@@ -138,13 +175,14 @@ class BuildButtons:
         money = buttonID.split("_")[6]
         spent = int(buttonID.split("_")[7])
         matSpent = int(buttonID.split("_")[8])
+        suffix = BuildButtons.raidSuffix(buttonID)
         material -= matSpent
         spent += matSpent
         material = str(material)
         spent = str(spent)
         view = View()
         view = BuildButtons.buildBuildSpendButtonsView(game, interaction, player, build, cost,
-                                                       loc, view, material, science, money, spent)
+                                                       loc, view, material, science, money, spent, suffix)
         await interaction.message.edit(content=f"Total cost: {cost}"
                                        f"\nAvailable resources: Materials-{material} Science-{science} Money-{money}"
                                        f"\nResources spent: {spent}", view=view)
@@ -158,6 +196,7 @@ class BuildButtons:
         money = int(buttonID.split("_")[6])
         spent = int(buttonID.split("_")[7])
         resource = buttonID.split("_")[8]
+        suffix = BuildButtons.raidSuffix(buttonID)
         ratio = FactionData.of(player).get("money_trade_ratio", 1) if resource == "Money" else 1
         spent += ratio
         if resource == "Science":
@@ -169,7 +208,7 @@ class BuildButtons:
         spent = str(spent)
         view = View()
         view = BuildButtons.buildBuildSpendButtonsView(game, interaction, player, build, cost,
-                                                       loc, view, material, science, money, spent)
+                                                       loc, view, material, science, money, spent, suffix)
         await interaction.message.edit(content=f"Total cost: {cost}"
                                        f"\nAvailable resources: Materials-{material} Science-{science} Money-{money}"
                                        f"\nResources spent: {spent}", view=view)
@@ -177,13 +216,13 @@ class BuildButtons:
     @staticmethod
     def buildBuildSpendButtonsView(game: GamestateHelper, interaction: discord.Interaction, player,
                                    build: str, cost: str, build_loc: str, view: View,
-                                   material: str, science: str, money: str, spent: str):
+                                   material: str, science: str, money: str, spent: str, suffix: str = ""):
         num = min(int(cost), int(material))
         buttonElements = [f"FCID{player['color']}", "spendMaterial", build, str(cost),
                           build_loc, material, science, money, spent, str(num)]
         if num > 0 and int(spent) < int(cost):
             view.add_item(Button(label=f"Materials ({str(num)})", style=discord.ButtonStyle.blurple,
-                                 custom_id="_".join(buttonElements)))
+                                 custom_id="_".join(buttonElements) + suffix))
 
         elements = ["Science", "Money"]
         tradeVal = player['trade_value']
@@ -193,17 +232,20 @@ class BuildButtons:
             if resource == "Science":
                 if int(science) >= tradeVal and int(spent) < int(cost):
                     view.add_item(Button(label=f"{resource} ({str(tradeVal)}:1)", style=discord.ButtonStyle.gray,
-                                         custom_id="_".join(buttonElements)))
+                                         custom_id="_".join(buttonElements) + suffix))
             if resource == "Money":
                 if int(money) >= tradeVal and int(spent) < int(cost):
                     ratio = FactionData.of(player).get("money_trade_ratio", 1)
                     view.add_item(Button(label=f"{resource} ({str(tradeVal)}:{ratio})", style=discord.ButtonStyle.gray,
-                                         custom_id="_".join(buttonElements)))
+                                         custom_id="_".join(buttonElements) + suffix))
 
         buttonElements = [f"FCID{player['color']}", "finishSpendForBuild", build, build_loc, material, science, money]
         if int(spent) >= int(cost):
             view.add_item(Button(label="Finish Build In This System", style=discord.ButtonStyle.red,
-                                 custom_id="_".join(buttonElements)))
+                                 custom_id="_".join(buttonElements) + suffix))
+        if suffix:
+            view.add_item(Button(label="Back to Move", style=discord.ButtonStyle.gray,
+                                 custom_id=f"FCID{player['color']}_herBackToMove_{suffix.rsplit('_', 1)[1]}"))
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
         return view
@@ -216,6 +258,8 @@ class BuildButtons:
         material = int(buttonID.split("_")[3])
         science = int(buttonID.split("_")[4])
         money = int(buttonID.split("_")[5])
+        suffix = BuildButtons.raidSuffix(buttonID)
+        moveCount = int(suffix.rsplit("_", 1)[1]) if suffix else 0
         game.add_units(build, loc)
         game.fixshipsOrder(loc)
         summary = ""
@@ -228,25 +272,46 @@ class BuildButtons:
                 textSum += shipEmoji + " "
             summary += " " + game.getShipFullName(shortName)
             textSum += game.getShipFullName(shortName).capitalize() + "\n"
+        if suffix and moveCount == 1 and not player.get("herRaidCharged"):
+            # Raid's build before the first move spends the Move action's disc now;
+            # moveTo then skips it so the action still uses exactly one disc.
+            player_helper.spend_influence_on_action("move")
+            player_helper.stats["herRaidCharged"] = True
         player_helper.specifyDetailsOfAction("Built " + summary + " in " + loc + ".")
         player_helper.stats["science"] = science
         player_helper.stats["materials"] = material
         player_helper.stats["money"] = money
+        if suffix:
+            player_helper.stats["herCrossUsed"] = True
         game.update_player(player_helper)
         drawing = DrawHelper(game.gamestate)
-        buildApt = player["build_apt"]
         await interaction.channel.send("This is what the tile looks like after the build. They built the following:\n"
                                        + textSum,
                                        file=await asyncio.to_thread(drawing.board_tile_image_file, loc))
-        if player.get("passed") or player.get("pulsarBuild"):
+        if suffix:
+            if moveCount <= player["move_apt"]:
+                await interaction.message.delete()
+                from Buttons.Move import MoveButtons
+                await MoveButtons.startMove(game, player, interaction, f"startMove_{moveCount}", False)
+            else:
+                from Buttons.Turn import TurnButtons
+                await TurnButtons.finishAction(player, game, interaction, player_helper)
+            return
+        buildApt = player["build_apt"]
+        pulsar_build = player.get("pulsarBuild")
+        if player.get("passed") or pulsar_build:
             buildApt = 1
-            if player.get("pulsarBuild"):
+            if pulsar_build:
                 player_helper.stats["pulsarBuild"] = False
                 game.update_player(player_helper)
         view2 = View()
         if len(build) < buildApt:
             view2.add_item(Button(label="Build Somewhere Else", style=discord.ButtonStyle.red,
                                   custom_id="startBuild2_deleteMsg"))
+        if (FactionData.has(player, "regroup") and not player.get("passed")
+                and not pulsar_build and not player.get("herCrossUsed")):
+            view2.add_item(Button(label="Move Activation (1)", style=discord.ButtonStyle.green,
+                                  custom_id=f"FCID{player['color']}_herRegroupMove_after"))
         view2.add_item(Button(label="Finish Action", style=discord.ButtonStyle.red,
                               custom_id=f"FCID{player['color']}_finishAction"))
         await interaction.channel.send(f"{player['player_name']} use buttons to finish the action or"

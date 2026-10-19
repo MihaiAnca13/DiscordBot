@@ -6,6 +6,7 @@ from Buttons.DiplomaticRelations import DiplomaticRelationsButtons
 from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Explore import ExploreButtons
 from Buttons.Influence import InfluenceButtons
+from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from helpers.EmojiHelper import Emoji
 from helpers.GamestateHelper import GamestateHelper
@@ -17,6 +18,15 @@ from helpers.ShipHelper import PlayerShip
 
 
 class MoveButtons:
+    @staticmethod
+    def addRegroupBackButton(view: View, player, phase: str):
+        if phase == "before":
+            view.add_item(Button(label="Back to Build", style=discord.ButtonStyle.gray,
+                                 custom_id=f"FCID{player['color']}_herBackToBuild"))
+        else:
+            view.add_item(Button(label="Finish Action", style=discord.ButtonStyle.red,
+                                 custom_id=f"FCID{player['color']}_finishAction"))
+
     @staticmethod
     def getListOfUnpinnedShipTiles(game: GamestateHelper, player):
         tile_map = game.gamestate["board"]
@@ -32,18 +42,31 @@ class MoveButtons:
 
     @staticmethod
     async def startMove(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str, button: bool):
+        nested = "herRegroup" in buttonID
+        phase = buttonID.rsplit("_", 1)[1] if nested else ""
         moveCount = 1
         if "_" in buttonID:
             moveCount = buttonID.split("_")[1]
+        if buttonID == "startMove":
+            player["herCrossUsed"] = False
+            player["herRaidCharged"] = False
+            game.update()
         view = View()
         tiles = MoveButtons.getListOfUnpinnedShipTiles(game, player)
+        suffix = f"_herRegroup_{phase}" if nested else ""
         for tile in tiles:
             view.add_item(Button(label=tile, style=discord.ButtonStyle.red,
-                                 custom_id=f"FCID{player['color']}_moveFrom_{tile}_{moveCount}"))
+                                 custom_id=f"FCID{player['color']}_moveFrom_{tile}_{moveCount}{suffix}"))
+        if nested:
+            MoveButtons.addRegroupBackButton(view, player, phase)
+        elif (not player.get("passed") and FactionData.has(player, "raid")
+              and not player.get("herCrossUsed") and int(moveCount) <= player["move_apt"]):
+            view.add_item(Button(label="Build Activation (1)", style=discord.ButtonStyle.green,
+                                 custom_id=f"FCID{player['color']}_herRaidBuild_{moveCount}"))
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
         if button:
-            if moveCount == 1:
+            if moveCount == 1 and not nested:
                 await interaction.channel.send(f"{player['player_name']} is using their turn to move")
             await interaction.message.delete()
         await interaction.channel.send(f"{player['player_name']} Select the tile you would like to move from",
@@ -58,6 +81,9 @@ class MoveButtons:
         view = View()
         originT = buttonID.split("_")[1]
         moveCount = buttonID.split("_")[2]
+        nested = "herRegroup" in buttonID
+        phase = buttonID.rsplit("_", 1)[1] if nested else ""
+        suffix = f"_herRegroup_{phase}" if nested else ""
         shipTypes = ["interceptor", "cruiser", "dreadnought"]
         for shipType in shipTypes:
             player_color = player["color"]
@@ -68,7 +94,10 @@ class MoveButtons:
                 shipEmoji = Emoji.getEmojiByName(player['color'] + game.getShipShortName(shipType))
                 view.add_item(Button(label=f"{shipType.capitalize()} (Range: {shipRange})", emoji=shipEmoji,
                                      style=discord.ButtonStyle.blurple,
-                                     custom_id=f"FCID{player['color']}_moveThisShip_{originT}_{shipType}_{moveCount}"))
+                                     custom_id=(f"FCID{player['color']}_moveThisShip_{originT}"
+                                                f"_{shipType}_{moveCount}{suffix}")))
+        if nested:
+            MoveButtons.addRegroupBackButton(view, player, phase)
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
         await interaction.message.delete()
@@ -140,6 +169,9 @@ class MoveButtons:
         originT = buttonID.split("_")[1]
         shipType = buttonID.split("_")[2]
         moveCount = buttonID.split("_")[3]
+        nested = "herRegroup" in buttonID
+        phase = buttonID.rsplit("_", 1)[1] if nested else ""
+        suffix = f"_herRegroup_{phase}" if nested else ""
         ship = PlayerShip(player, shipType)
         shipRange = ship.getRange()
         tiles = MoveButtons.getTilesInRange(game, player, originT, shipRange, ship.getJumpDrive())
@@ -151,12 +183,14 @@ class MoveButtons:
             if count < 24:
                 view.add_item(Button(label=destination, style=discord.ButtonStyle.blurple,
                                      custom_id=(f"FCID{player['color']}_moveTo_{originT}"
-                                                f"_{shipType}_{destination}_{moveCount}")))
+                                                f"_{shipType}_{destination}_{moveCount}{suffix}")))
             else:
                 view2.add_item(Button(label=destination, style=discord.ButtonStyle.blurple,
                                       custom_id=(f"FCID{player['color']}_moveTo_{originT}"
-                                                 f"_{shipType}_{destination}_{moveCount}")))
+                                                 f"_{shipType}_{destination}_{moveCount}{suffix}")))
             count += 1
+        if nested:
+            MoveButtons.addRegroupBackButton(view, player, phase)
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
 
@@ -252,13 +286,35 @@ class MoveButtons:
             if game.gamestate["board"][destination]["disctile"] > 0:
                 await DiscoveryTileButtons.exploreDiscoveryTile(game, destination, interaction, player)
 
-        if moveCount == 1:
-            player_helper.spend_influence_on_action("move")
+        nested = "herRegroup" in buttonID
+        if nested:
+            player_helper.stats["herCrossUsed"] = True
+        elif moveCount == 1:
+            if player.get("herRaidCharged"):
+                player_helper.stats.pop("herRaidCharged", None)
+            else:
+                player_helper.spend_influence_on_action("move")
+        if nested or moveCount == 1:
             game.update_player(player_helper)
         player_helper.specifyDetailsOfAction(f"Moved a {shipType} from {originT} to {destination}.")
         game.update_player(player_helper)
+        if nested:
+            phase = buttonID.rsplit("_", 1)[1]
+            if phase == "before":
+                await interaction.message.delete()
+                from Buttons.Build import BuildButtons
+                await BuildButtons.startBuild(game, player, interaction, "startBuild2_herRegroupResume",
+                                              player_helper)
+            else:
+                from Buttons.Turn import TurnButtons
+                await TurnButtons.finishAction(player, game, interaction, player_helper)
+            return
         view = View()
         await interaction.message.delete()
+        if (not player.get("passed") and FactionData.has(player, "raid")
+                and not player.get("herCrossUsed") and moveCount <= player["move_apt"]):
+            view.add_item(Button(label="Build Activation (1)", style=discord.ButtonStyle.green,
+                                 custom_id=f"FCID{player['color']}_herRaidBuild_{moveCount + 1}"))
         if player["move_apt"] > moveCount and not player.get("passed"):
             view.add_item(Button(label="Move an additional ship", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_startMove_{moveCount + 1}"))

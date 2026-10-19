@@ -593,7 +593,7 @@ class DrawHelper:
         return context
 
     def faction_portrait(self, faction):
-        if faction == "atlantians" or faction == "ra" or faction == "tm":
+        if faction == "atlantians" or faction == "ra" or faction == "tm" or faction == "heralds":
             return self.use_image(f"images/resources/components/layouts/factionImages/{faction}_image.png")
         return self.use_image(f"images/resources/components/factions/{faction}_board.png").crop((49, 252, 154, 357))
 
@@ -1268,6 +1268,10 @@ class DrawHelper:
         if faction == "exile":
             orbCoord = [(764, 68), (821, 40), (706, 97), (816, 100)]
         sbCoord = [(705, 39), (821, 39), (705, 97), (763, 60), (821, 97), (815, 0)]
+
+        if faction == "heralds":
+            # The printed cruiser puts the Ion Cannon top-right and leaves the middle slots empty.
+            cruiserCoord = [(215, 58), (328, 58), (271, 44), (215, 116), (271, 102), (328, 116)]
 
         if player["name"] == "Planta":
             interceptCoord.pop(2)
