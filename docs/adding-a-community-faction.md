@@ -76,6 +76,15 @@ Lyra's `shrine_type`), as fields setup copies in for that faction only.
 - **Do not narrow an ability beyond its text.** A reading that excludes a case the wording covers (a grey square from "any Advanced planet") was once written as a fix; check every exclusion against the exact text, and flag it rather than decide it.
 - **The tile number box.** Sectors without `images/resources/hexes/numberless/<id>.png` get `masks/banner.png` pasted over the printed nameplate with the map position on top. Home art with no nameplate there shows the box as a cutout; a numberless version (nameplate removed) avoids it.
 - **First-faction over-engineering.** The first faction built a parallel flow for an ability that an existing path already covered, and had to be simplified later. Hence the reuse-first rule above; and never scope the abilities out of the notes — the ability text is the part most likely to be got wrong silently.
+- **Class images are shown much smaller than they are committed.** `ImageCacheHelper` resizes them to about 90×33 in the player area; a name that is legible at 300×115 can disappear at display size. Check the composed image at the paste size, and give light blueprint headers a dark outline.
+- **Held sectors need two counts.** A reserve that is held off the board must be excluded from the outer-rim cleanup *and* included in the explore-position enumeration, or the last held tile becomes unplaceable when its deck empties.
+- **Copy a pairing before extending it.** `pairing = attacker; pairing += defender` mutates the tile's combat sides. Use `list(attacker) + list(defender)` wherever the result is only a local list.
+- **A home nameplate can sit over a population square.** A full-bleed home tile may need a numberless variant plus a per-tile number position; otherwise the standard banner covers a square or leaves a second printed number visible.
+- **`starting_ships` does not decrement `ship_stock`.** Set the stock to the physical count minus the ships setup places; do not copy the default array when a faction starts with a non-Interceptor.
+- **Check the body of a shared flag, not its name.** A flag such as a retreat penalty may still add draws for destroyed ships; a faction whose wording removes every draw needs its own guard in the shared reputation function.
+- **Blueprint cell counts come from the board render.** Plans and printed layouts can disagree with the actual number of part rectangles; count them from the art before writing the parts array or the player-area coordinates.
+- **Reconcile faction counts once per merge wave.** Each branch updates draft-count assertions to its own total; after merging several factions, set the shared count once and verify that every faction still appears with the right colour.
+- **Initiative changes need every speed path.** An ability that adds or changes initiative must be applied consistently in the speed enumeration, the manual-button validity check, the reroll path and the end-of-combat checks; fixing only the prompt leaves stale buttons live.
 
 ## Shared state machines an ability can reach
 

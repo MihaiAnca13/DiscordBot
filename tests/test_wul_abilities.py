@@ -264,22 +264,6 @@ def test_wolf_pack_saves_a_reroll_for_a_later_ship(make_game, no_random, run, pr
     assert reload(game).gamestate["board"]["101"].get("wolfPackRerolls", {}).get("blue", 0) == 0
 
 
-def test_wolf_pack_double_press_probe(make_game, no_random, run, press):
-    """Throwaway probe: a queued second answer must not convert a second miss."""
-    game = _wolf_game(make_game)
-    game.gamestate["board"]["101"]["player_ships"].append("blue-cru")
-    game.update()
-    inter = FakeInteraction()
-    no_random([6, 1])
-    run(Combat.rollDice(game, "rollDice_101_blue_2_deleteMsg", inter))
-    convert = next(c for c in buttons(inter.channel) if c.startswith("FCIDblue_wolfPackConvert_"))
-    message = inter.channel.message_with(convert)
-    press(inter.channel, 1, convert, message)
-    damage = reload(game).gamestate["board"]["101"]["damage_tracker"]["red-cru"]
-    press(inter.channel, 1, convert, message)
-    assert reload(game).gamestate["board"]["101"]["damage_tracker"]["red-cru"] == damage
-
-
 def test_wolf_pack_is_not_offered_to_other_factions(make_game, no_random, run):
     blue = player_stats("hyd", color="blue")
     red = player_stats("eri", color="red")
