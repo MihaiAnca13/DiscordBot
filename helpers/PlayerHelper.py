@@ -123,6 +123,28 @@ class PlayerHelper:
         self.stats["magPartPoints"] = amount
         return (f"\n> Adjusted magellan points for kept parts from {before} to {amount}")
 
+    def adjust_wraith_souls(self, adjustment):
+        before = self.stats.get("wraithSouls", 0)
+        amount = max(0, before + adjustment)
+        self.stats["wraithSouls"] = amount
+        return f"\n> Adjusted souls captured from {before} to {amount}"
+
+    @staticmethod
+    def capture_wraith_soul(player, tile, last_cube: bool = True):
+        """Soul-Hunters: one soul for a sector whose enemy player population was destroyed.
+        `last_cube` is False for the destroy-all path, where the cubes are removed afterwards."""
+        if not FactionData.has(player, "soul_hunters"):
+            return False
+        owner = tile.get("owner")
+        if not isinstance(owner, str) or owner == "ai" or owner == player.get("color"):
+            return False
+        has_player_pop = any(sum(tile.get(f"{kind}_pop", [])) > 0 for kind in (
+            "money", "science", "material", "moneyadv", "scienceadv", "materialadv"))
+        if has_player_pop == last_cube:
+            return False
+        PlayerHelper(player.get("color"), player).adjust_wraith_souls(1)
+        return True
+
     def spend_influence_on_action(self, action: str):
         self.adjust_influence(-1)
         self.stats["allianceLeaveClosed"] = True

@@ -51,7 +51,7 @@ class ExploreButtons:
                     elif "anc" not in ship or not FactionData.has(player, "may_not_fight_ancients"):
                         opponentShips = opponentShips + 1
         researchedTechs = player_helper.getTechs()
-        if "clo" in researchedTechs or "cld" in researchedTechs:
+        if "clo" in researchedTechs or "cld" in researchedTechs or FactionData.has(player, "phase_module"):
             playerShipsCount *= 2
         return playerShipsCount > 0 and playerShipsCount + alliedShips > opponentShips
 

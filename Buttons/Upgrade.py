@@ -101,7 +101,7 @@ class UpgradeButtons:
         if UpgradeButtons.is_locked_drive(player, ship, oldPart):
             await interaction.followup.send("A Harvester may not remove its Drive.", ephemeral=True)
             return
-        if discTileUpgrade not in ("dummy", "free") and not discTileUpgrade.startswith("tm"):
+        if discTileUpgrade not in ("dummy", "free", "phase") and not discTileUpgrade.startswith("tm"):
             await UpgradeButtons.chooseUpgrade(game, player, interaction,
                                                customID + "_" + discTileUpgrade, player_helper)
             return
@@ -214,6 +214,9 @@ class UpgradeButtons:
         if discTileUpgrade == "dummy":
             await interaction.channel.send(f"{player['player_name']}, choose which ship you would like to upgrade "
                                            "or finish your action.", view=view)
+        elif discTileUpgrade == "phase":
+            await interaction.channel.send(f"{player['player_name']}, you may finish the action"
+                                           " or undo this part swap.", view=view)
         elif discTileUpgrade.startswith("tm"):
             view = View()
             view.add_item(Button(label="Undo", style=discord.ButtonStyle.gray,

@@ -160,11 +160,50 @@ class Combat:
         return sorted(tiles, key=lambda x: x[0], reverse=True)
 
     @staticmethod
+    def phase_mode(game: GamestateHelper, color: str, pos: str, ship_type: str):
+        """The Phase Module declaration for one blueprint in this combat, if any."""
+        modes = game.gamestate["board"].get(pos, {}).get("phaseModes", {})
+        return modes.get(color, {}).get(ship_type, {})
+
+    @staticmethod
+    def phase_ship_energy(game: GamestateHelper, color: str, pos: str, ship_type: str):
+        player = game.getPlayerObjectFromColor(color)
+        return max(0, PlayerShip(player, ship_type).energy)
+
+    @staticmethod
+    def phase_offboard_used(game: GamestateHelper, color: str, pos: str):
+        player = game.getPlayerObjectFromColor(color)
+        modes = game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {})
+        used = 0
+        for ship_type, mode in modes.items():
+            used += max(0, mode.get("cost", 0) - max(0, PlayerShip(player, ship_type).energy))
+        return used
+
+    @staticmethod
+    def phase_offboard_remaining(game: GamestateHelper, color: str, pos: str):
+        player = game.getPlayerObjectFromColor(color)
+        return max(0, player.get("wraithSouls", 0) - Combat.phase_offboard_used(game, color, pos))
+
+    @staticmethod
+    def phase_declared_planets(game: GamestateHelper, color: str, pos: str):
+        modes = game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {})
+        return any(mode.get("planets") for mode in modes.values())
+
+    @staticmethod
+    def clear_phase_module(game: GamestateHelper, pos: str):
+        tile = game.gamestate["board"].get(pos, {})
+        for key in ("phaseModes", "phaseModuleReady", "phaseModuleColors", "phaseModulePrompted"):
+            tile.pop(key, None)
+        game.update()
+
+    @staticmethod
     async def startCombat(game: GamestateHelper, channel, pos):
         # a new pairing on the tile is a new combat: last pairing's Techno-Magic parts come off first
         await Combat.revertTechnoMagic(game, channel, pos)
         Carapace.clear(game, pos)
         Combat.clearWolfPack(game, pos)
+        game.gamestate["board"][pos].pop("ghostsRetreatPending", None)
+        Combat.clear_phase_module(game, pos)
         drawing = DrawHelper(game.gamestate)
         sides = Combat.currentPairing(game, pos)
         game.setAttackerAndDefender(sides[1], sides[0], pos)
@@ -185,7 +224,9 @@ class Combat:
                     await channel.send("AI stats look like this", file=file)
         await Combat.offerTechnoMagic(game, channel, pos)
         await Carapace.offer(game, channel, pos)
-        await Combat.promptNextSpeed(game, pos, channel, False)
+        waiting = await Combat.offerPhaseModule(game, channel, pos)
+        if not waiting:
+            await Combat.promptNextSpeed(game, pos, channel, False)
 
     @staticmethod
     async def startCombatThreads(game: GamestateHelper, interaction: discord.Interaction):
@@ -241,9 +282,12 @@ class Combat:
             p2 = game.getPlayerObjectFromColor(owner)
             player_helper = PlayerHelper(game.get_player_from_color(playerColor), player)
             player_helper2 = PlayerHelper(game.get_player_from_color(p2["color"]), p2)
+            wraithNeedsDeclaration = (FactionData.has(player, "phase_module")
+                                      and "neb" in player_helper.getTechs())
             if any([FactionData.has(p2, "population_destroyed_in_combat"),
                     game.is_population_gone(pos),
-                    "neb" in player_helper.getTechs() and "nea" not in player_helper2.getTechs()]):
+                    ("neb" in player_helper.getTechs() and "nea" not in player_helper2.getTechs()
+                     and not wraithNeedsDeclaration)]):
                 view = View()
                 view.add_item(Button(label="Destroy All Population", style=discord.ButtonStyle.green,
                                      custom_id=f"FCID{winner}_removeInfluenceFinish_{pos}_graveYard"))
@@ -266,6 +310,9 @@ class Combat:
                 view.add_item(Button(label="Roll to Destroy Population", style=discord.ButtonStyle.green,
                                      custom_id=f"FCID{winner}_rollDice_{pos}_{winner}_1000_deleteMsg"))
                 message = f"{playerName}, you may roll to attempt to kill enemy population."
+                if wraithNeedsDeclaration:
+                    message += (" Your Phase Module Planets option must be declared at the start of a combat,"
+                                " so only the roll is available here.")
                 asyncio.create_task(thread2.send(message, view=view))
             for combatatant in Combat.findPlayersInTile(game, tile2[1]):
                 if combatatant not in game.gamestate["peopleToCheckWith"] and combatatant != "ai":
@@ -343,7 +390,9 @@ class Combat:
                 else:
                     player = game.get_player_from_color(colorOrAI)
                     ship = PlayerShip(game.gamestate["players"][player], unitType)
-                    ships.append((ship.speed, unitType))
+                    ships.append((ship.speed + Combat.phase_mode(
+                        game, colorOrAI, pos, Combat.translateShipAbrToName(unitType)).get("speed", 0),
+                        unitType))
         sorted_ships = sorted(ships, key=lambda x: x[0], reverse=True)
         sorted_ships_grouped = []
         seen_ships = []
@@ -426,11 +475,13 @@ class Combat:
                     if (FactionData.has(game.gamestate["players"][player], "harvester")
                             and unitType == "sb" and not ship.dice and not ship.missile):
                         continue
-                    if (ship.speed, owner) not in ships:
-                        ships.append((ship.speed, owner))
+                    speed = ship.speed + Combat.phase_mode(
+                        game, owner, pos, Combat.translateShipAbrToName(unitType)).get("speed", 0)
+                    if (speed, owner) not in ships:
+                        ships.append((speed, owner))
                     if len(ship.missile) > 0:
-                        if (ship.speed+99, owner) not in ships:
-                            ships.append((ship.speed+99, owner))
+                        if (speed+99, owner) not in ships:
+                            ships.append((speed+99, owner))
         sorted_ships = sorted(ships, key=lambda x: (x[0], x[1] in defender), reverse=True)
         return sorted_ships
 
@@ -460,7 +511,8 @@ class Combat:
 
     @staticmethod
     def getOpponentUnitsThatCanBeHit(game: GamestateHelper, colorOrAI: str, playerShipsList,
-                                     dieVal: int, computerVal: int, pos: str, speed: int):
+                                     dieVal: int, computerVal: int, pos: str, speed: int,
+                                     ignore_shields: bool = False):
         players = Combat.findPlayersInTile(game, pos)
         hittableShips = []
         if dieVal == 1 or dieVal + computerVal < 6:
@@ -506,6 +558,11 @@ class Combat:
                     player = game.get_player_from_color(opponent)
                     shipModel = PlayerShip(game.gamestate["players"][player], ship[1])
                 shieldVal = shipModel.shield
+                if opponent != "ai":
+                    shieldVal += Combat.phase_mode(
+                        game, opponent, pos, Combat.translateShipAbrToName(ship[1])).get("shield", 0)
+                if ignore_shields:
+                    shieldVal = 0
                 if dieVal == 6 or dieVal + computerVal - shieldVal > 5:
                     ship_type = ship[1]
                     if "-" in ship_type:
@@ -963,6 +1020,20 @@ class Combat:
         if speed != 1000 and pairing and colorOrAI not in pairing:
             await interaction.channel.send("The combat pairing changed. Press Refresh Image and roll again.")
             return
+        if tile.get("phaseModuleColors") and not tile.get("phaseModulePrompted"):
+            await interaction.channel.send("Declare Phase Module options before rolling initiative.")
+            return
+        if tile.get("ghostsRetreatPending"):
+            await interaction.channel.send("A retreat is being resolved; choose its destination first.")
+            return
+        if (speed != 1000 and pairing
+                and (tile.get("phaseModuleColors") or tile.get("ghostsRetreatPending"))):
+            effective = {ship_speed for ship_speed, owner in Combat.getBothCombatantShipsBySpeed(
+                game, Combat.sideOf(tile.get("defender")), Combat.sideOf(tile.get("attacker")),
+                tile.get("player_ships", []), pos) if owner == colorOrAI}
+            if speed not in effective:
+                await interaction.channel.send("That initiative step is no longer valid. Use the current prompt.")
+                return
         if colorOrAI == "ai":
             await Combat.rollDiceAI(game, buttonID, interaction)
             return
@@ -987,6 +1058,9 @@ class Combat:
                 player = game.get_player_from_color(colorOrAI)
                 rollerType = ship[1]
                 shipModel = PlayerShip(game.gamestate["players"][player], rollerType)
+                phase = Combat.phase_mode(game, colorOrAI, pos, Combat.translateShipAbrToName(rollerType))
+                computerVal = shipModel.computer + phase.get("comp", 0)
+                ignoreShields = bool(phase.get("ignore"))
                 dice = shipModel.dice
                 sources = shipModel.dice_sources
                 augment = shipModel.spine_augment()
@@ -1047,8 +1121,8 @@ class Combat:
                         else:
                             for i in range(total_damage):
                                 dieNums.append([random_number, 1, die, source, roll_id, total_damage])
-                if shipModel.computer > 0:
-                    msg += f"\nThis ship type has a +{shipModel.computer} computer."
+                if computerVal > 0:
+                    msg += f"\nThis ship type has a +{computerVal} computer."
 
                 shielded = Carapace.engaged(game, pos, colorOrAI, shipModel.ship_type)
                 if shielded and not missiles:
@@ -1074,7 +1148,7 @@ class Combat:
                                      and die_source == cannon_index else 0)
                         die_damage_bonus = (spine_bonus if spine_mode == "spinedmg"
                                             and die_source == cannon_index else 0)
-                        computer_val = shipModel.computer + hit_bonus
+                        computer_val = computerVal + hit_bonus
                         hittableShips = []
                         if shielded and missiles and dieColor != "pink":
                             hittableShips = Combat.getOpponentUnitsThatCanBeHit(
@@ -1087,7 +1161,8 @@ class Combat:
                                 continue
                         if dieColor != "pink":
                             hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
-                                                                                dieNum, computer_val, pos, speed)
+                                                                                dieNum, computer_val, pos, speed,
+                                                                                ignoreShields)
                             if all([dieNum + computer_val > 5,
                                     len(hittableShips) == 0,
                                     oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
@@ -1107,7 +1182,7 @@ class Combat:
                                     viewLyr = View()
                                     label = "Reroll Die"
                                     buttonID = (f"FCID{colorOrAI}_rerollDie_{pos}_{colorOrAI}"
-                                                f"_{shipModel.computer}_{dieColor}_{counter}")
+                                                f"_{computerVal}_{dieColor}_{counter}_{rollerType}")
                                     viewLyr.add_item(Button(label=label, style=discord.ButtonStyle.green,
                                                             custom_id=buttonID))
                                     viewLyr.add_item(Button(label="Decline", style=discord.ButtonStyle.red,
@@ -1124,7 +1199,7 @@ class Combat:
                                     viewLyr = View()
                                     label = "Reroll Die"
                                     buttonID = (f"FCID{colorOrAI}_rerollDie_{pos}_{colorOrAI}"
-                                                f"_{shipModel.computer}_{dieColor}_{counter}")
+                                                f"_{computerVal}_{dieColor}_{counter}_{rollerType}")
                                     riftButtonID = (f"FCID{colorOrAI}_resolveLyraRiftRoll_{pos}_{colorOrAI}"
                                                 f"_{str(dieNum)}_{str(speed)}_{str(dieDam)}_{counter}")
                                     viewLyr.add_item(Button(label=label, style=discord.ButtonStyle.green,
@@ -1159,7 +1234,8 @@ class Combat:
                                 
                             if dieNum > 3:
                                 hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
-                                                                                    6, shipModel.computer, pos, speed)
+                                                                                    6, computerVal, pos, speed,
+                                                                                    ignoreShields)
                         if len(hittableShips) > 0:
                             if speed == 1000:
                                 msg = (f"{interaction.user.name}, choose what population to hit"
@@ -1404,6 +1480,10 @@ class Combat:
         colorDie = buttonID.split("_")[4]
         computerVal = int(buttonID.split("_")[3])
         dieId = buttonID.split("_")[5] if colorDie == "pink" else None
+        parts = buttonID.split("_")
+        rollerType = parts[6] if len(parts) > 6 else None
+        shipType = Combat.translateShipAbrToName(rollerType) if rollerType else None
+        ignoreShields = bool(shipType and Combat.phase_mode(game, colorOrAI, pos, shipType).get("ignore"))
         speed = game.gamestate["board"][pos]["currentSpeed"]
         tile_map = game.gamestate["board"]
         ships = player_helper.adjust_colony_ships(1)
@@ -1442,7 +1522,7 @@ class Combat:
             hittableShips = []
             if dieColor != "pink":
                 hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
-                                                                    dieNum, computerVal, pos, 3)
+                                                                    dieNum, computerVal, pos, 3, ignoreShields)
                 if dieNum + computerVal > 5 and len(hittableShips) == 0:
                     message = (f"The computer bonus for a die that rolled a {dieNum}"
                                " was cancelled by the shields on each of the opponents ships.")
@@ -1453,7 +1533,9 @@ class Combat:
                             oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
                         viewLyr = View()
                         label = "Reroll Die"
-                        buttonID = f"FCID{colorOrAI}_rerollDie_{pos}_{colorOrAI}_{computerVal}_{dieColor}"
+                        rerollSuffix = f"_{rollerType}" if rollerType else ""
+                        buttonID = (f"FCID{colorOrAI}_rerollDie_{pos}_{colorOrAI}"
+                                    f"_{computerVal}_{dieColor}{rerollSuffix}")
                         viewLyr.add_item(Button(label=label, style=discord.ButtonStyle.green, custom_id=buttonID))
                         viewLyr.add_item(Button(label="Decline", style=discord.ButtonStyle.red,
                                                 custom_id="FCID" + colorOrAI + "_deleteMsg"))
@@ -1474,8 +1556,9 @@ class Combat:
                                     oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
                         viewLyr = View()
                         label = "Reroll Die"
+                        rerollSuffix = f"_{rollerType}" if rollerType else ""
                         buttonID = (f"FCID{colorOrAI}_rerollDie_{pos}_{colorOrAI}"
-                                    f"_{0}_{dieColor}_{dieId}")
+                                    f"_{0}_{dieColor}_{dieId}{rerollSuffix}")
                         riftButtonID = (f"FCID{colorOrAI}_resolveLyraRiftRoll_{pos}_{colorOrAI}"
                                     f"_{str(dieNum)}_{str(speed)}_{str(dieDam)}_{dieId}")
                         viewLyr.add_item(Button(label=label, style=discord.ButtonStyle.green,
@@ -1507,7 +1590,7 @@ class Combat:
                     game.update()
                 if dieNum > 3:
                     hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
-                                                                        6, computerVal, pos, 3)
+                                                                        6, computerVal, pos, 3, ignoreShields)
             if len(hittableShips) > 0:
                 if len(hittableShips) > 1:
                     if colorOrAI != "ai":
@@ -1545,6 +1628,10 @@ class Combat:
         msg = f"{player['username']} hit {advanced + cube.replace('adv', '')} population."
         await interaction.channel.send(msg)
         game.remove_pop([cube + "_pop"], pos, game.get_player_from_color(owner), True)
+        if (cube.replace("adv", "") in ("money", "science", "material")
+                and PlayerHelper.capture_wraith_soul(player, game.gamestate["board"][pos])):
+            game.update_player(PlayerHelper(game.get_player_from_color(player["color"]), player))
+            await interaction.channel.send(f"{player['player_name']} captured a soul from the destroyed sector.")
         await interaction.message.delete()
         if len(PopulationButtons.findFullPopulation(game, pos)) == 0:
             game.remove_control(owner, pos)
@@ -1671,7 +1758,6 @@ class Combat:
                                          custom_id=(f"{checker}rollDice_{pos}_{nextOwner}_{str(nextSpeed)}"
                                                     "_deleteMsg")))
                 if nextSpeed < 99 and len(Combat.getRetreatTiles(game, pos, nextOwner)) > 0:
-                    msg += "You may also alternatively choose to start to retreat them. "
                     shipsSpeeds = Combat.getCombatantShipsBySpeed(game, nextOwner, ships, pos)
                     newSpeeds = 0
                     for ship in shipsSpeeds:
@@ -1679,11 +1765,19 @@ class Combat:
                         if speed2 < 99 and speed2 != int(nextSpeed):
                             newSpeeds += 1
                             break
+                    if FactionData.has(playerObj, "ghosts") and Combat.has_retreatable_ship(
+                            game, pos, nextOwner, nextSpeed):
+                        msg += "You may also retreat them immediately, before they fire. "
+                        view.add_item(Button(label="Retreat Now", style=discord.ButtonStyle.red,
+                                             custom_id=f"{checker}ghostsRetreat_{pos}_{nextOwner}_{str(nextSpeed)}"))
+                    elif not FactionData.has(playerObj, "ghosts"):
+                        msg += "You may also alternatively choose to start to retreat them. "
+                        view.add_item(Button(label=f"Retreat {initiative} Ships", style=discord.ButtonStyle.red,
+                                             custom_id=(f"{checker}startToRetreatUnits_{pos}_"
+                                                        f"{nextOwner}_{str(nextSpeed)}")))
                     if newSpeeds < 1:
                         msg += ("You would lose out on the default"
                                 " 1 reputation for battling if you choose to retreat here.")
-                    view.add_item(Button(label=f"Retreat {initiative} Ships", style=discord.ButtonStyle.red,
-                                         custom_id=f"{checker}startToRetreatUnits_{pos}_{nextOwner}_{str(nextSpeed)}"))
             else:
                 view.add_item(Button(label=f"Roll {initiative} Ships For AI", style=discord.ButtonStyle.green,
                                      custom_id=f"{checker}rollDice_{pos}_{nextOwner}_{nextSpeed}_deleteMsg"))
@@ -1706,11 +1800,8 @@ class Combat:
         asyncio.create_task(channel.send(msg, view=view))
 
     @staticmethod
-    async def finishRetreatingUnits(game: GamestateHelper, buttonID: str, interaction: discord.Interaction, playerObj):
-        pos = buttonID.split("_")[1]
-        colorOrAI = buttonID.split("_")[2]
-        speed = buttonID.split("_")[3]
-        destination = buttonID.split("_")[4]
+    async def completeRetreat(game: GamestateHelper, interaction: discord.Interaction, pos: str,
+                              colorOrAI: str, speed, destination: str, playerObj=None):
         oldLength = len(Combat.findPlayersInTile(game, pos))
         game.removeCertainRetreatingUnits((int(speed), colorOrAI), pos)
         tile_map = game.gamestate["board"]
@@ -1720,15 +1811,82 @@ class Combat:
                 shiptype = ship.split("-")[1]
                 player = game.get_player_from_color(colorOrAI)
                 shipM = PlayerShip(game.gamestate["players"][player], shiptype)
-                if shipM.speed == int(speed):
+                if (shipM.speed + Combat.phase_mode(
+                        game, colorOrAI, pos, Combat.translateShipAbrToName(shiptype)).get("speed", 0)
+                        == int(speed)):
                     game.remove_units([ship], pos)
                     game.add_units([ship], destination)
+        if playerObj is None:
+            playerObj = game.getPlayerObjectFromColor(colorOrAI)
         await interaction.message.delete()
         await interaction.channel.send(f"{playerObj['player_name']} has retreated all ships"
                                        f" with initiative {speed} to {destination}.")
         continued = await Combat.checkCombatEnd(game, interaction, pos, oldLength)
         if not continued:
             await Combat.promptNextSpeed(game, pos, interaction.channel, True)
+
+    @staticmethod
+    async def finishRetreatingUnits(game: GamestateHelper, buttonID: str, interaction: discord.Interaction, playerObj):
+        pos = buttonID.split("_")[1]
+        colorOrAI = buttonID.split("_")[2]
+        speed = buttonID.split("_")[3]
+        destination = buttonID.split("_")[4]
+        await Combat.completeRetreat(game, interaction, pos, colorOrAI, speed, destination, playerObj)
+
+    @staticmethod
+    def has_retreatable_ship(game: GamestateHelper, pos: str, color: str, speed):
+        ships = game.gamestate["board"][pos].get("player_ships", [])
+        for ship_speed, unit_type, _count in Combat.getCombatantShipsBySpeed(game, color, ships, pos):
+            if ship_speed == int(speed) and unit_type != "sb":
+                return True
+        return False
+
+    @staticmethod
+    async def ghostsRetreat(game: GamestateHelper, buttonID: str, interaction: discord.Interaction):
+        pos, color, speed = buttonID.split("_")[1:4]
+        playerObj = game.getPlayerObjectFromColor(color)
+        tile = game.gamestate["board"][pos]
+        if not FactionData.has(playerObj, "ghosts"):
+            return
+        if (tile.get("currentSpeed") != int(speed) or tile.get("currentRoller") != color
+                or not Combat.has_retreatable_ship(game, pos, color, speed)):
+            await interaction.channel.send("That retreat is no longer available. Refresh the combat view.")
+            return
+        tiles = Combat.getRetreatTiles(game, pos, color)
+        if not tiles:
+            await interaction.channel.send("There is no controlled sector to retreat to.")
+            return
+        tile["ghostsRetreatPending"] = color
+        game.update()
+        view = View()
+        for destination in dict.fromkeys(tiles):
+            view.add_item(Button(label=destination, style=discord.ButtonStyle.red,
+                                 custom_id=f"FCID{color}_ghostsRetreatTo_{pos}_{color}_{speed}_{destination}"))
+        await interaction.message.delete()
+        await interaction.channel.send(f"{playerObj['player_name']}, choose the controlled sector adjacent"
+                                       " to retreat to. The ships leave before they fire.", view=view)
+
+    @staticmethod
+    async def ghostsRetreatTo(game: GamestateHelper, buttonID: str, interaction: discord.Interaction):
+        pos, color, speed, destination = buttonID.split("_")[1:5]
+        playerObj = game.getPlayerObjectFromColor(color)
+        if not FactionData.has(playerObj, "ghosts"):
+            return
+        tile = game.gamestate["board"][pos]
+        if (tile.get("currentSpeed") != int(speed) or tile.get("currentRoller") != color
+                or not Combat.has_retreatable_ship(game, pos, color, speed)):
+            await interaction.channel.send("That retreat is no longer available. Refresh the combat view.")
+            return
+        if destination not in Combat.getRetreatTiles(game, pos, color):
+            await interaction.channel.send("That sector is no longer a legal retreat destination.")
+            return
+        tile.pop("ghostsRetreatPending", None)
+        game.update()
+        ships = Combat.getCombatantShipsBySpeed(
+            game, color, game.gamestate["board"][pos].get("player_ships", []), pos)
+        if not any(ship[0] < 99 and ship[0] != int(speed) for ship in ships):
+            game.setRetreatingPenalty(color, pos)
+        await Combat.completeRetreat(game, interaction, pos, color, speed, destination, playerObj)
 
     @staticmethod
     def getRetreatTiles(game: GamestateHelper, pos: str, color: str):
@@ -1868,6 +2026,194 @@ class Combat:
                 game.update()
 
     @staticmethod
+    def phase_option_cost(mode):
+        return (int(mode.get("comp", 0)) + int(mode.get("shield", 0))
+                + int(mode.get("speed", 0)) + (2 if mode.get("planets") else 0)
+                + (3 if mode.get("ignore") else 0))
+
+    @staticmethod
+    def phase_ship_types(game: GamestateHelper, color: str, pos: str):
+        ships = game.gamestate["board"][pos].get("player_ships", [])
+        types = []
+        for _speed, unit_type, _count in Combat.getCombatantShipsBySpeed(game, color, ships, pos):
+            ship_type = Combat.translateShipAbrToName(unit_type)
+            if ship_type not in types:
+                types.append(ship_type)
+        return types
+
+    @staticmethod
+    def phase_mode_valid(game: GamestateHelper, color: str, pos: str, ship_type: str, record):
+        player = game.getPlayerObjectFromColor(color)
+        modes = dict(game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {}))
+        modes[ship_type] = record
+        used = 0
+        for ship, mode in modes.items():
+            own = max(0, PlayerShip(player, ship).energy)
+            used += max(0, mode.get("cost", 0) - own)
+        return used <= player.get("wraithSouls", 0)
+
+    @staticmethod
+    def phase_module_main_view(game: GamestateHelper, color: str, pos: str):
+        player = game.getPlayerObjectFromColor(color)
+        types = Combat.phase_ship_types(game, color, pos)
+        view = View()
+        for ship_type in types:
+            view.add_item(Button(label=ship_type.capitalize(), style=discord.ButtonStyle.blurple,
+                                 custom_id=f"FCID{color}_phaseModuleShip_{pos}_{color}_{ship_type}"))
+        view.add_item(Button(label="Done Declaring", style=discord.ButtonStyle.green,
+                             custom_id=f"FCID{color}_phaseModuleDone_{pos}_{color}"))
+        view.add_item(Button(label="Clear All & Start Combat", style=discord.ButtonStyle.red,
+                             custom_id=f"FCID{color}_phaseModuleNone_{pos}_{color}"))
+        content = (f"{player['player_name']}, declare Phase Module options for this combat. "
+                   f"Each blueprint pays from its own spare power; {player.get('wraithSouls', 0)} souls "
+                   "are shared offboard power for this combat. Cloaking Device is always on.")
+        return content, view
+
+    @staticmethod
+    def phase_module_ship_view(game: GamestateHelper, color: str, pos: str, ship_type: str):
+        player = game.getPlayerObjectFromColor(color)
+        mode = Combat.phase_mode(game, color, pos, ship_type)
+        own = Combat.phase_ship_energy(game, color, pos, ship_type)
+        remaining = Combat.phase_offboard_remaining(game, color, pos)
+        view = View()
+        options = [("comp", "+1 to Hit", 1), ("shield", "+1 Shield", 1),
+                   ("speed", "+2 Initiative", 2), ("ignore", "Ignore Shields", 3)]
+        if "neb" in PlayerHelper(game.get_player_from_color(color), player).getTechs():
+            options.insert(3, ("planets", "Neutron Bombs", 2))
+        for option, label, cost in options:
+            on = bool(mode.get(option))
+            view.add_item(Button(label=f"{'✓ ' if on else ''}{label} ({cost})",
+                                 style=discord.ButtonStyle.green if on else discord.ButtonStyle.blurple,
+                                 custom_id=f"FCID{color}_phaseModuleOption_{pos}_{color}_{ship_type}_{option}"))
+        view.add_item(Button(label=f"Reset {ship_type.capitalize()}", style=discord.ButtonStyle.gray,
+                             custom_id=f"FCID{color}_phaseModuleReset_{pos}_{color}_{ship_type}"))
+        view.add_item(Button(label="Back", style=discord.ButtonStyle.gray,
+                             custom_id=f"FCID{color}_phaseModuleBack_{pos}_{color}"))
+        content = (f"{player['player_name']}, {ship_type.capitalize()}: {own} spare power, "
+                   f"{remaining} offboard power left. Declared: {mode.get('cost', 0)} power.")
+        return content, view
+
+    @staticmethod
+    async def offerPhaseModule(game: GamestateHelper, channel, pos: str):
+        """Phase Module: declare each blueprint's options before initiative is prompted."""
+        tile = game.gamestate["board"][pos]
+        pairing = Combat.sideOf(tile.get("attacker")) + Combat.sideOf(tile.get("defender"))
+        colors = []
+        for color in pairing:
+            if color == "ai":
+                continue
+            player = game.getPlayerObjectFromColor(color)
+            if (FactionData.has(player, "phase_module")
+                    and Combat.phase_ship_types(game, color, pos)):
+                colors.append(color)
+        if not colors:
+            return False
+        tile["phaseModuleColors"] = colors
+        tile["phaseModuleReady"] = {}
+        tile["phaseModes"] = {}
+        game.update()
+        for color in colors:
+            content, view = Combat.phase_module_main_view(game, color, pos)
+            await channel.send(content, view=view)
+        return True
+
+    @staticmethod
+    async def phaseModuleShip(game: GamestateHelper, customID: str, interaction: discord.Interaction):
+        _tag, pos, color, ship_type = customID.split("_")
+        player = game.getPlayerObjectFromColor(color)
+        if (not FactionData.has(player, "phase_module")
+                or game.gamestate["board"].get(pos, {}).get("phaseModuleReady", {}).get(color)
+                or ship_type not in Combat.phase_ship_types(game, color, pos)):
+            await interaction.followup.send("That blueprint is not in this combat.", ephemeral=True)
+            return
+        content, view = Combat.phase_module_ship_view(game, color, pos, ship_type)
+        await interaction.message.edit(content=content, view=view)
+
+    @staticmethod
+    async def phaseModuleBack(game: GamestateHelper, customID: str, interaction: discord.Interaction):
+        _tag, pos, color = customID.split("_")
+        player = game.getPlayerObjectFromColor(color)
+        if (not FactionData.has(player, "phase_module")
+                or game.gamestate["board"].get(pos, {}).get("phaseModuleReady", {}).get(color)):
+            return
+        content, view = Combat.phase_module_main_view(game, color, pos)
+        await interaction.message.edit(content=content, view=view)
+
+    @staticmethod
+    async def phaseModuleOption(game: GamestateHelper, customID: str, interaction: discord.Interaction):
+        _tag, pos, color, ship_type, option = customID.split("_")
+        player = game.getPlayerObjectFromColor(color)
+        if (not FactionData.has(player, "phase_module")
+                or game.gamestate["board"].get(pos, {}).get("phaseModuleReady", {}).get(color)
+                or ship_type not in Combat.phase_ship_types(game, color, pos)):
+            await interaction.followup.send("That blueprint is not in this combat.", ephemeral=True)
+            return
+        values = {"comp": 1, "shield": 1, "speed": 2, "planets": True, "ignore": True}
+        if option not in values:
+            return
+        if option == "planets" and "neb" not in PlayerHelper(
+                game.get_player_from_color(color), player).getTechs():
+            await interaction.followup.send("Research Neutron Bombs before declaring that option.", ephemeral=True)
+            return
+        tile = game.gamestate["board"][pos]
+        modes = tile.setdefault("phaseModes", {}).setdefault(color, {})
+        mode = dict(modes.get(ship_type, {"comp": 0, "shield": 0, "speed": 0,
+                                          "planets": False, "ignore": False, "cost": 0}))
+        mode[option] = 0 if mode.get(option) else values[option]
+        if option in ("planets", "ignore"):
+            mode[option] = bool(mode[option])
+        mode["cost"] = Combat.phase_option_cost(mode)
+        if not Combat.phase_mode_valid(game, color, pos, ship_type, mode):
+            await interaction.followup.send("Not enough power on that blueprint or in the offboard pool.",
+                                            ephemeral=True)
+            return
+        if mode["cost"]:
+            modes[ship_type] = mode
+        else:
+            modes.pop(ship_type, None)
+        game.update()
+        content, view = Combat.phase_module_ship_view(game, color, pos, ship_type)
+        await interaction.message.edit(content=content, view=view)
+
+    @staticmethod
+    async def phaseModuleReset(game: GamestateHelper, customID: str, interaction: discord.Interaction):
+        _tag, pos, color, ship_type = customID.split("_")
+        player = game.getPlayerObjectFromColor(color)
+        if (not FactionData.has(player, "phase_module")
+                or game.gamestate["board"].get(pos, {}).get("phaseModuleReady", {}).get(color)):
+            return
+        modes = game.gamestate["board"][pos].get("phaseModes", {}).get(color, {})
+        modes.pop(ship_type, None)
+        game.update()
+        content, view = Combat.phase_module_ship_view(game, color, pos, ship_type)
+        await interaction.message.edit(content=content, view=view)
+
+    @staticmethod
+    async def phaseModuleDone(game: GamestateHelper, customID: str, interaction: discord.Interaction,
+                              clear: bool = False):
+        _tag, pos, color = customID.split("_")
+        tile = game.gamestate["board"][pos]
+        colors = tile.get("phaseModuleColors", [])
+        player = game.getPlayerObjectFromColor(color)
+        if color not in colors or not FactionData.has(player, "phase_module"):
+            return
+        ready = tile.setdefault("phaseModuleReady", {})
+        if ready.get(color):
+            await interaction.followup.send("You have already finished declaring.", ephemeral=True)
+            return
+        if clear:
+            tile.get("phaseModes", {}).pop(color, None)
+        ready[color] = True
+        game.update()
+        await interaction.message.edit(content=f"{player['player_name']} has finished declaring Phase Module options.",
+                                       view=None)
+        if (all(ready.get(color2) for color2 in colors)
+                and not tile.get("phaseModulePrompted")):
+            tile["phaseModulePrompted"] = True
+            game.update()
+            await Combat.promptNextSpeed(game, pos, interaction.channel, False)
+
+    @staticmethod
     def discoveryTileClaimable(game: GamestateHelper, pos: str):
         """A Discovery Tile still on the board that no Ancients guard. Ancients
         guard their tile until destroyed, even against the Descendants of Draco."""
@@ -2003,8 +2349,11 @@ class Combat:
                 p2 = game.getPlayerObjectFromColor(owner)
                 player_helper = PlayerHelper(game.get_player_from_color(player["color"]), player)
                 player_helper2 = PlayerHelper(game.get_player_from_color(p2["color"]), p2)
+                wraithPlanets = (FactionData.has(player, "phase_module")
+                                 and Combat.phase_declared_planets(game, player["color"], pos))
                 if (FactionData.has(p2, "population_destroyed_in_combat") or game.is_population_gone(pos)
-                        or ("neb" in player_helper.getTechs() and "nea" not in player_helper2.getTechs())):
+                        or ("neb" in player_helper.getTechs() and "nea" not in player_helper2.getTechs()
+                            and (not FactionData.has(player, "phase_module") or wraithPlanets))):
                     if Combat.discoveryTileClaimable(game, pos):
                         await Combat.offerDiscoveryTile(game, interaction.channel, pos, winner)
                     view = View()
@@ -2035,7 +2384,13 @@ class Combat:
                     view.add_item(Button(label="Roll to Destroy Population", style=discord.ButtonStyle.green,
                                          custom_id=f"FCID{winner}_rollDice_{pos}_{winner}_1000_deleteMsg"))
                     message = f"{playerName}, you may roll to attempt to kill enemy population."
+                    if (FactionData.has(player, "phase_module") and "neb" in player_helper.getTechs()
+                            and not wraithPlanets):
+                        message += (" The Phase Module Planets option was not declared at the start of this"
+                                    " combat, so only the roll is available.")
                     asyncio.create_task(interaction.channel.send(message, view=view))
+        game.gamestate["board"][pos].pop("ghostsRetreatPending", None)
+        Combat.clear_phase_module(game, pos)
 
 
     @staticmethod
