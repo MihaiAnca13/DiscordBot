@@ -593,7 +593,7 @@ class DrawHelper:
         return context
 
     def faction_portrait(self, faction):
-        if faction == "atlantians" or faction == "ra" or faction == "tm":
+        if faction in ("atlantians", "ra", "tm", "turtugan"):
             return self.use_image(f"images/resources/components/layouts/factionImages/{faction}_image.png")
         return self.use_image(f"images/resources/components/factions/{faction}_board.png").crop((49, 252, 154, 357))
 

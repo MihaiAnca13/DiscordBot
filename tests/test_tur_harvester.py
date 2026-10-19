@@ -1,0 +1,185 @@
+from discord.ui import View
+
+from Buttons.Explore import ExploreButtons
+from Buttons.Harvester import HarvesterButtons
+from Buttons.Population import PopulationButtons
+from Buttons.Upgrade import UpgradeButtons
+from helpers.CombatHelper import Combat
+from helpers.DrawHelper import DrawHelper
+from helpers.Turtugan import Harvester
+from helpers.ShipHelper import PlayerShip
+from tests.fakes import (FakeChannel, FakeInteraction, board_tile, buttons, player_helper,
+                         player_stats, reload)
+
+
+def test_harvester_is_a_valid_starbase_but_a_normal_one_is_not():
+    assert PlayerShip(player_stats("tur", color="teal"), "starbase").check_valid_ship()
+    normal = player_stats("hyd", color="blue", starbase_parts=["hul", "nus", "nud"])
+    assert not PlayerShip(normal, "starbase").check_valid_ship()
+
+
+def test_only_turtugan_is_offered_the_starbase_in_a_move(start_game, press):
+    game, channel = start_game(factions=["tur", "eri"])
+    press(channel, 1, "FCIDblue_startMove")
+    press(channel, 1, "FCIDblue_moveFrom_201_1")
+    assert "Starbase (Range: 1)" in buttons(channel).values()
+
+    game, channel = start_game(factions=["eri", "hyd"])
+    press(channel, 1, "FCIDblue_startMove")
+    press(channel, 1, "FCIDblue_moveFrom_201_1")
+    assert "Starbase (Range: 1)" not in buttons(channel).values()
+
+
+def test_turtugan_can_move_the_harvester_and_spends_influence(start_game, press):
+    game, channel = start_game(factions=["tur", "eri"])
+    game.add_tile("301", 0, "102")
+    influence = game.get_player(1)["influence_discs"]
+    press(channel, 1, "FCIDblue_startMove")
+    press(channel, 1, "FCIDblue_moveFrom_201_1")
+    press(channel, 1, "FCIDblue_moveThisShip_201_starbase_1_all")
+    destination = next(cid for cid in buttons(channel) if cid.startswith("FCIDblue_moveTo_201_starbase_"))
+    press(channel, 1, destination)
+
+    state = reload(game)
+    moved_to = destination.split("_")[4]
+    assert "blue-sb" in state.gamestate["board"][moved_to]["player_ships"]
+    assert "blue-sb" not in state.gamestate["board"]["201"]["player_ships"]
+    assert state.get_player(1)["influence_discs"] == influence - 1
+    assert state.get_player(1)["move_action_counters"] == 1
+
+
+def test_the_explore_free_move_is_once_per_action(start_game, run, press):
+    game, channel = start_game(factions=["tur", "eri"])
+    game.add_tile("301", 0, "102")
+    run(ExploreButtons.startExplore(game, game.get_player(1), player_helper(game, "blue"),
+                                    FakeInteraction(channel), "startExplore"))
+    influence = reload(game).get_player(1)["influence_discs"]
+    view = View()
+    ExploreButtons.addHarvesterMoveButton(game, reload(game).get_player(1), view)
+    run(channel.send("free move", view=view))
+
+    press(channel, 1, "FCIDblue_startMoveHarvester")
+    press(channel, 1, "FCIDblue_moveFrom_201_0_sb")
+    press(channel, 1, "FCIDblue_moveThisShip_201_starbase_0_sb")
+    destination = next(cid for cid in buttons(channel) if cid.startswith("FCIDblue_moveTo_201_starbase_"))
+    press(channel, 1, destination)
+
+    state = reload(game)
+    assert state.get_player(1)["influence_discs"] == influence
+    assert state.get_player(1)["harvester_free_move_used"] is True
+
+    view = View()
+    ExploreButtons.addHarvesterMoveButton(game, reload(game).get_player(1), view)
+    assert len(view.children) == 0
+    from discord.ui import Button
+    view = View()
+    view.add_item(Button(label="Move Harvester (free)", custom_id="FCIDblue_startMoveHarvester"))
+    run(channel.send("stale free move", view=view))
+    press(channel, 1, "FCIDblue_startMoveHarvester")
+
+
+def test_harvester_placement_stores_the_planet_and_produces_at_upkeep(start_game, run, press, monkeypatch):
+    game, channel = start_game(factions=["tur", "eri"])
+    monkeypatch.setattr(DrawHelper, "show_select_techs", lambda self, *args, **kwargs: None)
+    press(channel, 1, "FCIDblue_startPlaceHarvester")
+    assert any(cid == "FCIDblue_harvesterSector_201" for cid in buttons(channel))
+    press(channel, 1, "FCIDblue_harvesterSector_201")
+    press(channel, 1, "FCIDblue_placeHarvester_201_scienceadv_0_science")
+
+    state = reload(game)
+    assert state.get_player(1)["harvester_placements"] == [
+        {"position": "201", "square": "scienceadv", "index": 0, "resource": "science"}]
+    assert state.gamestate["board"]["201"]["scienceadv_pop"] == [0]
+    assert state.get_player(1)["science_pop_cubes"] == 12
+
+    science_before = state.get_player(1)["science"]
+    science_income = state.get_player(1)["population_track"][state.get_player(1)["science_pop_cubes"] - 1]
+    game = reload(game)
+    run(game.upkeep(FakeInteraction(channel)))
+    assert reload(game).get_player(1)["science"] == science_before + science_income + 1
+
+
+def test_harvester_blocks_settling_its_planet(start_game, press):
+    game, channel = start_game(factions=["tur", "eri"])
+    game.get_player(1)["nano_tech"].append("adl")
+    game.update()
+    press(channel, 1, "FCIDblue_startPlaceHarvester")
+    press(channel, 1, "FCIDblue_harvesterSector_201")
+    press(channel, 1, "FCIDblue_placeHarvester_201_scienceadv_0_science")
+    state = reload(game)
+    assert "201_scienceadv_0" not in PopulationButtons.findEmptyPopulation(state, state.get_player(1))
+
+
+def test_elimination_clears_the_harvester_placements(start_game, run):
+    from Buttons.Influence import InfluenceButtons
+    game, channel = start_game(factions=["tur", "eri"])
+    player = game.get_player(1)
+    assert Harvester.record(game, player, "201", "scienceadv", 0, "science")
+    run(InfluenceButtons.eliminatePlayer(game, player, FakeInteraction(channel),
+                                         player_helper(game, "blue"), False))
+    assert player["harvester_placements"] == []
+
+
+def test_moving_or_destroying_the_harvester_clears_its_placement(start_game):
+    game, _channel = start_game(factions=["tur", "eri"])
+    player = game.get_player(1)
+    assert Harvester.record(game, player, "201", "scienceadv", 0, "science")
+    assert player["harvester_placements"]
+    game.remove_units(["blue-sb"], "201")
+    assert player["harvester_placements"] == []
+
+
+def test_a_second_placement_replaces_the_first_in_the_same_sector(start_game):
+    game, _channel = start_game(factions=["tur", "eri"])
+    player = game.get_player(1)
+    assert Harvester.record(game, player, "201", "scienceadv", 0, "science")
+    assert Harvester.record(game, player, "201", "materialadv", 0, "material")
+    assert len(player["harvester_placements"]) == 1
+    assert player["harvester_placements"][0]["square"] == "materialadv"
+
+
+def test_a_grey_planet_asks_for_the_resource(make_game, run):
+    stats = player_stats("tur", color="blue")
+    game = make_game({"players": {"1": stats},
+                      "board": {"202": dict(board_tile(["blue-sb"], sector=202)["202"],
+                                            neutraladv_pop=[0])}})
+    player = game.get_player(1)
+    channel = FakeChannel("t-actions")
+    interaction = FakeInteraction(channel)
+    run(HarvesterButtons.place(game, player, interaction, "placeHarvester_202_neutraladv_0"))
+    assert any(cid.endswith("_material") for cid in buttons(channel))
+    choice = next(cid for cid in buttons(channel) if cid.endswith("_material"))
+    handler_id = choice.replace("FCIDblue_", "")
+    run(HarvesterButtons.placeResource(game, player, FakeInteraction(channel, custom_id=handler_id), handler_id))
+    assert reload(game).get_player(1)["harvester_placements"][0]["resource"] == "material"
+
+
+def test_harvester_cannot_replace_its_drive(start_game, press):
+    game, channel = start_game(factions=["tur", "eri"])
+    press(channel, 1, "FCIDblue_startUpgrade")
+    inter = press(channel, 1, "FCIDblue_upgradeShip_2_starbase_dummy")
+    labels = {child.label for child in inter.message.edited["view"].children}
+    assert "Hull" in labels
+    assert "Nuclear Source" in labels
+    assert "Nuclear Drive" not in labels
+
+
+def test_forged_drive_removal_is_refused(start_game, run):
+    game, _channel = start_game(factions=["tur", "eri"])
+    interaction = FakeInteraction()
+    run(UpgradeButtons.selectOldPart(game, game.get_player(1), interaction,
+                                     "selectOldPart_2_starbase_nud_dummy_2", player_helper(game, "blue")))
+    assert "may not remove its Drive" in interaction.followup.sent[0][0]
+
+
+def test_a_weaponless_harvester_is_not_in_the_roll_order(make_game):
+    stats = player_stats("tur", color="teal")
+    other = player_stats("eri", color="red")
+    game = make_game({"players": {"1": stats, "2": other},
+                      "board": {"202": dict(board_tile(["teal-sb", "red-int"], sector=202)["202"],
+                                            attacker=["teal"], defender=["red"])}})
+    speeds = Combat.getBothCombatantShipsBySpeed(game, ["red"], ["teal"],
+                                                 game.gamestate["board"]["202"]["player_ships"], "202")
+    assert all(owner != "teal" for _speed, owner in speeds)
+    assert any(ship[1] == "sb" for ship in Combat.getCombatantShipsBySpeed(
+        game, "teal", game.gamestate["board"]["202"]["player_ships"], "202"))

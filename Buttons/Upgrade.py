@@ -2,6 +2,7 @@ import asyncio
 import copy
 import json
 import discord
+from helpers import FactionData
 from helpers.EmojiHelper import Emoji
 from helpers.GamestateHelper import GamestateHelper
 from helpers.PlayerHelper import DISCOVERY_PART_IDS, PlayerHelper
@@ -11,6 +12,11 @@ from helpers.ShipHelper import PlayerShip
 
 
 class UpgradeButtons:
+    @staticmethod
+    def is_locked_drive(player, ship, part):
+        """Harvester may not remove or replace its Nuclear Drive."""
+        return part == "nud" and ship == "starbase" and FactionData.has(player, "harvester")
+
     @staticmethod
     async def startUpgrade(game: GamestateHelper, player, interaction: discord.Interaction,
                            button: bool, discTileUpgrade: str, action:str):
@@ -62,7 +68,7 @@ class UpgradeButtons:
         with open("data/parts.json", "r") as f:
             part_stats = json.load(f)
         for index,i in enumerate(player[f"{ship}_parts"]):
-            if i == "mus":
+            if i == "mus" or UpgradeButtons.is_locked_drive(player, ship, i):
                 continue
             oldPart = player_helper.stats[f"old_{ship}_parts"][index]
             lab = part_stats[i]["name"]
@@ -92,6 +98,9 @@ class UpgradeButtons:
         oldPart = customID.split("_")[3]
         discTileUpgrade = customID.split("_")[4]
         indexOfOldPart = customID.split("_")[5]
+        if UpgradeButtons.is_locked_drive(player, ship, oldPart):
+            await interaction.followup.send("A Harvester may not remove its Drive.", ephemeral=True)
+            return
         if discTileUpgrade not in ("dummy", "free") and not discTileUpgrade.startswith("tm"):
             await UpgradeButtons.chooseUpgrade(game, player, interaction,
                                                customID + "_" + discTileUpgrade, player_helper)
@@ -136,6 +145,9 @@ class UpgradeButtons:
         newPart = customID.split("_")[4]
         discTileUpgrade = customID.split("_")[6]
         indexOfOldPart = customID.split("_")[5]
+        if UpgradeButtons.is_locked_drive(player, ship, oldPart):
+            await interaction.followup.send("A Harvester may not remove its Drive.", ephemeral=True)
+            return
         with open("data/parts.json", "r") as f:
             part_stats = json.load(f)
         index = 0

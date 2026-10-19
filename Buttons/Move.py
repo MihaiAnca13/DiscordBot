@@ -6,6 +6,7 @@ from Buttons.DiplomaticRelations import DiplomaticRelationsButtons
 from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Explore import ExploreButtons
 from Buttons.Influence import InfluenceButtons
+from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from helpers.EmojiHelper import Emoji
 from helpers.GamestateHelper import GamestateHelper
@@ -18,13 +19,18 @@ from helpers.ShipHelper import PlayerShip
 
 class MoveButtons:
     @staticmethod
-    def getListOfUnpinnedShipTiles(game: GamestateHelper, player):
+    def getListOfUnpinnedShipTiles(game: GamestateHelper, player, ship_filter="all"):
         tile_map = game.gamestate["board"]
+        ship_types = ("int", "cru", "drd")
+        if FactionData.has(player, "harvester"):
+            ship_types += ("sb",)
+        if ship_filter == "sb":
+            ship_types = ("sb",)
         tiles = []
         for tile in tile_map:
             if "player_ships" in tile_map[tile]:
                 if not any(f"{player['color']}-{ship}" in tile_map[tile]["player_ships"]
-                           for ship in ("int", "cru", "drd")):
+                           for ship in ship_types):
                     continue
                 if ExploreButtons.doesPlayerHaveUnpinnedShips(player, tile_map[tile]["player_ships"], game, tile):
                     tiles.append(tile)
@@ -33,10 +39,13 @@ class MoveButtons:
     @staticmethod
     async def startMove(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str, button: bool):
         moveCount = 1
+        ship_filter = "all"
         if "_" in buttonID:
             moveCount = buttonID.split("_")[1]
+            if len(buttonID.split("_")) > 2:
+                ship_filter = buttonID.split("_")[2]
         view = View()
-        tiles = MoveButtons.getListOfUnpinnedShipTiles(game, player)
+        tiles = MoveButtons.getListOfUnpinnedShipTiles(game, player, ship_filter)
         for tile in tiles:
             view.add_item(Button(label=tile, style=discord.ButtonStyle.red,
                                  custom_id=f"FCID{player['color']}_moveFrom_{tile}_{moveCount}"))
@@ -54,11 +63,29 @@ class MoveButtons:
                                                                                        tiles), ephemeral=True))
 
     @staticmethod
+    async def startHarvesterMove(game: GamestateHelper, player, interaction: discord.Interaction):
+        """The free Harvester move that belongs to an Explore action."""
+        if not FactionData.has(player, "harvester"):
+            return
+        if player.get("harvester_free_move_used"):
+            await interaction.followup.send("You already moved a Harvester for free this Explore action.",
+                                            ephemeral=True)
+            return
+        player["harvester_free_move_used"] = True
+        game.update()
+        await MoveButtons.startMove(game, player, interaction, "startMove_0_sb", True)
+
+    @staticmethod
     async def moveFrom(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str):
         view = View()
         originT = buttonID.split("_")[1]
         moveCount = buttonID.split("_")[2]
+        ship_filter = buttonID.split("_")[3] if len(buttonID.split("_")) > 3 else "all"
         shipTypes = ["interceptor", "cruiser", "dreadnought"]
+        if FactionData.has(player, "harvester"):
+            shipTypes.append("starbase")
+        if ship_filter == "sb":
+            shipTypes = ["starbase"]
         for shipType in shipTypes:
             player_color = player["color"]
             ship = PlayerShip(player, shipType)
@@ -68,7 +95,8 @@ class MoveButtons:
                 shipEmoji = Emoji.getEmojiByName(player['color'] + game.getShipShortName(shipType))
                 view.add_item(Button(label=f"{shipType.capitalize()} (Range: {shipRange})", emoji=shipEmoji,
                                      style=discord.ButtonStyle.blurple,
-                                     custom_id=f"FCID{player['color']}_moveThisShip_{originT}_{shipType}_{moveCount}"))
+                                     custom_id=(f"FCID{player['color']}_moveThisShip_{originT}_{shipType}_{moveCount}"
+                                                f"_{ship_filter}")))
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
         await interaction.message.delete()
@@ -259,7 +287,7 @@ class MoveButtons:
         game.update_player(player_helper)
         view = View()
         await interaction.message.delete()
-        if player["move_apt"] > moveCount and not player.get("passed"):
+        if int(moveCount) > 0 and player["move_apt"] > int(moveCount) and not player.get("passed"):
             view.add_item(Button(label="Move an additional ship", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_startMove_{moveCount + 1}"))
         view.add_item(Button(label="Finish Action", style=discord.ButtonStyle.red,

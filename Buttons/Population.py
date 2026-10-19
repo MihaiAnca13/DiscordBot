@@ -3,6 +3,7 @@ import discord
 from helpers.GamestateHelper import GamestateHelper
 from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
+from helpers.Turtugan import Harvester
 from discord.ui import View, Button
 
 
@@ -40,6 +41,9 @@ class PopulationButtons:
             if ("adl" not in allPlayerTechs and "adm" not in allPlayerTechs and "ade" not in allPlayerTechs
                     and not finds_a_way):
                 emptyPlanets = [s for s in emptyPlanets if "neutraladv" not in s]
+        if any(other.get("harvester_placements") for other in game.gamestate["players"].values()):
+            emptyPlanets = [square for square in emptyPlanets
+                            if not Harvester.occupied(game, *square.split("_"))]
         return emptyPlanets
 
     @staticmethod

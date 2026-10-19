@@ -10,6 +10,7 @@ from Buttons.DiplomaticRelations import DiplomaticRelationsButtons
 from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Draft import DraftButtons
 from Buttons.Explore import ExploreButtons
+from Buttons.Harvester import HarvesterButtons
 from Buttons.Influence import InfluenceButtons
 from Buttons.Move import MoveButtons
 from Buttons.Population import PopulationButtons
@@ -20,6 +21,7 @@ from Buttons.Turn import TurnButtons
 from Buttons.Upgrade import UpgradeButtons
 from helpers.CombatHelper import Combat
 from helpers.GameLock import game_lock
+from helpers.Turtugan import Carapace
 from helpers.GamestateHelper import GamestateHelper
 import time
 import logging
@@ -38,7 +40,7 @@ ANSWER_BUTTONS = ("selectDiscTile", "exploreDiscoveryTile", "keepDiscForPoints",
                   "getTech", "getFreeTech", "placeWarpPortal",
                   "offerRelationsTo", "acceptRelationsWith", "declineRelationsWith", "formMinorRelations",
                   "reducePopFor", "addCubeToTrack", "drawReputation", "dontDrawReputation",
-                  "ancientsCube", "setupTech")
+                  "ancientsCube", "setupTech", "reservedTile", "carapaceDone", "carapaceMissile")
 
 
 class ButtonListener(commands.Cog):
@@ -243,6 +245,8 @@ class ButtonListener(commands.Cog):
             if "2" not in customID:
                 game.updateSaveFile()
             await ExploreButtons.startExplore(game, player, player_helper, interaction, customID)
+        elif customID.startswith("reservedTile"):
+            await ExploreButtons.reservedTile(game, player, interaction, customID)
         elif customID.startswith("exploreTile"):
             await ExploreButtons.exploreTile(game, player, interaction, customID)
         elif customID.startswith("placeTile"):
@@ -368,10 +372,26 @@ class ButtonListener(commands.Cog):
             await AllianceButtons.agreeJoinAlliance(game, player, interaction, customID)
         elif customID.startswith("leaveAlliance"):
             await AllianceButtons.leaveAlliance(game, player, interaction, customID)
+        elif customID.startswith("startMoveHarvester"):
+            await MoveButtons.startHarvesterMove(game, player, interaction)
         elif customID.startswith("startMove"):
             if customID == "startMove":
                 game.updateSaveFile()
             await MoveButtons.startMove(game, player, interaction, customID, True)
+        elif customID.startswith("startPlaceHarvester"):
+            await HarvesterButtons.startPlace(game, player, interaction)
+        elif customID.startswith("harvesterSector"):
+            await HarvesterButtons.showSquares(game, player, interaction, customID)
+        elif customID.startswith("placeHarvester"):
+            await HarvesterButtons.place(game, player, interaction, customID)
+        elif customID.startswith("harvesterResource"):
+            await HarvesterButtons.placeResource(game, player, interaction, customID)
+        elif customID.startswith("carapaceToggle"):
+            await Carapace.toggle(game, player, interaction, customID)
+        elif customID.startswith("carapaceDone"):
+            await Carapace.done(game, player, interaction, customID)
+        elif customID.startswith("carapaceMissile"):
+            await Carapace.resolve_missile(game, player, interaction, customID)
         elif customID.startswith("moveFrom"):
             await MoveButtons.moveFrom(game, player, interaction, customID)
         elif customID.startswith("moveThisShip"):

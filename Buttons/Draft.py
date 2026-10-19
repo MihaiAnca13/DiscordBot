@@ -9,6 +9,7 @@ from Buttons.Research import ResearchButtons
 from helpers.EmojiHelper import Emoji
 from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
+from helpers.Turtugan import DeepSpace
 from discord.ui import View, Button
 
 
@@ -231,6 +232,7 @@ class DraftButtons:
                     await PopulationButtons.offerAncientsCube(game, player, interaction,
                                                               game.getLocationFromID(player["home_planet"]))
                     await ResearchButtons.offerSetupTech(game, player, interaction)
+                    await DeepSpace.post_reserve(game, player, interaction.channel)
 
         asyncio.create_task(game.showUpdate("Start of Game", interaction))
         player = game.get_player(temp_player_list[0],interaction)

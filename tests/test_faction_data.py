@@ -63,6 +63,7 @@ def test_starting_ships_come_from_the_faction_data(make_game):
     assert home_ships("exl") == ["blue-orb", "blue-int"]
     assert home_ships("rho") == ["blue-int", "blue-int"]
     assert home_ships("hyd") == ["blue-int"]
+    assert home_ships("tur") == ["blue-sb"]
 
 
 def _tile_game(make_game, faction, owner="blue", **tile):

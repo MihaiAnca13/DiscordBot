@@ -3,6 +3,7 @@ from Buttons.BlackHole import BlackHoleButtons
 from Buttons.Alliance import AllianceButtons
 from Buttons.DiplomaticRelations import DiplomaticRelationsButtons
 from Buttons.Explore import ExploreButtons
+from Buttons.Harvester import HarvesterButtons
 from Buttons.Population import PopulationButtons
 from Buttons.Pulsar import PulsarButtons
 from helpers.EmojiHelper import Emoji
@@ -426,6 +427,8 @@ class TurnButtons:
         if len(PopulationButtons.findEmptyPopulation(game, p1)) > 0 and p1["colony_ships"] > 0:
             view.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                                  custom_id=f"FCID{p1['color']}_startPopDrop"))
+        if not p1.get("passed"):
+            HarvesterButtons.addButton(view, game, p1)
         blackView = BlackHoleButtons.getBlackHoleShips(game, player)
         for child in blackView.children:
             view.add_item(child)
@@ -546,6 +549,7 @@ class TurnButtons:
                 view.add_item(Button(label="Minor Species Relations", style=discord.ButtonStyle.green,
                                      custom_id=f"FCID{player['color']}_startMinorRelations"))
         AllianceButtons.addAllianceButtons(view, game, player)
+        HarvesterButtons.addButton(view, game, player)
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
         await interaction.channel.send(f"Colony ships available: {player['colony_ships']}\n"
