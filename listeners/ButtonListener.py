@@ -182,6 +182,9 @@ class ButtonListener(commands.Cog):
         if customID == "showGame":
             await TurnButtons.showGame(game, interaction)
             return
+        if customID.startswith("refreshCombatPrompt"):
+            await Combat.refreshCombatPrompt(game, customID.split("_")[1], interaction.channel)
+            return
         if customID.startswith("refreshImage"):
             await Combat.refreshImage(game, customID, interaction)
             return
