@@ -47,7 +47,7 @@ class ExploreButtons:
                         else:
                             if Combat.exile_orbital_exists(game, tile):
                                 playerShipsCount += 1
-                    elif "anc" not in ship or FactionData.has(player, "may_not_fight_ancients"):
+                    elif "anc" not in ship or not FactionData.has(player, "may_not_fight_ancients"):
                         opponentShips = opponentShips + 1
         researchedTechs = player_helper.getTechs()
         if "clo" in researchedTechs or "cld" in researchedTechs:
