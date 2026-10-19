@@ -83,17 +83,14 @@ def run():
 @pytest.fixture
 def press(run):
     """Click a button through ButtonListener.resolveButton, as the given user."""
-    from listeners.ButtonListener import ButtonListener
-    from tests.fakes import FakeInteraction
-
-    def _press(channel, user_id, custom_id, message=None):
+    def click(channel, user_id, custom_id, message=None):
         game_id = channel.name.split("-")[0]  # the guild role that pings players is named after the game
         inter = FakeInteraction(channel, custom_id=custom_id, user_id=user_id, role_names=[game_id],
                                 message=message or channel.message_with(custom_id))
         run(ButtonListener(None).resolveButton(inter))
         return inter
 
-    return _press
+    return click
 
 
 @pytest.fixture
@@ -102,11 +99,7 @@ def start_game(games_dir, run):
 
     Returns (game, channel); press buttons in the channel with `press`.
     """
-    from helpers.GamestateHelper import GamestateHelper
-    from setup.GameInit import GameInit
-    from tests.fakes import FakeChannel, FakeInteraction
-
-    def _start(player_count=2, factions=None):
+    def start(player_count=2, factions=None):
         random.seed(0)  # GameInit shuffles decks and tiles; keep runs reproducible
         factions = factions or ["hyd", "eri", "ori", "dra", "mec", "pla"]
         colors = ["blue", "red", "green", "yellow", "purple", "white"]
@@ -125,4 +118,4 @@ def start_game(games_dir, run):
         game.addToKey("activePlayerColor", "blue")
         return game, FakeChannel("aeb1-actions")
 
-    return _start
+    return start
