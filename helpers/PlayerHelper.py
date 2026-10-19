@@ -21,6 +21,20 @@ class PlayerHelper:
         return index in FactionData.of(player).get("reputation_only_slots", [])
 
     @staticmethod
+    def get_spine_cannon_slots(player, ship_type):
+        ship_type = {"int": "interceptor", "cru": "cruiser", "drd": "dread", "sb": "starbase"}.get(
+            ship_type, ship_type)
+        return FactionData.of(player).get("spine_cannon_slots", {}).get(ship_type, [])
+
+    @staticmethod
+    def is_spine_gun(part):
+        """A Spine Cannon slot holds a gun: dice, no missile rack, no rift die."""
+        with open("data/parts.json", "r") as f:
+            part_stats = json.load(f).get(part, {})
+        return bool(part_stats.get("dice")) and not part_stats.get("missile") \
+            and "pink" not in part_stats["dice"]
+
+    @staticmethod
     def has_reputation_slot_for_relation(player):
         """A relation takes the first free ambassador slot, or replaces the lowest reputation tile."""
         for index, tile in enumerate(player["reputation_track"]):

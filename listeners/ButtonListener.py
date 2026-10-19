@@ -38,7 +38,7 @@ ANSWER_BUTTONS = ("selectDiscTile", "exploreDiscoveryTile", "keepDiscForPoints",
                   "getTech", "getFreeTech", "placeWarpPortal",
                   "offerRelationsTo", "acceptRelationsWith", "declineRelationsWith", "formMinorRelations",
                   "reducePopFor", "addCubeToTrack", "drawReputation", "dontDrawReputation",
-                  "ancientsCube", "setupTech")
+                  "ancientsCube", "setupTech", "wolfPack")
 
 
 class ButtonListener(commands.Cog):
@@ -157,7 +157,7 @@ class ButtonListener(commands.Cog):
             if not any(substring in customID for substring in ["showGame", "AtRatio", "gain5",
                                                                "showReputation", "rollDice", "magColShip",
                                                                "rerollDie", "readyForUpkeep", "draftFaction",
-                                                               "buildShip"]):
+                                                               "buildShip", "wolfPack"]):
                 await interaction.followup.send(f"{interaction.user.mention}, this button ({customID}) was pressed"
                                                 " most recently, and we are attempting to prevent an accidental"
                                                 " double press. Try hitting show reputation first and then hitting this"
@@ -384,6 +384,8 @@ class ButtonListener(commands.Cog):
             await game.declareWinner(interaction)
         elif customID.startswith("rollDice"):
             await Combat.rollDice(game, customID, interaction)
+        elif customID.startswith("wolfPack"):
+            await Combat.wolfPackChoice(game, customID, interaction)
         elif customID.startswith("rerollDie"):
             await Combat.rerollDie(game, customID, interaction, player, player_helper)
         elif customID.startswith("removeUnits"):

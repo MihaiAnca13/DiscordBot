@@ -60,6 +60,9 @@ class MoveButtons:
         moveCount = buttonID.split("_")[2]
         shipTypes = ["interceptor", "cruiser", "dreadnought"]
         for shipType in shipTypes:
+            key = {"dreadnought": "dread"}.get(shipType, shipType)
+            if not player.get(f"{key}_parts"):
+                continue
             player_color = player["color"]
             ship = PlayerShip(player, shipType)
             shipRange = ship.getRange()

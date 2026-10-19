@@ -27,6 +27,21 @@ def load_properties(path):
 
 _resized_cache = {}
 
+# Wulfen blueprints are board art, not the shared template: part rectangles are in
+# image pixels, in parts-array order, because the spine slots replace normal ones.
+WULFEN_BLUEPRINTS = {
+    "cru": ("wulfen_cruiser_blueprint.png", [
+        (105, 292, 132, 103), (335, 147, 112, 99), (335, 247, 112, 148),
+        (210, 147, 125, 99), (210, 247, 125, 114)]),
+    "drd": ("wulfen_dreadnought_blueprint.png", [
+        (32, 148, 126, 129), (32, 277, 126, 110), (158, 142, 120, 135),
+        (278, 142, 120, 135), (158, 277, 120, 110), (278, 277, 120, 110),
+        (401, 148, 124, 124), (401, 272, 124, 132)]),
+    "sb": ("wulfen_starbase_blueprint.png", [
+        (107, 144, 125, 119), (107, 263, 125, 115), (232, 144, 103, 119),
+        (335, 152, 111, 121), (335, 273, 111, 121)]),
+}
+
 
 class DrawHelper:
     def __init__(self, gamestate):
@@ -276,6 +291,8 @@ class DrawHelper:
                     tile_image.paste(discTile, (int(108 * mult), int(89 * mult)), mask=discTile)
 
             text_position = (int(280 * mult), int(132 * mult))
+            if tile.get("number_snap"):
+                text_position = tuple(tile["number_snap"])
             bannerPath = "images/resources/masks/banner.png"
             banner = self.use_image(bannerPath)
             if not numberless and "back" not in sector:
@@ -593,7 +610,7 @@ class DrawHelper:
         return context
 
     def faction_portrait(self, faction):
-        if faction == "atlantians" or faction == "ra" or faction == "tm":
+        if faction == "atlantians" or faction == "ra" or faction == "tm" or faction == "wulfen":
             return self.use_image(f"images/resources/components/layouts/factionImages/{faction}_image.png")
         return self.use_image(f"images/resources/components/factions/{faction}_board.png").crop((49, 252, 154, 357))
 
@@ -1189,7 +1206,13 @@ class DrawHelper:
             shipFullName = self.getShipFullName(ship)
             if ship == "orb" and faction != "exile":
                 continue
+            # A faction without an Interceptor blueprint (Wulfen) keeps the counter gap.
+            if ship == "int" and not player.get("interceptor_parts"):
+                continue
             ship_blueprint_path = f"images/resources/components/layouts/blueprints/blueprint_{shipFullName}.png"
+            if faction == "wulfen":
+                ship_blueprint_path = (f"images/resources/components/layouts/blueprints/"
+                                       f"{WULFEN_BLUEPRINTS[ship][0]}")
             if faction == "planta":
                 ship_blueprint_path = ship_blueprint_path.replace(".png","_planta.png")
             ship_blueprint = self.use_image(ship_blueprint_path)
@@ -1239,7 +1262,10 @@ class DrawHelper:
                 shortF = "terran"
             shipClassPath = f"images/resources/components/layouts/blueprints/classes/{shortF}_{shipFullName}_class.png"
             shipClass = self.use_image(shipClassPath)
-            context.paste(shipClass, (2250 + 550 * counter+mod+175, 74))
+            if faction == "wulfen":
+                context.paste(shipClass, (2250 + 550 * counter+mod+175, 74), mask=shipClass)
+            else:
+                context.paste(shipClass, (2250 + 550 * counter+mod+175, 74))
 
 
             if ship != "orb":
@@ -1248,15 +1274,24 @@ class DrawHelper:
                     filepath = f"images/resources/components/fancy_ships/fancy_{player['color']}-{ship}.png"
                 else:
                     filepath = f"images/resources/components/basic_ships/{player['color']}-{ship}.png"
-                ship_image = self.use_resized_image(filepath, (120, 120))
-                if ship == "drd":
-                    ship_image = ship_image.rotate(270,expand=True)
-                for shipCounter in range(player["ship_stock"][counter]):
-                    mod = 0
-                    if ship == "drd" or ship =="sb":
-                        mod = 161
-                        
-                    context.paste(ship_image, (2670 + 550 * counter+mod, 150+35 * shipCounter), ship_image)
+                if faction == "wulfen":
+                    # compact stock column beside the class image, clear of the income track
+                    ship_image = self.use_resized_image(filepath, (32, 32))
+                    if ship == "drd":
+                        ship_image = ship_image.rotate(270, expand=True)
+                    for shipCounter in range(player["ship_stock"][counter]):
+                        context.paste(ship_image, (2250 + 550 * counter + mod + 500, 72 + 30 * shipCounter),
+                                      ship_image)
+                else:
+                    ship_image = self.use_resized_image(filepath, (120, 120))
+                    if ship == "drd":
+                        ship_image = ship_image.rotate(270,expand=True)
+                    for shipCounter in range(player["ship_stock"][counter]):
+                        mod = 0
+                        if ship == "drd" or ship =="sb":
+                            mod = 161
+
+                        context.paste(ship_image, (2670 + 550 * counter+mod, 150+35 * shipCounter), ship_image)
 
 
 
@@ -1308,13 +1343,33 @@ class DrawHelper:
                 context.paste(part_image, (scaled_x, scaled_y+50), mask=part_image)  
         referenceX = 2220
         sizeOfSquare = 137
-        process_parts(player["interceptor_parts"], interceptCoord, referenceX,sizeOfSquare,"interceptor")
-        process_parts(player["cruiser_parts"], cruiserCoord,referenceX,sizeOfSquare,"cruiser")
-        process_parts(player["dread_parts"], dreadCoord,referenceX,sizeOfSquare,"dreadnought")
-        if faction == "exile":
-            process_parts(player["orb_parts"], orbCoord,referenceX,sizeOfSquare,"orbital")
+        if faction == "wulfen":
+            for counter, ship in enumerate(ships):
+                if ship not in WULFEN_BLUEPRINTS:
+                    continue
+                _, rects = WULFEN_BLUEPRINTS[ship]
+                parts_key = {"cru": "cruiser", "drd": "dread", "sb": "starbase"}[ship]
+                mod = 161 if ship == "sb" else 0
+                for part, (rx, ry, rw, rh) in zip(player[f"{parts_key}_parts"], rects):
+                    if part == "empty":
+                        continue
+                    part_details = part_data.get(part)
+                    partName = part_details["name"].lower().replace(" ", "_") if part_details else part
+                    part_image = self.use_resized_image(
+                        f"images/resources/components/upgrades/{partName}.png", (max(1, rw - 4), max(1, rh - 4)))
+                    if part == "mus":
+                        part_image = part_image.resize((int(part_image.width * 0.69), int(part_image.height * 0.69)))
+                    context.paste(part_image, (2250 + 550 * counter + mod + int(rx) + 2, 70 + int(ry) + 2),
+                                  mask=part_image)
         else:
-            process_parts(player["starbase_parts"], sbCoord,referenceX,sizeOfSquare,"starbase")
+            if player.get("interceptor_parts"):
+                process_parts(player["interceptor_parts"], interceptCoord, referenceX,sizeOfSquare,"interceptor")
+            process_parts(player["cruiser_parts"], cruiserCoord,referenceX,sizeOfSquare,"cruiser")
+            process_parts(player["dread_parts"], dreadCoord,referenceX,sizeOfSquare,"dreadnought")
+            if faction == "exile":
+                process_parts(player["orb_parts"], orbCoord,referenceX,sizeOfSquare,"orbital")
+            else:
+                process_parts(player["starbase_parts"], sbCoord,referenceX,sizeOfSquare,"starbase")
 
         if "shrine_in_storage" in player:
             shrine_board_path = "images/resources/components/factions/shrine_board.png"
