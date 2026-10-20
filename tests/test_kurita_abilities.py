@@ -227,7 +227,7 @@ def test_full_track_replacement_keeps_the_adjustment(make_game, run):
     assert player["battleRepPoints"] == 1
 
 
-def test_returned_tile_gets_no_adjustment(make_game, run):
+def test_returned_tile_keeps_the_battle_adjustment(make_game, run):
     game = make_game({"players": {"1": _stats("kur", "blue")}, "reputation_tiles": [5]})
     game.get_player(1)["reputation_track"] = [5, 5, 5, 5]
 
@@ -235,7 +235,7 @@ def test_returned_tile_gets_no_adjustment(make_game, run):
                                                     player_helper(game, "blue"), False,
                                                     battle_rep_adjustment=1))
 
-    assert "battleRepPoints" not in game.getPlayerObjectFromColor("blue")
+    assert game.getPlayerObjectFromColor("blue")["battleRepPoints"] == 1
 
 
 def test_queued_battle_rep_keeps_its_adjustment(make_game, run):
@@ -325,3 +325,13 @@ def test_traitor_card_is_minus_four_for_kurita():
     assert drawing.get_public_points(player_stats("kur", color="blue", traitor=True), False) == -4
     assert drawing.get_public_points(player_stats("hyd", color="blue", traitor=True), False) == -2
     assert drawing.get_public_points(player_stats("rho", color="blue", traitor=True), False) == 0
+
+
+def test_retreat_penalty_ends_with_the_pairing(make_game, run):
+    game = _winner_game(make_game, ["red"], owner="red")
+    game.gamestate["board"][POS]["retreatPenaltyblue"] = True
+    interaction = FakeInteraction()
+    run(Combat.declareAWinner(game, interaction, POS))
+    assert not any(cid.startswith("FCIDblue_drawReputation_") for cid in offered_ids(interaction))
+    assert "retreatPenaltyblue" not in game.gamestate["board"][POS]
+    assert game.getReputationTilesToDraw(POS, "blue") == 1

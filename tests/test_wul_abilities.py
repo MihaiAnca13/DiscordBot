@@ -328,3 +328,22 @@ def test_wolf_pack_bank_is_cleared_when_a_new_pairing_starts(make_game, run, mon
     run(Combat.startCombat(game, FakeInteraction().channel, "101"))
 
     assert "wolfPackRerolls" not in reload(game).gamestate["board"]["101"]
+
+
+def test_wolf_pack_keeps_a_six_from_a_killing_attack(make_game, no_random, run, monkeypatch):
+    game = _wolf_game(make_game)
+    game.get_player(2)["cruiser_parts"] = ["ioc", "nus", "nud"]
+    ended = []
+
+    async def winner(game, interaction, pos):
+        ended.append(pos)
+
+    monkeypatch.setattr(Combat, "declareAWinner", winner)
+    no_random([6])
+    inter = FakeInteraction()
+    run(Combat.rollDice(game, "rollDice_101_blue_2_deleteMsg", inter))
+    assert "red-cru" not in game.gamestate["board"]["101"]["player_ships"]
+    assert not ended
+    assert "FCIDblue_wolfPackSave_101" in buttons(inter.channel)
+    run(Combat.wolfPackChoice(game, "wolfPackSave_101", FakeInteraction(inter.channel)))
+    assert ended == ["101"]

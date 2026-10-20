@@ -2877,10 +2877,6 @@
                                         0
                                 ],
                                 [
-                                        1,
-                                        0
-                                ],
-                                [
                                         0,
                                         4
                                 ],
@@ -3536,16 +3532,16 @@
                 ],
                 "phase_module_slots": {
                         "interceptor": [
-                                3
-                        ],
-                        "cruiser": [
                                 2
                         ],
-                        "dread": [
+                        "cruiser": [
                                 3
                         ],
+                        "dread": [
+                                4
+                        ],
                         "starbase": [
-                                3
+                                2
                         ]
                 },
                 "materials": 4,
@@ -3651,31 +3647,31 @@
                 "interceptor_parts": [
                         "ioc",
                         "nus",
-                        "nud",
-                        "empty"
+                        "empty",
+                        "nud"
                 ],
                 "cruiser_parts": [
-                        "elc",
+                        "nus",
                         "ioc",
                         "empty",
-                        "nus",
+                        "empty",
                         "hul",
                         "nud"
                 ],
                 "dread_parts": [
-                        "elc",
+                        "nus",
                         "ioc",
                         "ioc",
                         "empty",
-                        "nus",
+                        "empty",
                         "hul",
                         "hul",
                         "nud"
                 ],
                 "starbase_parts": [
-                        "elc",
-                        "ioc",
                         "hul",
+                        "ioc",
+                        "empty",
                         "empty",
                         "hul"
                 ],

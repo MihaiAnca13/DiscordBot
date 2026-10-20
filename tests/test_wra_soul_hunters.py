@@ -133,8 +133,13 @@ def test_player_area_draws_the_live_soul_count(make_game, monkeypatch):
     player["wraithSouls"] = 2
     monkeypatch.setattr(DrawHelper, "use_image",
                         lambda self, filename: Image.new("RGBA", (1024, 890)))
-    monkeypatch.setattr(DrawHelper, "use_resized_image",
-                        lambda self, filename, size: Image.new("RGBA", size))
+    assets = []
+
+    def resized_image(self, filename, size):
+        assets.append(filename)
+        return Image.new("RGBA", size)
+
+    monkeypatch.setattr(DrawHelper, "use_resized_image", resized_image)
     texts = []
     original = ImageDraw.ImageDraw.text
 
@@ -145,4 +150,6 @@ def test_player_area_draws_the_live_soul_count(make_game, monkeypatch):
     monkeypatch.setattr(ImageDraw.ImageDraw, "text", spy)
     DrawHelper(game.gamestate).player_area(player)
 
-    assert "Souls: 2" in texts
+    assert "Power: 2" in texts
+    assert "+2" in texts
+    assert assets.count("images/resources/components/factions/wraith_phase_module.png") == 4

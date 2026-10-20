@@ -264,3 +264,22 @@ def test_a_cleared_prompt_refuses_a_stale_toggle(make_game, run):
     state = reload(game)
     run(Carapace.toggle(state, state.get_player(1), inter, "carapaceToggle_202_interceptor_1"))
     assert "no longer current" in inter.followup.sent[0][0]
+
+
+def test_unfinished_carapace_menu_closes_when_firing_starts(make_game, run, no_random):
+    game = combat_game(make_game)
+    ch = channel()
+    run(Carapace.offer(game, ch, "202"))
+    toggle_id = next(cid for cid in buttons(ch) if "carapaceToggle_202_interceptor" in cid)
+    no_random([1])
+    run(Combat.rollDice(game, "rollDice_202_red_2_attacker", FakeInteraction(ch)))
+    inter = FakeInteraction(ch)
+    run(Carapace.toggle(game, game.get_player(1), inter, toggle_id))
+    assert "no longer current" in inter.followup.sent[0][0]
+    assert not Carapace.engaged(game, "202", "teal", "interceptor")
+
+    run(Carapace.offer(game, ch, "202"))
+    token = game.gamestate["board"]["202"]["carapaceShields"]["teal"]["token"]
+    new_id = f"carapaceToggle_202_interceptor_{token}"
+    run(Carapace.toggle(game, game.get_player(1), FakeInteraction(ch), new_id))
+    assert Carapace.engaged(game, "202", "teal", "interceptor")

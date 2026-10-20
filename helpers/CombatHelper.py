@@ -174,23 +174,16 @@ class Combat:
         return modes.get(color, {}).get(ship_type, {})
 
     @staticmethod
-    def phase_ship_energy(game: GamestateHelper, color: str, pos: str, ship_type: str):
-        player = game.getPlayerObjectFromColor(color)
-        return max(0, PlayerShip(player, ship_type).energy)
-
-    @staticmethod
     def phase_offboard_used(game: GamestateHelper, color: str, pos: str):
-        player = game.getPlayerObjectFromColor(color)
         modes = game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {})
-        used = 0
-        for ship_type, mode in modes.items():
-            used += max(0, mode.get("cost", 0) - max(0, PlayerShip(player, ship_type).energy))
-        return used
+        return sum(mode.get("cost", 0) for mode in modes.values())
 
     @staticmethod
     def phase_offboard_remaining(game: GamestateHelper, color: str, pos: str):
         player = game.getPlayerObjectFromColor(color)
-        return max(0, player.get("wraithSouls", 0) - Combat.phase_offboard_used(game, color, pos))
+        available = player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0)
+        ready = game.gamestate["board"].get(pos, {}).get("phaseModuleReady", {}).get(color)
+        return max(0, available - (0 if ready else Combat.phase_offboard_used(game, color, pos)))
 
     @staticmethod
     async def phaseBombing(game: GamestateHelper, player, interaction: discord.Interaction, customID: str):
@@ -202,11 +195,15 @@ class Combat:
         if "neb" not in player_helper.getTechs():
             await interaction.followup.send("Research Neutron Bombs before using them.", ephemeral=True)
             return
-        if player.get("wraithSouls", 0) < 2:
+        if player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0) < 2:
             await interaction.followup.send("The Phase Module needs 2 Power for Neutron Bombs.",
                                             ephemeral=True)
             return
-        from Buttons.Influence import InfluenceButtons
+        if game.gamestate["board"][pos]["owner"] == 0:
+            await interaction.followup.send("That sector no longer has an owner to bomb.", ephemeral=True)
+            return
+        player["wraithPowerSpent"] = player.get("wraithPowerSpent", 0) + 2
+        game.update_player(player_helper)
         await InfluenceButtons.removeInfluenceFinish(
             game, interaction, f"removeInfluenceFinish_{pos}_graveYard", True, player)
 
@@ -337,7 +334,7 @@ class Combat:
                                      custom_id=f"FCID{winner}_rollDice_{pos}_{winner}_1000_deleteMsg"))
                 message = f"{playerName}, you may roll to attempt to kill enemy population."
                 if wraithNeedsDeclaration:
-                    if player.get("wraithSouls", 0) >= 2:
+                    if player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0) >= 2:
                         view.add_item(Button(label="Use Phase Module: Neutron Bombs (2 Power)",
                                              style=discord.ButtonStyle.blurple,
                                              custom_id=f"FCID{winner}_phaseBombing_{pos}"))
@@ -1065,6 +1062,8 @@ class Combat:
             if speed not in effective:
                 await interaction.channel.send("That initiative step is no longer valid. Use the current prompt.")
                 return
+        if speed != 1000:
+            Carapace.close_controls(game, pos)
         if colorOrAI == "ai":
             await Combat.rollDiceAI(game, buttonID, interaction)
             return
@@ -1078,6 +1077,7 @@ class Combat:
         update = False
         popRiftProtector = True
         deferredEnd = False
+        is_wolf = speed != 1000 and FactionData.has(game.getPlayerObjectFromColor(colorOrAI), "wolf_pack")
         wolf_sixes = {}
         wolf_misses = []
         wolf_miss_ids = set()
@@ -1290,35 +1290,38 @@ class Combat:
                                 update = True
                                 await Combat.offerHitPrompt(game, interaction, pos, colorOrAI, hittableShips,
                                                             dieNum, dieDam, counter=counter,
-                                                            deferEnd=dieColor == "pink")
-                                deferredEnd = deferredEnd or dieColor == "pink"
+                                                            deferEnd=dieColor == "pink" or is_wolf)
+                                deferredEnd = deferredEnd or dieColor == "pink" or is_wolf
                     if shipRiftBackfire > 0:
                         await Combat.applyRiftBackfire(game, colorOrAI, interaction, pos, shipRiftBackfire,
                                                        deferEnd=True)
                         deferredEnd = True
 
-        if deferredEnd:
+        if deferredEnd and not is_wolf:
             await Combat.checkCombatEnd(game, interaction, pos, oldLength)
         hitsToAssign = 0
         if speed != 1000 and not Carapace.has_pending_missiles(game, pos):
             if "unresolvedHits" in game.gamestate["board"][pos]:
                 hitsToAssign = game.gamestate["board"][pos]["unresolvedHits"]
-            if hitsToAssign == 0 and oldLength == len(Combat.findPlayersInTile(game, pos)):
+            if hitsToAssign == 0:
                 playerObj = game.getPlayerObjectFromColor(colorOrAI)
                 bank = game.gamestate["board"][pos].get("wolfPackRerolls", {}).get(colorOrAI, 0)
                 if FactionData.has(playerObj, "wolf_pack") and (wolf_sixes or (bank > 0 and wolf_misses)):
                     state = {"color": colorOrAI, "speed": speed, "sixes": wolf_sixes,
-                             "misses": wolf_misses, "available": bank}
-                    await Combat.offerWolfPack(game, pos, interaction.channel, state)
+                             "misses": wolf_misses, "available": bank, "oldLength": oldLength}
+                    await Combat.offerWolfPack(game, pos, interaction, state)
                     return
-                await Combat.promptNextSpeed(game, pos, interaction.channel, update)
+                if is_wolf and await Combat.checkCombatEnd(game, interaction, pos, oldLength):
+                    return
+                if oldLength == len(Combat.findPlayersInTile(game, pos)):
+                    await Combat.promptNextSpeed(game, pos, interaction.channel, update)
             elif hitsToAssign > 0:
                 playerObj = game.getPlayerObjectFromColor(colorOrAI)
                 bank = game.gamestate["board"][pos].get("wolfPackRerolls", {}).get(colorOrAI, 0)
                 if FactionData.has(playerObj, "wolf_pack") and (wolf_sixes or (bank > 0 and wolf_misses)):
                     game.gamestate["board"][pos]["pendingWolfPack"] = {
                         "color": colorOrAI, "speed": speed, "sixes": wolf_sixes,
-                        "misses": wolf_misses, "available": bank}
+                        "misses": wolf_misses, "available": bank, "oldLength": oldLength}
                     game.update()
 
     @staticmethod
@@ -1331,27 +1334,24 @@ class Combat:
             game.update()
 
     @staticmethod
-    async def offerWolfPack(game: GamestateHelper, pos: str, channel, state: dict):
+    async def offerWolfPack(game: GamestateHelper, pos: str, interaction: discord.Interaction, state: dict):
         tile = game.gamestate["board"][pos]
         tile["wolfPack"] = state
         game.update()
-        await Combat.wolfPackPrompt(game, pos, channel)
+        await Combat.wolfPackPrompt(game, pos, interaction)
 
     @staticmethod
-    async def offerPendingWolfPack(game: GamestateHelper, pos: str, channel):
+    async def offerPendingWolfPack(game: GamestateHelper, pos: str, interaction: discord.Interaction):
         tile = game.gamestate["board"][pos]
         state = tile.pop("pendingWolfPack", None)
         if state is None:
             return False
         game.update()
-        if len(Combat.findSidesInTile(game, pos)) < 2 \
-                or state["color"] not in Combat.findPlayersInTile(game, pos):
-            return True
-        await Combat.offerWolfPack(game, pos, channel, state)
+        await Combat.offerWolfPack(game, pos, interaction, state)
         return True
 
     @staticmethod
-    async def wolfPackPrompt(game: GamestateHelper, pos: str, channel):
+    async def wolfPackPrompt(game: GamestateHelper, pos: str, interaction: discord.Interaction):
         tile = game.gamestate["board"][pos]
         state = tile.get("wolfPack")
         if state is None:
@@ -1371,7 +1371,7 @@ class Combat:
                                  custom_id=f"FCID{color}_wolfPackSave_{pos}"))
             view.add_item(Button(label="Done", style=discord.ButtonStyle.gray,
                                  custom_id=f"FCID{color}_wolfPackDone_{pos}"))
-            await channel.send(
+            await interaction.channel.send(
                 f"{player['player_name']}, Wolf Pack: {sixes} six{'es' if sixes != 1 else ''}. "
                 "Convert a miss from the same attack pool into a hit, or save a reroll for a later ship.",
                 view=view)
@@ -1388,22 +1388,24 @@ class Combat:
                         custom_id=f"FCID{color}_wolfPackReroll_{pos}_{index}"))
                 view.add_item(Button(label="Decline", style=discord.ButtonStyle.red,
                                      custom_id=f"FCID{color}_wolfPackDecline_{pos}"))
-                await channel.send(
+                await interaction.channel.send(
                     f"{player['player_name']}, Wolf Pack: you have {state['available']} saved reroll"
                     f"{'s' if state['available'] != 1 else ''}. Reroll a miss from this attack?", view=view)
                 return
-        await Combat.finishWolfPack(game, pos, channel)
+        await Combat.finishWolfPack(game, pos, interaction)
 
     @staticmethod
-    async def finishWolfPack(game: GamestateHelper, pos: str, channel):
+    async def finishWolfPack(game: GamestateHelper, pos: str, interaction: discord.Interaction):
         tile = game.gamestate["board"][pos]
         state = tile.pop("wolfPack", None)
         tile.pop("pendingWolfPack", None)
         game.update()
         color = state["color"] if state else None
-        if color is not None and len(Combat.findSidesInTile(game, pos)) >= 2 \
-                and color in Combat.findPlayersInTile(game, pos):
-            await Combat.promptNextSpeed(game, pos, channel, True)
+        if state is not None and await Combat.checkCombatEnd(
+                game, interaction, pos, state["oldLength"]):
+            return
+        if color is not None and color in Combat.findPlayersInTile(game, pos):
+            await Combat.promptNextSpeed(game, pos, interaction.channel, True)
 
     @staticmethod
     async def wolfPackChoice(game: GamestateHelper, buttonID: str, interaction: discord.Interaction):
@@ -1432,14 +1434,14 @@ class Combat:
             if not targets:
                 state.pop("pendingHit", None)
                 save()
-                await Combat.wolfPackPrompt(game, pos, interaction.channel)
+                await Combat.wolfPackPrompt(game, pos, interaction)
             elif len(targets) == 1:
                 await Combat.wolfPackHit(game, pos, interaction, color, targets[0],
                                          die_num, damage)
                 if tile.get("wolfPack") is not state:
                     return
                 save()
-                await Combat.wolfPackPrompt(game, pos, interaction.channel)
+                await Combat.wolfPackPrompt(game, pos, interaction)
             else:
                 save()
                 view = View()
@@ -1466,11 +1468,11 @@ class Combat:
             banks = tile.setdefault("wolfPackRerolls", {})
             banks[color] = banks.get(color, 0) + 1
             save()
-            await Combat.wolfPackPrompt(game, pos, interaction.channel)
+            await Combat.wolfPackPrompt(game, pos, interaction)
         elif kind == "wolfPackDone":
             state["sixes"] = {pool: 0 for pool in state["sixes"]}
             save()
-            await Combat.wolfPackPrompt(game, pos, interaction.channel)
+            await Combat.wolfPackPrompt(game, pos, interaction)
         elif kind == "wolfPackReroll":
             if state["available"] <= 0:
                 return
@@ -1499,15 +1501,15 @@ class Combat:
             if tile.get("wolfPack") is not state:
                 return
             save()
-            await Combat.wolfPackPrompt(game, pos, interaction.channel)
+            await Combat.wolfPackPrompt(game, pos, interaction)
         elif kind == "wolfPackDecline":
-            await Combat.finishWolfPack(game, pos, interaction.channel)
+            await Combat.finishWolfPack(game, pos, interaction)
 
     @staticmethod
     async def wolfPackHit(game: GamestateHelper, pos: str, interaction: discord.Interaction,
                           color: str, ship: str, die_num: int, damage: int):
         await Combat.assignHitTo(game, f"assignHitTo_{pos}_{color}_{ship}_{die_num}_{damage}",
-                                 interaction, False)
+                                 interaction, False, deferEnd=True)
 
     @staticmethod
     async def rerollDie(game: GamestateHelper, buttonID: str, interaction: discord.Interaction,
@@ -1839,6 +1841,7 @@ class Combat:
     async def completeRetreat(game: GamestateHelper, interaction: discord.Interaction, pos: str,
                               colorOrAI: str, speed, destination: str, playerObj=None):
         oldLength = len(Combat.findPlayersInTile(game, pos))
+        Carapace.close_controls(game, pos)
         game.removeCertainRetreatingUnits((int(speed), colorOrAI), pos)
         tile_map = game.gamestate["board"]
         player_ships = tile_map[pos]["player_ships"][:]
@@ -1974,6 +1977,7 @@ class Combat:
         pos = buttonID.split("_")[1]
         colorOrAI = buttonID.split("_")[2]
         speed = buttonID.split("_")[3]
+        Carapace.close_controls(game, pos)
         game.setRetreatingUnits((int(speed), colorOrAI), pos)
         tile_map = game.gamestate["board"]
         player_ships = tile_map[pos]["player_ships"][:]
@@ -2081,11 +2085,8 @@ class Combat:
         player = game.getPlayerObjectFromColor(color)
         modes = dict(game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {}))
         modes[ship_type] = record
-        used = 0
-        for ship, mode in modes.items():
-            own = max(0, PlayerShip(player, ship).energy)
-            used += max(0, mode.get("cost", 0) - own)
-        return used <= player.get("wraithSouls", 0)
+        used = sum(mode.get("cost", 0) for mode in modes.values())
+        return used <= player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0)
 
     @staticmethod
     def phase_module_main_view(game: GamestateHelper, color: str, pos: str):
@@ -2100,15 +2101,14 @@ class Combat:
         view.add_item(Button(label="Clear All & Start Combat", style=discord.ButtonStyle.red,
                              custom_id=f"FCID{color}_phaseModuleNone_{pos}_{color}"))
         content = (f"{player['player_name']}, declare Phase Module options for this combat. "
-                   f"Each blueprint pays from its own spare power; {player.get('wraithSouls', 0)} souls "
-                   "are shared offboard power for this combat. Cloaking Device is always on.")
+                   f"{player.get('wraithSouls', 0) - player.get('wraithPowerSpent', 0)} offboard power "
+                   "is available to spend across blueprints. Cloaking Device is always on.")
         return content, view
 
     @staticmethod
     def phase_module_ship_view(game: GamestateHelper, color: str, pos: str, ship_type: str):
         player = game.getPlayerObjectFromColor(color)
         mode = Combat.phase_mode(game, color, pos, ship_type)
-        own = Combat.phase_ship_energy(game, color, pos, ship_type)
         remaining = Combat.phase_offboard_remaining(game, color, pos)
         view = View()
         options = [(option, label, cost) for option, (label, cost) in Combat.PHASE_OPTIONS.items()
@@ -2124,7 +2124,7 @@ class Combat:
                              custom_id=f"FCID{color}_phaseModuleReset_{pos}_{color}_{ship_type}"))
         view.add_item(Button(label="Back", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{color}_phaseModuleBack_{pos}_{color}"))
-        content = (f"{player['player_name']}, {ship_type.capitalize()}: {own} spare power, "
+        content = (f"{player['player_name']}, {ship_type.capitalize()}: "
                    f"{remaining} offboard power left. Declared: {mode.get('cost', 0)} power.")
         return content, view
 
@@ -2203,7 +2203,7 @@ class Combat:
             mode[option] = bool(mode[option])
         mode["cost"] = Combat.phase_option_cost(mode)
         if not Combat.phase_mode_valid(game, color, pos, ship_type, mode):
-            await interaction.followup.send("Not enough power on that blueprint or in the offboard pool.",
+            await interaction.followup.send("Not enough power in the offboard pool.",
                                             ephemeral=True)
             return
         if mode["cost"]:
@@ -2242,6 +2242,11 @@ class Combat:
             return
         if clear:
             tile.get("phaseModes", {}).pop(color, None)
+        cost = Combat.phase_offboard_used(game, color, pos)
+        if cost > player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0):
+            await interaction.followup.send("Not enough power in the offboard pool.", ephemeral=True)
+            return
+        player["wraithPowerSpent"] = player.get("wraithPowerSpent", 0) + cost
         ready[color] = True
         game.update()
         await interaction.message.edit(content=f"{player['player_name']} has finished declaring Phase Module options.",
@@ -2428,6 +2433,8 @@ class Combat:
                         message += (" The Phase Module Planets option was not declared at the start of this"
                                     " combat, so only the roll is available.")
                     asyncio.create_task(interaction.channel.send(message, view=view))
+        for playerColor in players:
+            game.gamestate["board"][pos].pop("retreatPenalty" + playerColor, None)
         game.gamestate["board"][pos].pop("ghostsRetreatPending", None)
         game.gamestate["board"][pos].pop("firstShotPhase", None)
         game.gamestate["board"][pos].pop("firstShotSide", None)
@@ -2531,11 +2538,11 @@ class Combat:
             await interaction.message.delete()
             if hitsToAssign == 0:
                 playersAfter = len(Combat.findPlayersInTile(game, pos))
+                if await Combat.offerPendingWolfPack(game, pos, interaction):
+                    return
                 if deferEnd and oldLength != playersAfter:
                     await Combat.checkCombatEnd(game, interaction, pos, oldLength)
                 elif oldLength == playersAfter:
-                    if await Combat.offerPendingWolfPack(game, pos, interaction.channel):
-                        return
                     await Combat.promptNextSpeed(game, pos, interaction.channel, True)
 
     @staticmethod

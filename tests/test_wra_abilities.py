@@ -75,7 +75,7 @@ def test_phase_technology_swaps_the_second_build_activation_for_one_upgrade(star
     press(channel, 1, replacement)
 
     state = reload(game).get_player(1)
-    assert state["interceptor_parts"] == ["hul", "nus", "nud", "empty"]
+    assert state["interceptor_parts"] == ["hul", "nus", "empty", "nud"]
     assert state["influence_discs"] == 11          # the Build action's disc only
     assert state["upgrade_action_counters"] == 0   # the swap is not an Upgrade action
     assert state["phaseSwappedThisAction"] is True
@@ -133,7 +133,7 @@ def test_phase_technology_undo_restores_the_blueprint_without_spending_a_disc(st
     press(channel, 1, "FCIDblue_undoUpgrade_1_phase")
 
     state = reload(game).get_player(1)
-    assert state["interceptor_parts"] == ["ioc", "nus", "nud", "empty"]
+    assert state["interceptor_parts"] == ["ioc", "nus", "empty", "nud"]
     assert state["influence_discs"] == 11
     assert "FCIDblue_upgradeShip_1_interceptor_phase" in buttons(channel)
 
@@ -303,7 +303,7 @@ def test_phase_module_menu_lists_only_the_blueprints_in_the_tile(make_game):
     assert not any(cid.endswith("_starbase") for cid in labels)
 
 
-def test_stock_interceptor_can_pay_for_one_power_but_not_two(make_game):
+def test_stock_interceptor_cannot_pay_for_options_without_offboard_power(make_game):
     game = phase_combat(make_game, souls=0)
     channel = FakeInteraction().channel
     message = offer_phase(game, channel)
@@ -316,11 +316,12 @@ def test_stock_interceptor_can_pay_for_one_power_but_not_two(make_game):
 
     comp = FakeInteraction(channel, message=message)
     asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_comp", comp))
-    assert game.gamestate["board"]["101"]["phaseModes"]["blue"]["interceptor"]["comp"] == 1
+    assert "Not enough power" in comp.followup.sent[0][0]
+    assert not game.gamestate["board"]["101"].get("phaseModes", {}).get("blue")
 
 
 def test_offboard_power_is_shared_between_blueprints_and_reset_refunds_it(make_game):
-    game = phase_combat(make_game, souls=1, blue_ships=("blue-int", "blue-cru"))
+    game = phase_combat(make_game, souls=2, blue_ships=("blue-int", "blue-cru"))
     channel = FakeInteraction().channel
     message = offer_phase(game, channel)
 
@@ -521,7 +522,7 @@ def test_phase_module_bombing_only_tile_without_power_leaves_only_the_roll(make_
 def test_phase_module_bombs_a_sector_without_combat(make_game, run):
     blue = player_stats("wra", color="blue")
     blue["military_tech"] = ["phm", "neb"]
-    blue["wraithSouls"] = 2
+    blue["wraithSouls"] = 4
     red = player_stats("hyd", color="red")
     red["owned_tiles"] = ["101"]
     game = make_game({"player_count": 2, "players": {"1": blue, "2": red},
@@ -533,7 +534,13 @@ def test_phase_module_bombs_a_sector_without_combat(make_game, run):
 
     state = reload(game)
     assert state.gamestate["board"]["101"]["owner"] == 0
-    assert state.get_player(1)["wraithSouls"] == 3
+    assert state.get_player(1)["wraithSouls"] == 5
+    assert state.get_player(1)["wraithPowerSpent"] == 2
+    assert Combat.phase_offboard_remaining(state, "blue", "101") == 3
+    replay = FakeInteraction()
+    run(Combat.phaseBombing(state, state.get_player(1), replay, "phaseBombing_101"))
+    assert state.get_player(1)["wraithPowerSpent"] == 2
+    assert "no longer has an owner" in replay.followup.sent[0][0]
 
 
 def test_phase_module_done_is_an_answer_button():
@@ -543,7 +550,7 @@ def test_phase_module_done_is_an_answer_button():
 
 def test_rolling_is_refused_until_the_phase_module_declaration_is_done(make_game, monkeypatch):
     import asyncio
-    game = phase_combat(make_game, souls=1)
+    game = phase_combat(make_game, souls=2)
     channel = FakeInteraction().channel
     message = offer_phase(game, channel)
     before = FakeInteraction(channel)
@@ -577,3 +584,26 @@ def test_ghosts_retreat_blocks_a_manual_roll_until_the_destination_is_chosen(
     asyncio.run(Combat.rollDice(state, "rollDice_101_blue_3_deleteMsg", stale))
     assert "A retreat is being resolved" in stale.channel.sent[-1][0]
     assert state.gamestate["board"]["101"]["player_ships"] == ["blue-int", "red-int"]
+
+
+def test_declared_power_is_spent_once_and_survives_the_next_combat(make_game, run, monkeypatch):
+    game = phase_combat(make_game, souls=2)
+    channel = FakeInteraction().channel
+    message = offer_phase(game, channel)
+
+    async def prompt(game, pos, channel, update):
+        return None
+
+    monkeypatch.setattr(Combat, "promptNextSpeed", prompt)
+    run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_speed",
+                                FakeInteraction(channel, message=message)))
+    run(Combat.phaseModuleDone(game, "phaseModuleDone_101_blue",
+                              FakeInteraction(channel, message=message)))
+    run(Combat.phaseModuleDone(game, "phaseModuleDone_101_blue",
+                              FakeInteraction(channel, message=message)))
+    game = reload(game)
+    assert game.get_player(1)["wraithPowerSpent"] == 2
+    assert game.get_player(1)["wraithSouls"] == 2
+    assert Combat.phase_offboard_remaining(game, "blue", "101") == 0
+    Combat.clear_phase_module(game, "101")
+    assert Combat.phase_offboard_remaining(reload(game), "blue", "101") == 0

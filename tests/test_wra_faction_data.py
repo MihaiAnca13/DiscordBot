@@ -2,6 +2,7 @@ import json
 
 from Buttons.Research import ResearchButtons
 from helpers.PlayerHelper import PlayerHelper
+from helpers.ShipHelper import PlayerShip
 from tests.fakes import FACTIONS, player_stats, reload
 
 
@@ -71,3 +72,13 @@ def test_starting_phase_module_counts_for_the_military_research_discount(start_g
     # The first military tech is one cheaper because the printed Phase Module is on the track.
     assert ResearchButtons.calculate_cost(starbase, "military", wraith) == 3
     assert ResearchButtons.calculate_cost(starbase, "military", plain) == 4
+
+
+def test_wraith_phase_modules_replace_starting_computers():
+    player = player_stats("wra")
+    for ship in ("interceptor", "cruiser", "dread", "starbase"):
+        assert PlayerShip(player, ship).computer == 0
+        assert "elc" not in player[f"{ship}_parts"]
+        assert len(PlayerHelper.get_phase_module_slots(player, ship)) == 1
+        slot = PlayerHelper.get_phase_module_slots(player, ship)[0]
+        assert player[f"{ship}_parts"][slot] == "empty"

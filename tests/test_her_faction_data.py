@@ -83,3 +83,10 @@ def test_heralds_reputation_track_uses_three_relation_slots():
     # One ambassador-only and two mixed slots: three relations, then only rep-only slots remain.
     player["reputation_track"] = ["amb-hyd-blue", "mixed-eri-red", "mixed-dra-green", 5, 4]
     assert not PlayerHelper.has_reputation_slot_for_relation(player)
+
+
+def test_heralds_blueprint_layout_has_one_cell_per_part():
+    her = FACTIONS["her"]
+    for ship in ("interceptor", "cruiser"):
+        assert len(her["blueprint_slots"][ship]) == len(her[f"{ship}_parts"]) == 5
+    assert [1, 0] not in her["blueprint_slots"]["cruiser"]

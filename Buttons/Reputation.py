@@ -43,9 +43,6 @@ class ReputationButtons:
             if tile in ("rep", "mixed"):
                 player_helper.stats["reputation_track"][x] = highest
                 game.gamestate["reputation_tiles"].remove(highest)
-                if battle_rep_adjustment:
-                    player_helper.stats["battleRepPoints"] = (
-                        player_helper.stats.get("battleRepPoints", 0) + battle_rep_adjustment)
                 found = True
                 break
         if not found:
@@ -60,11 +57,11 @@ class ReputationButtons:
                 player_helper.stats["reputation_track"][loc] = highest
                 game.gamestate["reputation_tiles"].append(lowest)
                 game.gamestate["reputation_tiles"].remove(highest)
-                if battle_rep_adjustment:
-                    player_helper.stats["battleRepPoints"] = (
-                        player_helper.stats.get("battleRepPoints", 0) + battle_rep_adjustment)
             else:
                 msg += " It was lower or equal to your highest value reputation tile, so you put it back in the bag."
+        if battle_rep_adjustment:
+            player_helper.stats["battleRepPoints"] = (
+                player_helper.stats.get("battleRepPoints", 0) + battle_rep_adjustment)
         game.update_player(player_helper)
         game.update()
         if not queue:

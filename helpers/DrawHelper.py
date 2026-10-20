@@ -1151,7 +1151,7 @@ class DrawHelper:
         text_drawable_image.text((618, 417), f"{FactionData.of(player).get('influence_colony_ships', 2)}",
                                  color, font=font, stroke_width=stroke_width, stroke_fill=stroke_color)
         if FactionData.has(player, "soul_hunters"):
-            text_drawable_image.text((3850, 740), f"Souls: {player.get('wraithSouls', 0)}",
+            text_drawable_image.text((3850, 740), f"Power: {player.get('wraithSouls', 0) - player.get('wraithPowerSpent', 0)}",
                                      color, font=font, stroke_width=stroke_width, stroke_fill=stroke_color)
             
 
@@ -1207,8 +1207,17 @@ class DrawHelper:
                     pop_image = self.use_resized_image(pop_path, (42,42))
                     context.paste(pop_image, (reputationX+x*150+30, 600+60), mask=pop_image)
 
+        if FactionData.has(player, "honour_victorious") or FactionData.has(player, "soul_hunters"):
+            bonus = (player.get("wraithSouls", 0) if FactionData.has(player, "soul_hunters")
+                     else player.get("battleRepPoints", 0))
+            points = self.use_resized_image("images/resources/components/all_boards/points.png", (120, 120))
+            bonus_x = reputationX + len(player["reputation_track"]) * 150
+            context.paste(points, (bonus_x, 600), mask=points)
+            text_drawable_image.text((bonus_x + 60, 660), f"{bonus:+d}", (0, 0, 0), font=font,
+                                     anchor="mm")
+
         # Alliance tiles sit to the right of the reputation track.
-        allianceX = 4600
+        allianceX = 4600 + (150 if FactionData.has(player, "honour_victorious") else 0)
         for allianceTile, betrayed in player.get("alliances", {}).items():
             side = "betrayed" if betrayed else "ally"
             alliance_path = (f"images/resources/components/alliances/"
@@ -1371,11 +1380,15 @@ class DrawHelper:
 
         def process_parts(parts, coords, refX, square_size, shipType, cells=None):
             for counter, part in enumerate(parts):
-                if part == "empty":
+                is_phase_module = counter in PlayerHelper.get_phase_module_slots(
+                    player, "dread" if shipType == "dreadnought" else shipType)
+                if part == "empty" and not is_phase_module:
                     continue
                 part_details = part_data.get(part)
                 partName = part_details["name"].lower().replace(" ", "_") if part_details else part
                 part_path = f"images/resources/components/upgrades/{partName}.png"
+                if is_phase_module:
+                    part_path = "images/resources/components/factions/wraith_phase_module.png"
                 part_image = self.use_resized_image(part_path, (square_size,square_size+8))
                 if part == "mus":
                     part_image = part_image.resize((int(square_size * 0.69), int(square_size * 0.69)))

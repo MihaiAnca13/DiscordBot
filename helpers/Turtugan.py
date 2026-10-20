@@ -304,6 +304,12 @@ class Carapace:
                                view=Carapace._view(player, pos, state, classes, token))
 
     @staticmethod
+    def close_controls(game, pos):
+        for state in game.gamestate["board"][pos].get("carapaceShields", {}).values():
+            state["done"] = True
+        game.update()
+
+    @staticmethod
     async def toggle(game, player, interaction, customID):
         pos, ship_class, token = customID.split("_")[1:4]
         state = game.gamestate["board"].get(pos, {}).get("carapaceShields", {}).get(player["color"])
