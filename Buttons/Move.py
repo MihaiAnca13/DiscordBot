@@ -48,6 +48,7 @@ class MoveButtons:
     @staticmethod
     async def startMove(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str, button: bool):
         nested = "herRegroup" in buttonID
+        raid_resume = "herRaidResume" in buttonID
         phase = buttonID.rsplit("_", 1)[1] if nested else ""
         moveCount = 1
         ship_filter = "all"
@@ -58,7 +59,7 @@ class MoveButtons:
             player["herCrossUsed"] = False
             player["herRaidCharged"] = False
             game.update()
-        if not nested and len(buttonID.split("_")) > 2:
+        if not nested and len(buttonID.split("_")) > 2 and not raid_resume:
             ship_filter = buttonID.split("_")[2]
         view = View()
         tiles = MoveButtons.getListOfUnpinnedShipTiles(game, player, ship_filter)
@@ -74,6 +75,9 @@ class MoveButtons:
               and not player.get("herCrossUsed") and int(moveCount) <= player["move_apt"]):
             view.add_item(Button(label="Build Activation (1)", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_herRaidBuild_{moveCount}"))
+        if raid_resume:
+            view.add_item(Button(label="Finish Action", style=discord.ButtonStyle.red,
+                                 custom_id=f"FCID{player['color']}_finishAction"))
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
         if button:

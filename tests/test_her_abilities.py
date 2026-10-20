@@ -139,6 +139,7 @@ def test_raid_build_after_the_move_does_not_spend_a_second_disc(start_game, pres
     # The second move is still available and Raid is used up.
     menu = buttons(channel)
     assert "FCIDblue_moveFrom_301_2" in menu
+    assert "FCIDblue_finishAction" in menu
     assert not [cid for cid in menu if "herRaidBuild" in cid]
 
 

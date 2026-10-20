@@ -296,7 +296,8 @@ class BuildButtons:
             if moveCount <= player["move_apt"]:
                 await interaction.message.delete()
                 from Buttons.Move import MoveButtons
-                await MoveButtons.startMove(game, player, interaction, f"startMove_{moveCount}", False)
+                await MoveButtons.startMove(game, player, interaction,
+                                            f"startMove_{moveCount}_herRaidResume", False)
             else:
                 from Buttons.Turn import TurnButtons
                 await TurnButtons.finishAction(player, game, interaction, player_helper)
