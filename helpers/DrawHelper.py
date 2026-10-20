@@ -158,7 +158,7 @@ class DrawHelper:
             for string in wormholeStringsViewed:
                 if contains_all_chars(string, wormholeString):
                     alreadyFound = True
-            if alreadyFound:
+            if alreadyFound and tile.get("type") != "nebula":
                 continue
             wormholeStringsViewed.append(wormholeString)
             rotationWorks = False
@@ -166,7 +166,12 @@ class DrawHelper:
                 adjTileWormholeNum = (index + x) % 6
                 if rotationWorks:
                     continue
-                if adjTile in playerTiles and adjTileWormholeNum in tile["wormholes"]:
+                connected = adjTile in playerTiles
+                neighbor = self.gamestate["board"].get(adjTile, {})
+                if "nebula_internal" in neighbor:
+                    connected = any(position in self.gamestate["board"][source]["adjacent"]
+                                    for source in [adjTile] + neighbor["nebula_internal"] if source in playerTiles)
+                if connected and adjTileWormholeNum in tile["wormholes"]:
                     for index2, adjTile2 in enumerate(configs.get(adjTile)[0].split(",")):
                         tile_orientation_index2 = (index2 +
                                                    int(self.gamestate["board"][adjTile]["orientation"]) // 60) % 6
@@ -195,7 +200,11 @@ class DrawHelper:
     def base_tile_image_with_rotation_in_context(self, rotation, tileID, tile, count, configs, position, configs2):
         mult = 1
         context = Image.new("RGBA", (int(345 * 3 * mult), int(300 * 3 * mult)), (255, 255, 255, 0))
-        image = self.base_tile_image_with_rotation(tileID, rotation, tile["wormholes"]).resize((345, 300))
+        image = self.base_tile_image_with_rotation(tileID, rotation, tile["wormholes"])
+        if tile.get("type") == "nebula":
+            image = image.rotate(rotation)
+            self.label_nebula_subsectors(image, position, rotation)
+        image = image.resize((345, 300))
         context.paste(image, (int(345 * mult), int(300 * mult)), mask=image)
         coords = [(int(345 * mult), 0),
                   (int(605 * mult), int(150 * mult)),
@@ -258,6 +267,8 @@ class DrawHelper:
         return discord.File(bytes_io, filename="parts.webp")
 
     def mergeLocationsFile(self, locations):
+        locations = list(dict.fromkeys(self.gamestate["board"][pos].get("nebula_parent", pos)
+                                       for pos in locations))
         amount = len(locations)
         mult = 1024 / 345
         result = math.ceil(math.sqrt(amount))
@@ -275,6 +286,8 @@ class DrawHelper:
         return discord.File(bytes_io, filename="tiles.webp")
 
     def board_tile_image(self, position, additionalRot:int=0):
+        if "nebula_parent" in self.gamestate["board"].get(position, {}):
+            return self.board_tile_image(self.gamestate["board"][position]["nebula_parent"], additionalRot)
         sector = self.gamestate["board"][position]["sector"]
         filepath2 = f"images/resources/hexes/{sector}.png"
         filepath = f"images/resources/hexes/numberless/{sector}.png"
@@ -288,7 +301,7 @@ class DrawHelper:
             tile = self.gamestate["board"][position]
             rotation = (int(tile["orientation"])+additionalRot+360)%360
 
-            if int(position) // 100 == 2 and int(position) % 2 == 1 and self.gamestate["player_count"] < 7:
+            if position.isdigit() and int(position) // 100 == 2 and int(position) % 2 == 1 and self.gamestate["player_count"] < 7:
                 hsMask2 = Image.open("images/resources/masks/hsmaskTrip.png").convert("RGBA").resize((210, 210))
                 tile_image.paste(hsMask2, (int(138 * mult), int(115 * mult)), mask=hsMask2)
             if tile.get("disctile", 0) > 0:
@@ -312,8 +325,9 @@ class DrawHelper:
             stroke_width = 6
             text_color = (255, 255, 255)
             textDrawableImage = ImageDraw.Draw(tile_image)
-            textDrawableImage.text(text_position, text, text_color, font=font,
-                                   stroke_width=stroke_width, stroke_fill=stroke_color)
+            if tile.get("type") != "nebula":
+                textDrawableImage.text(text_position, text, text_color, font=font,
+                                       stroke_width=stroke_width, stroke_fill=stroke_color)
 
             wormholeCode = ""
             closedpath = "images/resources/masks/closed_wh_mask.png"
@@ -363,10 +377,10 @@ class DrawHelper:
                 warppath = "images/resources/all_boards/Warp_picture.png"
                 warp_mask = self.use_image(warppath)
                 tile_image.paste(warp_mask, (int(20 * mult), int(140 * mult)), mask=warp_mask)
-            if len(tile.get("player_ships", [])) > 0:
+            def paste_ships(ship_tile, ship_pos):
                 counts = {}  # To track counts for each ship type
                 countsShips = {}
-                for ship in tile["player_ships"]:
+                for ship in ship_tile["player_ships"]:
                     if "-" not in ship:
                         continue
                     ship_type = ship.split("-")[1]  # Extract ship type
@@ -382,9 +396,9 @@ class DrawHelper:
                         ship = ship_type
                         if ship_type == "orb":
                             size = int(110 * mult)
-                            if tile["owner"] != 0:
-                                if all([self.getPlayerObjectFromColor(tile["owner"])['name'] == "The Exiles",
-                                            tile.get("orbital_pop", [0])[0] == 1]):
+                            if ship_tile["owner"] != 0:
+                                if all([self.getPlayerObjectFromColor(ship_tile["owner"])['name'] == "The Exiles",
+                                            ship_tile.get("orbital_pop", [0])[0] == 1]):
                                     ship = "exile_orb"
                                 
                     filepathShip = f"images/resources/components/fancy_ships/fancy_{ship}.png"
@@ -396,7 +410,7 @@ class DrawHelper:
                         continue
                     ship_image = self.use_image(filepathShip)
 
-                    coords = tile[f"{ship_type}_snap"]
+                    coords = ship_tile[f"{ship_type}_snap"]
 
                     if ship_type not in counts:
                         counts[ship_type] = 0
@@ -421,10 +435,10 @@ class DrawHelper:
                     if "ai-" not in key:
                         ship_type = key.split("-")[1]
 
-                    coords = tile[ship_type.replace("adv", "") + "_snap"]
-                    if "damage_tracker" in self.gamestate["board"][position]:
-                        if key in self.gamestate["board"][position]["damage_tracker"]:
-                            damage = self.gamestate["board"][position]["damage_tracker"][key]
+                    coords = ship_tile[ship_type.replace("adv", "") + "_snap"]
+                    if "damage_tracker" in self.gamestate["board"][ship_pos]:
+                        if key in self.gamestate["board"][ship_pos]["damage_tracker"]:
+                            damage = self.gamestate["board"][ship_pos]["damage_tracker"][key]
                     if damage > 0:
                         for count in range(damage):
                             damage_image = self.use_image("images/resources/components/basic_ships/marker_damage.png")
@@ -433,6 +447,20 @@ class DrawHelper:
                                                   10 * count * mult + 15 * mult),
                                               int(345 / 1024 * mult * coords[1] + value - size / 2 + 35 * mult)),
                                              mask=damage_image)
+
+            if len(tile.get("player_ships", [])) > 0:
+                paste_ships(tile, position)
+            if "nebula_internal" in tile:
+                for sib in tile["nebula_internal"]:
+                    sib_tile = self.gamestate["board"][sib]
+                    if sib_tile.get("disctile", 0) > 0:
+                        discTile = self.use_image("images/resources/components/discovery_tiles/discovery_2ptback.png")
+                        discTile = discTile.rotate(315, expand=True)
+                        diamond = sib_tile["disc_snap"]
+                        tile_image.paste(discTile, (int(diamond[0] - discTile.width / 2),
+                                                    int(diamond[1] - discTile.height / 2)), mask=discTile)
+                    if len(sib_tile.get("player_ships", [])) > 0:
+                        paste_ships(sib_tile, sib)
 
             def paste_resourcecube(tile, tile_image, resource_type, color, disc_center):
                 if tile.get(f"{resource_type}_pop", 0):
@@ -497,7 +525,23 @@ class DrawHelper:
                 for resource in ["neutral", "neutraladv", "money", "moneyadv", "science", "scienceadv",
                                  "material", "materialadv", "orbital", "disc"]:
                     paste_resourcecube(tile, tile_image, resource, color, disc_center)
+            if tile.get("type") == "nebula":
+                tile_image = tile_image.rotate(rotation)
+                self.label_nebula_subsectors(tile_image, position, rotation)
             return tile_image
+
+    @staticmethod
+    def label_nebula_subsectors(image, position, rotation):
+        angle = math.radians(rotation)
+        center_x, center_y = image.width / 2, image.height / 2
+        font = ImageFont.truetype("images/resources/arial.ttf", size=int(30 * 1024 / 345))
+        draw = ImageDraw.Draw(image)
+        for suffix, (x, y) in zip("ABC", [(865, 445), (335, 139), (335, 751)]):
+            x, y = x - center_x, y - center_y
+            point = (center_x + x * math.cos(angle) + y * math.sin(angle),
+                     center_y - x * math.sin(angle) + y * math.cos(angle))
+            draw.text(point, f"{position}-{suffix}", fill="white", font=font, anchor="mm",
+                      stroke_width=6, stroke_fill="black")
 
     def areTwoTilesAdjacent(self, tile1, tile2, configs):
         def is_adjacent(tile_a, tile_b):
@@ -715,7 +759,8 @@ class DrawHelper:
         return context
 
     def display_remaining_tiles(self):
-        # Tall enough for the turn order (290px) pasted under the minor species block at y 250.
+        # Tall enough for the turn order (290px) pasted under the minor species block at y 250;
+        # at 500 it clipped its "Next Round" row, which the player areas below then covered.
         context = Image.new("RGBA", (1900, 560), (0, 0, 0, 255))
 
         filepath = "images/resources/hexes/sector3backblank.png"
@@ -1190,6 +1235,15 @@ class DrawHelper:
                     pop_image = self.use_resized_image(pop_path, (42,42))
                     context.paste(pop_image, (reputationX+x*150+30, 600+60), mask=pop_image)
 
+        # Alliance tiles sit to the right of the reputation track.
+        allianceX = 4600
+        for allianceTile, betrayed in player.get("alliances", {}).items():
+            side = "betrayed" if betrayed else "ally"
+            alliance_path = (f"images/resources/components/alliances/"
+                             f"alliances_{allianceTile}_{side}.png")
+            alliance_image = self.use_resized_image(alliance_path, (120, 120))
+            context.paste(alliance_image, (allianceX, 600), mask=alliance_image)
+            allianceX += 130
 
         faction = self.get_short_faction_name(player["name"])
         ships = ["int", "cru", "drd", "sb","orb"]
@@ -1687,6 +1741,10 @@ class DrawHelper:
 
         if "rep" in player.get("discoveryTileBonusPointTiles", []):
             points += reputationPoints // 3
+        for betrayed in player.get("alliances", {}).values():
+            # A faceup Alliance Tile is worth 2 VP, a Betrayer tile costs 3. Rho Indi
+            # gets no exemption here, unlike the Traitor Card.
+            points += -3 if betrayed else 2
         if player.get("traitor"):
             if player["name"] == "Rho Indi Syndicate":
                 pass
@@ -1715,6 +1773,8 @@ class DrawHelper:
                 max_x = max(max_x, 1820 + hyperImage.width)
                 max_y = max(max_y, 2850 + hyperImage.height)
             for tile in tile_map:
+                if "nebula_parent" in self.gamestate["board"][tile]:
+                    continue
                 tile_image = self.board_tile_image(tile).resize((345, 300))
                 x, y = map(int, configs.get(tile)[0].split(","))
                 context.paste(tile_image, (x, y), mask=tile_image)
@@ -1811,6 +1871,8 @@ class DrawHelper:
             max_x = float('-inf')
             max_y = float('-inf')
             for tile in tile_map:
+                if "nebula_parent" in self.gamestate["board"][tile]:
+                    continue
                 tile_image = self.board_tile_image(tile)
                 x, y = map(int, configs.get(tile)[0].split(","))
                 context.paste(tile_image, (x, y), mask=tile_image)

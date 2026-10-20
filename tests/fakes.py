@@ -4,29 +4,43 @@ Discord is never available in tests, so interaction, channel, guild and message
 objects are stubbed here. Anything that is a plain helper rather than a pytest
 fixture belongs in this module; fixtures live in conftest.py.
 """
-import asyncio
 import copy
+import itertools
 import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import discord
+
+from helpers.PlayerHelper import PlayerHelper
 
 from helpers.GamestateHelper import GamestateHelper
 
 FACTIONS = json.load(open("data/factions.json"))
+POS = "101"  # the sector board_tile() builds by default
 
 
 class FakeMessage:
-    _next_id = 1
+    _ids = itertools.count(1)
 
-    def __init__(self):
-        self.id = FakeMessage._next_id
-        FakeMessage._next_id += 1
+    def __init__(self, channel=None):
+        self.id = next(self._ids)
+        self.flags = SimpleNamespace(ephemeral=False)
+
+        self.channel = channel
         self.components = []
 
     async def delete(self):
-        pass
+        if self.channel is not None:
+            self.channel.deleted.add(self.id)
 
     async def edit(self, **kwargs):
         self.edited = kwargs
+
+    async def create_thread(self, name):
+        thread = FakeChannel(name)
+        self.channel.threads.append(thread)
+        return thread
 
 
 class FakeChannel:
@@ -34,10 +48,29 @@ class FakeChannel:
         self.name = name
         self.threads = []
         self.sent = []
+        self.messages = []  # parallel to sent: the message each send created
+        self.deleted = set()
 
     async def send(self, content=None, **kwargs):
         self.sent.append((content, kwargs))
-        return FakeMessage()
+        self.messages.append(FakeMessage(self))
+        return self.messages[-1]
+
+    async def edit(self, **kwargs):
+        self.edited = kwargs
+
+    async def fetch_message(self, message_id):
+        if message_id in self.deleted:
+            raise discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), "Unknown Message")
+        return FakeMessage(self)
+
+    def message_with(self, custom_id):
+        """The latest message carrying this button, as Discord hands it to the press."""
+        for (_content, kwargs), message in zip(reversed(self.sent), reversed(self.messages)):
+            if any(getattr(c, "custom_id", None) == custom_id for c in getattr(kwargs.get("view"), "children", [])):
+                return message
+        return None
+
 
 
 class FakeUser:
@@ -124,13 +157,37 @@ def player_stats(faction, **overrides):
     return stats
 
 
+def players(*colors):
+    """A gamestate players dict with one Hydran Progress per colour."""
+    return {str(i): player_stats("hyd", color=color) for i, color in enumerate(colors, 1)}
+
+
+def board_tile(ships=(), owner=0, sector=int(POS), **extra):
+    """A board dict holding one sector, keyed the way the gamestate keys it."""
+    tile = {"owner": owner, "sector": sector, "disctile": 0, "player_ships": list(ships)}
+    tile.update(extra)
+    return {str(sector): tile}
+
+
+def player_helper(game, color):
+    """A PlayerHelper for the player with this colour."""
+    return PlayerHelper(game.get_player_from_color(color), game.getPlayerObjectFromColor(color))
+
+
+def offered_buttons(interaction):
+    """Every button offered across the messages the fake channel received."""
+    return [child for _content, kwargs in interaction.channel.sent
+            for child in getattr(kwargs.get("view"), "children", [])]
+
+
 def offered_labels(interaction):
     """Button labels offered across every message the fake channel received."""
-    labels = []
-    for _content, kwargs in interaction.channel.sent:
-        for child in getattr(kwargs.get("view"), "children", []):
-            labels.append(getattr(child, "label", None))
-    return labels
+    return [getattr(button, "label", None) for button in offered_buttons(interaction)]
+
+
+def offered_ids(interaction):
+    """Button custom_ids offered across every message the fake channel received."""
+    return [getattr(button, "custom_id", None) for button in offered_buttons(interaction)]
 
 
 def buttons(channel):
@@ -145,11 +202,3 @@ def buttons(channel):
 def reload(game):
     """Re-read a game from disk: what the next button press will see."""
     return type(game)(None, game.game_id)
-
-
-async def drain(coro):
-    """Await a coroutine and let its create_task side effects run."""
-    result = await coro
-    for _ in range(10):
-        await asyncio.sleep(0)
-    return result
