@@ -96,6 +96,9 @@ class MoveButtons:
             await interaction.followup.send("You already moved a Harvester for free this Explore action.",
                                             ephemeral=True)
             return
+        if not MoveButtons.getListOfUnpinnedShipTiles(game, player, "sb"):
+            await interaction.followup.send("Your Harvester is pinned and cannot move.", ephemeral=True)
+            return
         player["harvester_free_move_used"] = True
         game.update()
         await MoveButtons.startMove(game, player, interaction, "startMove_0_sb", True)

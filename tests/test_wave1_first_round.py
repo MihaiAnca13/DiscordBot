@@ -72,6 +72,8 @@ def test_wave1_community_factions_setup_and_first_round(games_dir, run, press, m
         assert player["home_planet"] == homes[key]
         assert colors[pid] in ["blue", "red", "green", "yellow", "purple",
                                "white", "pink", "brown", "teal"]
+    assert state["board"]["314"]["sector"] == "253"
+    assert state["board"]["314"]["number_snap"] == [680, 350]
 
     # The three setup prompts of the earlier community factions still resolve in one game.
     press(channel, 1, find_button(channel, f"FCID{colors[1]}_ancientsCube_science_"))

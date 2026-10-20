@@ -2,6 +2,7 @@ from discord.ui import View
 
 from Buttons.Explore import ExploreButtons
 from Buttons.Harvester import HarvesterButtons
+from Buttons.Move import MoveButtons
 from Buttons.Population import PopulationButtons
 from Buttons.Upgrade import UpgradeButtons
 from helpers.CombatHelper import Combat
@@ -64,6 +65,18 @@ def test_free_harvester_move_only_offers_the_harvester(start_game, run, press):
     labels = buttons(channel).values()
     assert "Starbase (Range: 1)" in labels
     assert "Cruiser (Range: 1)" not in labels
+
+
+def test_pinned_harvester_does_not_consume_the_free_move(start_game, run):
+    game, channel = start_game(factions=["tur", "eri"])
+    game.gamestate["board"]["201"]["player_ships"].append("red-int")
+    game.update()
+    interaction = FakeInteraction(channel)
+
+    run(MoveButtons.startHarvesterMove(game, game.get_player(1), interaction))
+
+    assert "harvester_free_move_used" not in reload(game).get_player(1)
+    assert "pinned" in interaction.followup.sent[0][0]
 
 
 def test_the_explore_free_move_is_once_per_action(start_game, run, press):
