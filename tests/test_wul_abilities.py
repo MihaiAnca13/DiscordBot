@@ -214,8 +214,8 @@ def test_player_area_draws_three_wulfen_blueprints(start_game, monkeypatch):
     joined = " ".join(loaded)
     assert "blueprint_interceptor.png" not in joined
     for ship in ("cruiser", "dreadnought", "starbase"):
-        assert f"blueprint_{ship}.png" in joined
-        assert f"wulfen_{ship}_class.png" in joined
+        assert f"wulfen_{ship}_blueprint.png" in joined
+        assert f"blueprint_{ship}.png" not in joined
 
 
 def _wolf_game(make_game):

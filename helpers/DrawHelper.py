@@ -28,6 +28,22 @@ def load_properties(path):
 
 _resized_cache = {}
 
+# Wulfen's printed board uses two coloured spine slots instead of the shared blueprint grid.
+# The rectangles are pixels in the 550x400 panel, in parts-array order.
+WULFEN_BLUEPRINTS = {
+    "cru": ("wulfen_cruiser_blueprint.png", [
+        (105, 292, 132, 103), (335, 147, 112, 99), (335, 247, 112, 148),
+        (210, 147, 125, 99), (210, 247, 125, 114)]),
+    "drd": ("wulfen_dreadnought_blueprint.png", [
+        (32, 148, 126, 129), (32, 277, 126, 110), (158, 142, 120, 135),
+        (278, 142, 120, 135), (158, 277, 120, 110), (278, 277, 120, 110),
+        (401, 148, 124, 124), (401, 272, 124, 132)]),
+    "sb": ("wulfen_starbase_blueprint.png", [
+        (107, 144, 125, 119), (107, 263, 125, 115), (232, 144, 103, 119),
+        (335, 152, 111, 121), (335, 273, 111, 121)]),
+}
+
+
 class DrawHelper:
     def __init__(self, gamestate):
         self.gamestate = gamestate
@@ -1207,38 +1223,47 @@ class DrawHelper:
         color = (255, 255, 255)
         stroke_width = 2
         font = ImageFont.truetype("images/resources/arial.ttf", size=35)
+        stat_font = ImageFont.truetype("images/resources/arial.ttf", size=30)
+        wulfen_font_cost = ImageFont.truetype("images/resources/arial.ttf", size=40)
+        wulfen_font_stat = ImageFont.truetype("images/resources/arial.ttf", size=20)
         blueprint_slots = FactionData.of(player).get("blueprint_slots", {})
         slot_cells = {}
         ship_origins = {}
-        for slot, ship in enumerate(ships):
+        for counter, ship in enumerate(ships):
             shipFullName = self.getShipFullName(ship)
             if ship == "orb" and faction != "exile":
                 continue
-            # A faction without an Interceptor blueprint (Wulfen) leaves its space empty.
             if ship == "int" and not player.get("interceptor_parts"):
                 continue
-            ship_blueprint_path = f"images/resources/components/layouts/blueprints/blueprint_{shipFullName}.png"
-            if faction == "planta":
-                ship_blueprint_path = ship_blueprint_path.replace(".png","_planta.png")
-            ship_blueprint = self.use_image(ship_blueprint_path)
-            if ship == "drd":
-                if faction == "rho":
-                    continue
+            wulfen = faction == "wulfen"
+            slot = counter
             mod = 0
+            if wulfen:
+                slot = {"cru": 0, "drd": 1, "sb": 2}[ship]
+                ship_blueprint_path = ("images/resources/components/layouts/blueprints/"
+                                       f"{WULFEN_BLUEPRINTS[ship][0]}")
+            else:
+                ship_blueprint_path = f"images/resources/components/layouts/blueprints/blueprint_{shipFullName}.png"
+                if faction == "planta":
+                    ship_blueprint_path = ship_blueprint_path.replace(".png","_planta.png")
+            ship_blueprint = self.use_image(ship_blueprint_path)
+            if ship == "drd" and faction == "rho":
+                continue
             if ship == "sb" and faction == "exile":
                 continue
-            if ship =="sb" or ship =="orb":
-                mod = 161
-                if ship == "orb":
-                    mod = -389
-            layout = blueprint_slots.get(PlayerHelper.blueprint_key(ship))
-            if layout:
-                # keep the stat header, draw the faction's own slot shape below it
-                ship_blueprint = ship_blueprint.crop((0, 0, ship_blueprint.width, 83))
-                slot_cells[ship] = self.draw_blueprint_slots(context, (2250 + 550 * slot + mod, 70), layout)
-            ship_origins[ship] = (2250 + 550 * slot + mod, 70)
-            context.paste(ship_blueprint, (2250 + 550 * slot+mod, 70))
-            counter = slot
+            if not wulfen:
+                if ship == "sb" or ship == "orb":
+                    mod = 161
+                    if ship == "orb":
+                        mod = -389
+                layout = blueprint_slots.get(PlayerHelper.blueprint_key(ship))
+                if layout:
+                    # Keep the stat header; draw the faction's own slot shape below it.
+                    ship_blueprint = ship_blueprint.crop((0, 0, ship_blueprint.width, 83))
+                    slot_cells[ship] = self.draw_blueprint_slots(
+                        context, (2250 + 550 * slot + mod, 70), layout)
+                ship_origins[ship] = (2250 + 550 * slot + mod, 70)
+            context.paste(ship_blueprint, (2250 + 550 * slot + mod, 70))
             shipMod = PlayerShip(player, shipFullName)
             total_energy = shipMod.total_energy
             usedEnergy = total_energy - shipMod.energy
@@ -1248,51 +1273,85 @@ class DrawHelper:
             computer = str(shipMod.computer)
             shield = str(shipMod.shield)
             cost = str(shipMod.cost)
-            text_drawable_image.text((2250 + 550 * slot+mod+40, 70+42), f"{usedEnergy}/{total_energy}", color, font=font,
-                                             stroke_width=stroke_width, stroke_fill=stroke_color)
-            if drive != "0":
-                text_drawable_image.text((2250 + 550 * slot+mod+155, 70+42), f"{drive}", color, font=font,
-                                                stroke_width=stroke_width, stroke_fill=stroke_color)
-
-            text_drawable_image.text((2250 + 550 * slot+mod+230, 70+42), f"{hull}", color, font=font,
-                                             stroke_width=stroke_width, stroke_fill=stroke_color)
-            text_drawable_image.text((2250 + 550 * slot+mod+295, 70+42), f"{computer}", color, font=font,
-                                             stroke_width=stroke_width, stroke_fill=stroke_color)
-            text_drawable_image.text((2250 + 550 * slot+mod+375, 70+42), f"{shield}", color, font=font,
-                                             stroke_width=stroke_width, stroke_fill=stroke_color)
-            text_drawable_image.text((2250 + 550 * slot+mod+375, 68), f"{speed}", color, font=font,
-                                             stroke_width=stroke_width, stroke_fill=stroke_color)
-            if ship =="drd":
-                mod += 5
-            text_drawable_image.text((2250 + 550 * slot+mod+10, 70), f"{cost}", color, font=font,
-                                             stroke_width=stroke_width, stroke_fill=stroke_color)
-            shortF = faction
-            if "terran" in shortF:
-                shortF = "terran"
-            shipClassPath = f"images/resources/components/layouts/blueprints/classes/{shortF}_{shipFullName}_class.png"
-            shipClass = self.use_image(shipClassPath)
-            context.paste(shipClass, (2250 + 550 * slot+mod+175, 74), mask=shipClass)
-
-
+            filepath = None
             if ship != "orb":
                 filepath = f"images/resources/components/fancy_ships/fancy_{player['color']}-{ship}.png"
-                if self.gamestate.get("fancy_ships") and os.path.exists(filepath):
-                    filepath = f"images/resources/components/fancy_ships/fancy_{player['color']}-{ship}.png"
-                else:
+                if not (self.gamestate.get("fancy_ships") and os.path.exists(filepath)):
                     filepath = f"images/resources/components/basic_ships/{player['color']}-{ship}.png"
-                ship_image = self.use_resized_image(filepath, (120, 120))
-                if ship == "drd":
-                    ship_image = ship_image.rotate(270,expand=True)
-                for shipCounter in range(player["ship_stock"][counter]):
-                    mod = 0
-                    if ship == "drd" or ship =="sb":
-                        mod = 161
+            if wulfen:
+                x0 = 2250 + 550 * slot
+                y0 = 70
+                text_drawable_image.text((x0 + 8, y0), cost, color,
+                                         font=wulfen_font_cost,
+                                         stroke_width=stroke_width, stroke_fill=stroke_color)
+                shortF = "wulfen"
+                shipClassPath = (f"images/resources/components/layouts/blueprints/classes/"
+                                 f"{shortF}_{shipFullName}_class.png")
+                shipClass = self.use_image(shipClassPath)
+                class_height = 90
+                class_width = max(1, int(shipClass.width * class_height / shipClass.height))
+                shipClass = shipClass.resize((class_width, class_height), Image.LANCZOS)
+                context.paste(shipClass, (x0 + 48, y0), mask=shipClass)
+                comp_text = f"+{computer}" if shipMod.computer > 0 else computer
+                stats = [
+                    ("EN", f"{usedEnergy}/{total_energy}", 300, 5),
+                    ("DR", drive, 420, 5),
+                    ("HULL", hull, 300, 32),
+                    ("COM", comp_text, 420, 32),
+                    ("SH", shield, 300, 59),
+                    ("SPD", speed, 420, 59),
+                ]
+                for label, value, stat_x, stat_y in stats:
+                    text_drawable_image.text((x0 + stat_x, y0 + stat_y), f"{label} {value}",
+                                             color, font=wulfen_font_stat,
+                                             stroke_width=1, stroke_fill=stroke_color)
+                if filepath is not None:
+                    ship_image = self.use_resized_image(filepath, (28, 28))
+                    for shipCounter in range(player["ship_stock"][counter]):
+                        context.paste(ship_image, (x0 + 296 + 30 * shipCounter, y0 + 104), ship_image)
+                ImageDraw.Draw(context).rectangle((x0, y0, x0 + 549, y0 + 399),
+                                                  outline=(58, 92, 120), width=2)
+            else:
+                text_drawable_image.text((2250 + 550 * slot+mod+40, 70+58), f"{usedEnergy}/{total_energy}", color, font=stat_font,
+                                                 stroke_width=stroke_width, stroke_fill=stroke_color)
+                if drive != "0":
+                    text_drawable_image.text((2250 + 550 * slot+mod+155, 70+58), f"{drive}", color, font=stat_font,
+                                                    stroke_width=stroke_width, stroke_fill=stroke_color)
+                text_drawable_image.text((2250 + 550 * slot+mod+230, 70+58), f"{hull}", color, font=stat_font,
+                                                 stroke_width=stroke_width, stroke_fill=stroke_color)
+                text_drawable_image.text((2250 + 550 * slot+mod+295, 70+58), f"{computer}", color, font=stat_font,
+                                                 stroke_width=stroke_width, stroke_fill=stroke_color)
+                text_drawable_image.text((2250 + 550 * slot+mod+375, 70+58), f"{shield}", color, font=stat_font,
+                                                 stroke_width=stroke_width, stroke_fill=stroke_color)
+                text_drawable_image.text((2250 + 550 * slot+mod+375, 68), f"{speed}", color, font=stat_font,
+                                                 stroke_width=stroke_width, stroke_fill=stroke_color)
+                if ship =="drd":
+                    mod += 5
+                text_drawable_image.text((2250 + 550 * slot+mod+10, 70), f"{cost}", color, font=font,
+                                                 stroke_width=stroke_width, stroke_fill=stroke_color)
+                shortF = faction
+                if "terran" in shortF:
+                    shortF = "terran"
+                shipClassPath = f"images/resources/components/layouts/blueprints/classes/{shortF}_{shipFullName}_class.png"
+                class_x = 2250 + 550 * slot + mod
+                ImageDraw.Draw(context).rectangle((class_x + 35, 70, class_x + 320, 105),
+                                                  fill=(0, 0, 0, 255))
+                shipClass = self.use_image(shipClassPath)
+                class_height = 60
+                class_width = max(1, int(shipClass.width * class_height / shipClass.height))
+                shipClass = shipClass.resize((class_width, class_height), Image.LANCZOS)
+                context.paste(shipClass, (class_x + 45, 64), mask=shipClass)
+                if filepath is not None:
+                    ship_image = self.use_resized_image(filepath, (120, 120))
+                    if ship == "drd":
+                        ship_image = ship_image.rotate(270,expand=True)
+                    for shipCounter in range(player["ship_stock"][counter]):
+                        stock_mod = 0
+                        if ship == "drd" or ship =="sb":
+                            stock_mod = 161
+                        context.paste(ship_image, (2670 + 550 * slot+stock_mod,
+                                                   150+35 * shipCounter), ship_image)
 
-                    context.paste(ship_image, (2670 + 550 * slot+mod, 150+35 * shipCounter), ship_image)
-
-
-
-        
         interceptCoord = [(78, 39), (20, 87), (78, 97), (136, 87), (148, 39)]
         cruiserCoord = [(215, 58), (271, 44), (328, 58), (215, 116), (271, 102), (328, 116), (388, 10)]
         dreadCoord = [(435, 58), (492, 44), (550, 44), (607, 58), (435, 116),
@@ -1320,7 +1379,7 @@ class DrawHelper:
                 part_image = self.use_resized_image(part_path, (square_size,square_size+8))
                 if part == "mus":
                     part_image = part_image.resize((int(square_size * 0.69), int(square_size * 0.69)))
-                if cells:
+                if cells and counter < len(cells):
                     context.paste(part_image, cells[counter], mask=part_image)
                     continue
 
@@ -1343,33 +1402,53 @@ class DrawHelper:
                 context.paste(part_image, (scaled_x, scaled_y+50), mask=part_image)  
         referenceX = 2220
         sizeOfSquare = 137
-        if player.get("interceptor_parts"):
-            process_parts(player["interceptor_parts"], interceptCoord, referenceX,sizeOfSquare,"interceptor",
-                          slot_cells.get("int"))
-        process_parts(player["cruiser_parts"], cruiserCoord,referenceX,sizeOfSquare,"cruiser", slot_cells.get("cru"))
-        process_parts(player["dread_parts"], dreadCoord,referenceX,sizeOfSquare,"dreadnought", slot_cells.get("drd"))
-        if faction == "exile":
-            process_parts(player["orb_parts"], orbCoord,referenceX,sizeOfSquare,"orbital")
+        if faction == "wulfen":
+            for ship, parts_key in (("cru", "cruiser"), ("drd", "dread"), ("sb", "starbase")):
+                slot = {"cru": 0, "drd": 1, "sb": 2}[ship]
+                _, rects = WULFEN_BLUEPRINTS[ship]
+                for part, (rx, ry, rw, rh) in zip(player[f"{parts_key}_parts"], rects):
+                    if part == "empty":
+                        continue
+                    part_details = part_data.get(part)
+                    partName = part_details["name"].lower().replace(" ", "_") if part_details else part
+                    part_image = self.use_resized_image(
+                        f"images/resources/components/upgrades/{partName}.png",
+                        (max(1, rw - 4), max(1, rh - 4)))
+                    if part == "mus":
+                        part_image = part_image.resize(
+                            (int(part_image.width * 0.69), int(part_image.height * 0.69)))
+                    context.paste(part_image, (2250 + 550 * slot + rx + 2, 70 + ry + 2),
+                                  mask=part_image)
         else:
-            process_parts(player["starbase_parts"], sbCoord,referenceX,sizeOfSquare,"starbase", slot_cells.get("sb"))
+            if player.get("interceptor_parts"):
+                process_parts(player["interceptor_parts"], interceptCoord, referenceX,sizeOfSquare,"interceptor",
+                              slot_cells.get("int"))
+            process_parts(player["cruiser_parts"], cruiserCoord, referenceX,sizeOfSquare,"cruiser", slot_cells.get("cru"))
+            process_parts(player["dread_parts"], dreadCoord, referenceX,sizeOfSquare,"dreadnought", slot_cells.get("drd"))
+            if faction == "exile":
+                process_parts(player["orb_parts"], orbCoord, referenceX,sizeOfSquare,"orbital")
+            else:
+                process_parts(player["starbase_parts"], sbCoord, referenceX,sizeOfSquare,"starbase", slot_cells.get("sb"))
 
-        draw = ImageDraw.Draw(context)
-        for ship, cells in slot_cells.items():
-            # Spine Cannon slots keep the board's red (cannon) and yellow (augment) frame over the part
-            # the augment frame sits below the cannon's, wrapping down past its slot as printed
-            for index, frame, drop in zip(PlayerHelper.get_spine_cannon_slots(player, ship),
-                                          [(220, 30, 30), (240, 190, 20)], [0, 12]):
-                x, y = cells[index]
-                draw.rectangle((x - 3, y - 3 + drop, x + 139, y + 139 + drop), outline=frame, width=6)
-        if FactionData.has(player, "carapace_shields"):
-            for ship_class, (col, row) in FactionData.of(player).get("carapace_module", {}).items():
-                ship = Carapace.SHORT[ship_class]
-                if ship not in ship_origins:
-                    continue
-                x, y = self.blueprint_cell(ship_origins[ship], col, row)
-                module = self.use_image("images/resources/components/factions/turtugan_carapace"
-                                        + ("_starbase.png" if ship == "sb" else ".png"))
-                context.paste(module, (x, y), mask=module)
+            draw = ImageDraw.Draw(context)
+            for ship, cells in slot_cells.items():
+                # Spine Cannon slots keep the board's red (cannon) and yellow (augment) frame over the part
+                # the augment frame sits below the cannon's, wrapping down past its slot as printed
+                for index, frame, drop in zip(PlayerHelper.get_spine_cannon_slots(player, ship),
+                                              [(220, 30, 30), (240, 190, 20)], [0, 12]):
+                    if index >= len(cells):
+                        continue
+                    x, y = cells[index]
+                    draw.rectangle((x - 3, y - 3 + drop, x + 139, y + 139 + drop), outline=frame, width=6)
+            if FactionData.has(player, "carapace_shields"):
+                for ship_class, (col, row) in FactionData.of(player).get("carapace_module", {}).items():
+                    ship = Carapace.SHORT[ship_class]
+                    if ship not in ship_origins:
+                        continue
+                    x, y = self.blueprint_cell(ship_origins[ship], col, row)
+                    module = self.use_image("images/resources/components/factions/turtugan_carapace"
+                                            + ("_starbase.png" if ship == "sb" else ".png"))
+                    context.paste(module, (x, y), mask=module)
 
         if "shrine_in_storage" in player:
             shrine_board_path = "images/resources/components/factions/shrine_board.png"
@@ -2042,14 +2121,18 @@ class DrawHelper:
 
     def show_player_ship(self, player_area, ship, factionName):
         player_area = player_area.crop((2250, 70, 3900+424+250, 470))
-        if "intercept" in ship:
-            player_area = player_area.crop((0, 0, 424, 400))
-        if "cru" in ship:
-                player_area = player_area.crop((550, 0, 550+424+100, 400))
-        if "dread" in ship:
-            player_area = player_area.crop((1100, 0, 1100+561,400))
-        if "starbase" in ship or "orb" in ship:
-            player_area = player_area.crop((1800, 0, 1800+424+100, 400))
+        if factionName == "wulfen":
+            offset = {"cruiser": 0, "dreadnought": 550, "starbase": 1100}.get(ship, 0)
+            player_area = player_area.crop((offset, 0, offset + 550, 400))
+        else:
+            if "intercept" in ship:
+                player_area = player_area.crop((0, 0, 424, 400))
+            if "cru" in ship:
+                    player_area = player_area.crop((550, 0, 550+424+100, 400))
+            if "dread" in ship:
+                player_area = player_area.crop((1100, 0, 1100+561,400))
+            if "starbase" in ship or "orb" in ship:
+                player_area = player_area.crop((1800, 0, 1800+424+100, 400))
         byteData = BytesIO()
         player_area.save(byteData, format="WEBP")
         byteData.seek(0)
