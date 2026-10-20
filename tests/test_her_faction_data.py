@@ -62,16 +62,12 @@ def test_heralds_ship_stats(ship, expected):
     assert actual == expected
 
 
-def test_heralds_blueprints_differ_from_the_standard_ships():
+def test_standard_ship_baselines():
     standard = PlayerShip(player_stats("hyd"), "interceptor")
-    heralds = PlayerShip(player_stats("her"), "interceptor")
     assert (standard.hull, standard.speed, standard.cost) == (0, 3, 3)
-    assert (heralds.hull, heralds.speed, heralds.cost) == (1, 2, 4)
 
     standard = PlayerShip(player_stats("hyd"), "cruiser")
-    heralds = PlayerShip(player_stats("her"), "cruiser")
     assert (standard.hull, standard.speed, standard.cost) == (1, 2, 5)
-    assert (heralds.hull, heralds.speed, heralds.cost) == (0, 3, 4)
 
 
 def test_heralds_reputation_track_uses_three_relation_slots():

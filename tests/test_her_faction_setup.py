@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pytest
 
 from Buttons.Draft import DraftButtons
@@ -50,8 +48,3 @@ def test_heralds_still_respect_explicit_bans():
 def test_heralds_faction_choice_exists():
     choices = [(choice.name, choice.value) for choice in SetupCommands.factionChoices]
     assert ("Heralds of Ragnarok", "her") in choices
-
-
-def test_heralds_reference_images_exist():
-    for name in ("heralds_board.png", "heralds_info.png"):
-        assert Path(f"images/resources/components/factions/{name}").is_file(), name

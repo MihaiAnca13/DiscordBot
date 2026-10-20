@@ -500,6 +500,43 @@ def test_phase_module_bombing_only_tile_offers_neutron_bombs_when_powered(make_g
     assert any("spend 2 Power" in content for content, _kwargs in bombing.sent)
 
 
+
+@pytest.mark.parametrize("change", ["round", "fleet", "owner", "population", "combat"])
+def test_phase_module_rejects_obsolete_bombing_prompt(make_game, run, press, change):
+    blue = player_stats("wra", color="blue", military_tech=["phm", "neb"], wraithSouls=2)
+    red = player_stats("hyd", color="red", owned_tiles=["101"])
+    game = make_game({"player_count": 2, "players": {"1": blue, "2": red},
+                      "board": board_tile(["blue-int"], owner="red", sector=101, money_pop=[1]),
+                      "advanced_ai": False, "wa_ai": False, "reputation_tiles": [1, 2, 3],
+                      "game_id": "t", "roundNum": 1})
+    channel = FakeInteraction(role_names=["t"]).channel
+    run(Combat.startCombatThreads(game, FakeInteraction(channel, role_names=["t"])))
+    bombing = channel.threads[0]
+    custom_id = "FCIDblue_phaseBombing_101_1"
+    message = bombing.message_with(custom_id)
+    assert message is not None
+    tile = game.gamestate["board"]["101"]
+    if change == "round":
+        game.gamestate["roundNum"] = 2
+    elif change == "fleet":
+        tile["player_ships"] = []
+    elif change == "owner":
+        tile["owner"] = "blue"
+    elif change == "population":
+        tile["money_pop"] = [0]
+    elif change == "combat":
+        tile["player_ships"].append("red-int")
+    game.update()
+
+    interaction = press(bombing, 1, custom_id, message)
+
+    state = reload(game)
+    assert state.gamestate["board"]["101"] == tile
+    assert state.get_player(1).get("wraithPowerSpent", 0) == 0
+    assert state.get_player(1)["wraithSouls"] == 2
+    assert "no longer current" in interaction.followup.sent[0][0]
+
+
 def test_phase_module_bombing_only_tile_without_power_leaves_only_the_roll(make_game, run):
     blue = player_stats("wra", color="blue")
     blue["military_tech"] = ["phm", "neb"]
@@ -530,7 +567,7 @@ def test_phase_module_bombs_a_sector_without_combat(make_game, run):
                       "advanced_ai": False, "wa_ai": False, "reputation_tiles": [1, 2, 3],
                       "game_id": "t", "roundNum": 1})
 
-    run(Combat.phaseBombing(game, blue, FakeInteraction(), "phaseBombing_101"))
+    run(Combat.phaseBombing(game, blue, FakeInteraction(), "phaseBombing_101_1"))
 
     state = reload(game)
     assert state.gamestate["board"]["101"]["owner"] == 0
@@ -538,7 +575,7 @@ def test_phase_module_bombs_a_sector_without_combat(make_game, run):
     assert state.get_player(1)["wraithPowerSpent"] == 2
     assert Combat.phase_offboard_remaining(state, "blue", "101") == 3
     replay = FakeInteraction()
-    run(Combat.phaseBombing(state, state.get_player(1), replay, "phaseBombing_101"))
+    run(Combat.phaseBombing(state, state.get_player(1), replay, "phaseBombing_101_1"))
     assert state.get_player(1)["wraithPowerSpent"] == 2
     assert "no longer has an owner" in replay.followup.sent[0][0]
 

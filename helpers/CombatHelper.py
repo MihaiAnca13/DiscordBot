@@ -202,6 +202,13 @@ class Combat:
         if game.gamestate["board"][pos]["owner"] == 0:
             await interaction.followup.send("That sector no longer has an owner to bomb.", ephemeral=True)
             return
+        parts = customID.split("_")
+        if (len(parts) != 3 or parts[2] != str(game.gamestate["roundNum"])
+                or pos not in [tile for sector, tile in Combat.findTilesInContention(game)]
+                or player["color"] not in Combat.findPlayersInTile(game, pos)
+                or game.is_population_gone(pos)):
+            await interaction.followup.send("This bombing opportunity is no longer current.", ephemeral=True)
+            return
         player["wraithPowerSpent"] = player.get("wraithPowerSpent", 0) + 2
         game.update_player(player_helper)
         await InfluenceButtons.removeInfluenceFinish(
@@ -337,7 +344,7 @@ class Combat:
                     if player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0) >= 2:
                         view.add_item(Button(label="Use Phase Module: Neutron Bombs (2 Power)",
                                              style=discord.ButtonStyle.blurple,
-                                             custom_id=f"FCID{winner}_phaseBombing_{pos}"))
+                                             custom_id=f"FCID{winner}_phaseBombing_{pos}_{game.gamestate['roundNum']}"))
                         message += " You may spend 2 Power to use Neutron Bombs on the population."
                     else:
                         message += (" The Phase Module needs 2 Power for Neutron Bombs,"

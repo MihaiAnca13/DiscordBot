@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops, ImageDraw
 
 from helpers.DrawHelper import DrawHelper
 from tests.fakes import reload
@@ -62,9 +62,22 @@ def test_setup_places_lupis_and_the_starting_cruiser(start_game):
     assert player["cruiser_parts"] == ["nus", "hul", "nud", "ioc", "ioc"]
 
 
-def test_board_tile_image_uses_the_number_snap(start_game):
+def test_board_tile_image_uses_the_number_snap(start_game, monkeypatch):
     game, _channel = start_game(factions=["wul", "eri"])
-    image = DrawHelper(game.gamestate).board_tile_image("201")
+    drawing = DrawHelper(game.gamestate)
+    image = drawing.board_tile_image("201")
     assert image.size == (1024, 890)
-    # the printed SECTOR number is gone; the map position is drawn at the data snap
-    assert lupis()["number_snap"] == [665, 320]
+    original_text = ImageDraw.ImageDraw.text
+
+    def omit_map_number(self, xy, text, *args, **kwargs):
+        if text != "201":
+            return original_text(self, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", omit_map_number)
+    without_number = drawing.board_tile_image("201")
+    difference = ImageChops.difference(image.convert("RGB"), without_number.convert("RGB"))
+    bounds = difference.getbbox()
+    assert bounds is not None
+    left, top, right, bottom = bounds
+    assert 650 <= left < right <= 850
+    assert 310 <= top < bottom <= 430
