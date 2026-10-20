@@ -85,6 +85,14 @@ Lyra's `shrine_type`), as fields setup copies in for that faction only.
 - **Blueprint cell counts come from the board render.** Plans and printed layouts can disagree with the actual number of part rectangles; count them from the art before writing the parts array or the player-area coordinates.
 - **Reconcile faction counts once per merge wave.** Each branch updates draft-count assertions to its own total; after merging several factions, set the shared count once and verify that every faction still appears with the right colour.
 - **Initiative changes need every speed path.** An ability that adds or changes initiative must be applied consistently in the speed enumeration, the manual-button validity check, the reroll path and the end-of-combat checks; fixing only the prompt leaves stale buttons live.
+- **A deferred hit still has to close the pairing.** A target button whose resolution is deferred must still call the end-of-combat check when it removes the last ship of a side; otherwise the combat waits forever after the button is pressed.
+- **A free activation's filter belongs in the next button id.** If a free move is restricted to one ship class, put that filter into the emitted `moveFrom` id and test the id the UI actually emits, not a hand-written equivalent.
+- **A displayed action count must be enforced.** `influence_apt`, `build_apt` and the other activation numbers are not just labels; the flow must cap the number of placements/removals/units, including the second and third presses.
+- **A built-in part slot must be excluded from upgrades.** If a faction's blueprint prints a fixed module in a slot, omit that slot from the part menu and reject a forged/stale selection; otherwise the player gets the module's benefit plus a free replacement part.
+- **Income from a placed piece must be counted before bankruptcy.** A Harvester-like income source that arrives at upkeep has to be applied before the bankruptcy check, or a player is wrongly forced to trade/remove control.
+- **A custom blueprint panel is not the shared template.** Only `blueprint_<ship>` files are resized to the paste area; a faction-specific panel either keeps its native size or uses the shared frame. Check the composed player area, not just the file dimensions.
+- **A no-combat bombing prompt still needs the weapon/power choice.** If the card lets a faction use a bombing technology outside a normal combat, offer that choice in the bombing prompt instead of claiming the combat-start declaration rules it out.
+- **A held home tile may need a per-tile number position.** Removing the printed sector number is not enough if the nameplate remains; a `number_snap` or an inpainted nameplate keeps “PLANET SECTOR 314” from appearing on the map.
 
 ## Shared state machines an ability can reach
 
