@@ -18,6 +18,14 @@ from jproperties import Properties
 
 
 class Combat:
+    PHASE_OPTIONS = {
+        "comp": ("+1 to Hit", 1),
+        "shield": ("+1 Shield", 1),
+        "speed": ("+2 Initiative", 2),
+        "planets": ("Neutron Bombs", 2),
+        "ignore": ("Ignore Shields", 3),
+    }
+
     @staticmethod
     def exile_orbital_exists(game: GamestateHelper, pos):
         """A faction whose Orbitals count as Ships while they carry a Population Cube."""
@@ -433,20 +441,19 @@ class Combat:
 
     @staticmethod
     def firstShotSideOf(game: GamestateHelper, attacker, defender):
-        """The side that shoots second, or [] when both or neither side has first shot."""
+        """The Kurita colours that shoot second, or [] when both or neither side has first shot."""
         attacker = Combat.sideOf(attacker)
         defender = Combat.sideOf(defender)
 
-        def has_first_shot(side):
-            return any(color != "ai"
-                       and FactionData.has(game.getPlayerObjectFromColor(color), "first_shot")
-                       for color in side)
+        def first_shot_colors(side):
+            return [color for color in side if color != "ai"
+                    and FactionData.has(game.getPlayerObjectFromColor(color), "first_shot")]
 
-        attacker_has = has_first_shot(attacker)
-        defender_has = has_first_shot(defender)
-        if attacker_has == defender_has:
+        attacker_first = first_shot_colors(attacker)
+        defender_first = first_shot_colors(defender)
+        if bool(attacker_first) == bool(defender_first):
             return []
-        return list(attacker if attacker_has else defender)
+        return attacker_first or defender_first
 
     @staticmethod
     def firstShotSide(game: GamestateHelper, pos):
@@ -1093,6 +1100,15 @@ class Combat:
                 cannon_index = augment[0] if augment else None
                 missiles = ""
                 nonMissiles = " on initiative " + str(speed)
+                incoming_shield = False
+                if speed > 90 and speed < 1000:
+                    attacker_side = Combat.sideOf(tile.get("attacker"))
+                    defender_side = Combat.sideOf(tile.get("defender"))
+                    enemy_side = defender_side if colorOrAI in attacker_side else attacker_side
+                    incoming_shield = any(
+                        Carapace.engaged(game, pos, enemy, ship_class)
+                        for enemy in enemy_side
+                        for ship_class in Carapace.classes_in_battle(game, pos, enemy))
                 if speed > 90 and speed < 1000:
                     dice = shipModel.missile
                     sources = [None] * len(dice)
@@ -1149,7 +1165,7 @@ class Combat:
                     msg += f"\nThis ship type has a +{computerVal} computer."
 
                 shielded = Carapace.engaged(game, pos, colorOrAI, shipModel.ship_type)
-                if shielded and not missiles:
+                if shielded:
                     for die in dieNums:
                         die[1] = Carapace.weapon_damage(game, pos, colorOrAI,
                                                         shipModel.ship_type, die[1])
@@ -1174,15 +1190,12 @@ class Combat:
                                             and die_source == cannon_index else 0)
                         computer_val = computerVal + hit_bonus
                         hittableShips = []
-                        if shielded and missiles and dieColor != "pink":
-                            hittableShips = Combat.getOpponentUnitsThatCanBeHit(
-                                game, colorOrAI, player_ships, dieNum, shipModel.computer, pos, speed)
-                            if hittableShips:
-                                update = True
-                                await Carapace.prompt_missile(game, interaction, pos, colorOrAI,
-                                                              shipModel.ship_type, shipModel.computer,
-                                                              speed, dieNum, dieDam, counter)
-                                continue
+                        if incoming_shield and dieColor != "pink":
+                            update = True
+                            await Carapace.prompt_missile(game, interaction, pos, colorOrAI,
+                                                          shipModel.ship_type, computerVal,
+                                                          speed, dieNum, dieDam, counter)
+                            continue
                         if dieColor != "pink":
                             hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
                                                                                 dieNum, computer_val, pos, speed,
@@ -2051,9 +2064,8 @@ class Combat:
 
     @staticmethod
     def phase_option_cost(mode):
-        return (int(mode.get("comp", 0)) + int(mode.get("shield", 0))
-                + int(mode.get("speed", 0)) + (2 if mode.get("planets") else 0)
-                + (3 if mode.get("ignore") else 0))
+        return sum(cost for option, (_label, cost) in Combat.PHASE_OPTIONS.items()
+                   if mode.get(option))
 
     @staticmethod
     def phase_ship_types(game: GamestateHelper, color: str, pos: str):
@@ -2100,10 +2112,10 @@ class Combat:
         own = Combat.phase_ship_energy(game, color, pos, ship_type)
         remaining = Combat.phase_offboard_remaining(game, color, pos)
         view = View()
-        options = [("comp", "+1 to Hit", 1), ("shield", "+1 Shield", 1),
-                   ("speed", "+2 Initiative", 2), ("ignore", "Ignore Shields", 3)]
+        options = [(option, label, cost) for option, (label, cost) in Combat.PHASE_OPTIONS.items()
+                   if option != "planets"]
         if "neb" in PlayerHelper(game.get_player_from_color(color), player).getTechs():
-            options.insert(3, ("planets", "Neutron Bombs", 2))
+            options.insert(3, ("planets", *Combat.PHASE_OPTIONS["planets"]))
         for option, label, cost in options:
             on = bool(mode.get(option))
             view.add_item(Button(label=f"{'✓ ' if on else ''}{label} ({cost})",
@@ -2172,7 +2184,7 @@ class Combat:
                 or ship_type not in Combat.phase_ship_types(game, color, pos)):
             await interaction.followup.send("That blueprint is not in this combat.", ephemeral=True)
             return
-        values = {"comp": 1, "shield": 1, "speed": 2, "planets": True, "ignore": True}
+        values = {option: cost for option, (_label, cost) in Combat.PHASE_OPTIONS.items()}
         if option not in values:
             return
         if option == "planets" and "neb" not in PlayerHelper(

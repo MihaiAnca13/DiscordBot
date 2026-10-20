@@ -226,22 +226,31 @@ def test_a_grey_planet_asks_for_the_resource(make_game, run):
     assert reload(game).get_player(1)["harvester_placements"][0]["resource"] == "material"
 
 
-def test_harvester_cannot_replace_its_drive(start_game, press):
+def test_harvester_can_replace_its_drive_with_another_drive(start_game, press):
     game, channel = start_game(factions=["tur", "eri"])
+    game.get_player(1)["grid_tech"].append("tad")
+    game.update()
+
     press(channel, 1, "FCIDblue_startUpgrade")
-    inter = press(channel, 1, "FCIDblue_upgradeShip_2_starbase_dummy")
+    press(channel, 1, "FCIDblue_upgradeShip_2_starbase_dummy")
+    inter = press(channel, 1, "FCIDblue_selectOldPart_2_starbase_nud_dummy_2")
+
     labels = {child.label for child in inter.message.edited["view"].children}
-    assert "Hull" in labels
-    assert "Nuclear Source" in labels
-    assert "Nuclear Drive" not in labels
+    assert "Nuclear Drive" in labels
+    assert "Tachyon Drive" in labels
+    assert "Hull" not in labels and "Empty" not in labels
+
+    press(channel, 1, "FCIDblue_chooseUpgrade_2_starbase_nud_tad_2_dummy")
+    assert reload(game).get_player(1)["starbase_parts"][2] == "tad"
 
 
 def test_forged_drive_removal_is_refused(start_game, run):
     game, _channel = start_game(factions=["tur", "eri"])
     interaction = FakeInteraction()
-    run(UpgradeButtons.selectOldPart(game, game.get_player(1), interaction,
-                                     "selectOldPart_2_starbase_nud_dummy_2", player_helper(game, "blue")))
-    assert "may not remove its Drive" in interaction.followup.sent[0][0]
+    run(UpgradeButtons.chooseUpgrade(game, game.get_player(1), interaction,
+                                     "chooseUpgrade_2_starbase_nud_empty_2_dummy",
+                                     player_helper(game, "blue")))
+    assert "must keep a Drive" in interaction.followup.sent[0][0]
 
 
 def test_a_weaponless_harvester_is_not_in_the_roll_order(make_game):

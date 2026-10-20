@@ -51,6 +51,8 @@ def test_technologies_and_costs():
             faction["cost_orbital"], faction["cost_monolith"], faction["cost_interceptor"]) == (4, 8, 3, 4, 10, 3)
     assert faction["ship_stock"] == [0, 5, 2, 4]
     assert faction["starting_ships"] == ["cru"]
+    # One cruiser starts on the home sector; five remain to build, for the printed 6 maximum.
+    assert faction["ship_stock"][1] + faction["starting_ships"].count("cru") == 6
     assert "interceptor_parts" not in faction
 
 

@@ -13,9 +13,14 @@ from helpers.ShipHelper import PlayerShip
 
 class UpgradeButtons:
     @staticmethod
-    def is_locked_drive(player, ship, part):
-        """Harvester may not remove or replace its Nuclear Drive."""
-        return part == "nud" and ship == "starbase" and FactionData.has(player, "harvester")
+    def is_drive(part):
+        with open("data/parts.json", "r") as f:
+            return json.load(f).get(part, {}).get("range", 0) > 0
+
+    @staticmethod
+    def must_keep_drive(player, ship, part):
+        """A Harvester may replace its Drive, but may not leave the slot without one."""
+        return ship == "starbase" and FactionData.has(player, "harvester") and UpgradeButtons.is_drive(part)
 
     @staticmethod
     async def startUpgrade(game: GamestateHelper, player, interaction: discord.Interaction,
@@ -69,7 +74,7 @@ class UpgradeButtons:
             part_stats = json.load(f)
         phase_slots = PlayerHelper.get_phase_module_slots(player, ship)
         for index,i in enumerate(player[f"{ship}_parts"]):
-            if i == "mus" or index in phase_slots or UpgradeButtons.is_locked_drive(player, ship, i):
+            if i == "mus" or index in phase_slots:
                 continue
             oldPart = player_helper.stats[f"old_{ship}_parts"][index]
             lab = part_stats[i]["name"]
@@ -99,9 +104,6 @@ class UpgradeButtons:
         oldPart = customID.split("_")[3]
         discTileUpgrade = customID.split("_")[4]
         indexOfOldPart = customID.split("_")[5]
-        if UpgradeButtons.is_locked_drive(player, ship, oldPart):
-            await interaction.followup.send("A Harvester may not remove its Drive.", ephemeral=True)
-            return
         if int(indexOfOldPart) in PlayerHelper.get_phase_module_slots(player, ship):
             await interaction.followup.send("The Phase Module is built in and cannot be replaced.", ephemeral=True)
             return
@@ -116,6 +118,10 @@ class UpgradeButtons:
             available_parts = {part for part in available_parts
                                if part != "empty" and part not in DISCOVERY_PART_IDS}
         slot_note = ""
+        if UpgradeButtons.must_keep_drive(player, ship, oldPart):
+            available_parts = {part for part in available_parts
+                               if part != "empty" and UpgradeButtons.is_drive(part)}
+            slot_note = " A Harvester must keep a Drive in this slot."
         spine_slot = int(indexOfOldPart) in PlayerHelper.get_spine_cannon_slots(player, ship)
         if spine_slot:
             # a Spine Cannon slot may be upgraded, but only with a gun
@@ -157,8 +163,9 @@ class UpgradeButtons:
         newPart = customID.split("_")[4]
         discTileUpgrade = customID.split("_")[6]
         indexOfOldPart = customID.split("_")[5]
-        if UpgradeButtons.is_locked_drive(player, ship, oldPart):
-            await interaction.followup.send("A Harvester may not remove its Drive.", ephemeral=True)
+        if UpgradeButtons.must_keep_drive(player, ship, oldPart) and (
+                newPart == "empty" or not UpgradeButtons.is_drive(newPart)):
+            await interaction.followup.send("A Harvester must keep a Drive in this slot.", ephemeral=True)
             return
         with open("data/parts.json", "r") as f:
             part_stats = json.load(f)

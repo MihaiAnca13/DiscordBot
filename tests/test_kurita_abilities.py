@@ -114,7 +114,7 @@ def test_first_shot_mirror_uses_normal_order(make_game, run):
     assert _prompts(game, run, FakeInteraction().channel, 1) == [(5, "blue")]
 
 
-def test_first_shot_delays_the_whole_allied_side(make_game):
+def test_first_shot_delays_only_kurita_in_an_alliance(make_game):
     game = _combat_game(make_game)
     game.gamestate["players"]["3"] = _stats("hyd", "green")
     game.formAlliance("nova", ["blue", "green"])
@@ -123,7 +123,7 @@ def test_first_shot_delays_the_whole_allied_side(make_game):
 
     tile = game.gamestate["board"][POS]
     assert Combat.findSidesInTile(game, POS) == [["blue", "green"], ["red"]]
-    assert Combat.firstShotSideOf(game, tile["attacker"], tile["defender"]) == ["blue", "green"]
+    assert Combat.firstShotSideOf(game, tile["attacker"], tile["defender"]) == ["blue"]
 
 
 def test_start_combat_resets_the_opening_for_each_pairing(make_game, run):

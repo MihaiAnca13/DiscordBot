@@ -2864,7 +2864,7 @@
                 "home_planet": "251",
                 "owned_tiles": [],
                 "explore_apt": 1,
-                "research_apt": 1,
+                "research_apt": 2,
                 "upgrade_apt": 2,
                 "build_apt": 2,
                 "move_apt": 2,

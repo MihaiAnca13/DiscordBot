@@ -35,7 +35,7 @@ def test_kurita_starting_values():
     assert kur["trade_value"] == 3
     assert kur["influence_discs"] == 12
     assert [kur[f"{action}_apt"] for action in
-            ("explore", "research", "upgrade", "build", "move", "influence")] == [1, 1, 2, 2, 2, 2]
+            ("explore", "research", "upgrade", "build", "move", "influence")] == [1, 2, 2, 2, 2, 2]
 
 
 def test_kurita_starts_with_phase_shields_only():

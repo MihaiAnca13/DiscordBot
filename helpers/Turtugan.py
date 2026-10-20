@@ -353,8 +353,8 @@ class Carapace:
                              custom_id=f"FCID{color}_carapaceMissile_{pos}_damage_{token}"))
         view.add_item(Button(label="-1 to Hit", style=discord.ButtonStyle.green,
                              custom_id=f"FCID{color}_carapaceMissile_{pos}_hit_{token}"))
-        await interaction.channel.send(f"{game.getPlayerObjectFromColor(color)['player_name']}, Carapace Shields"
-                                       f" alters your {ship_type} missile die ({dieNum}). Choose -1 damage"
+        await interaction.channel.send(f"{game.getPlayerObjectFromColor(color)['player_name']}, the target's"
+                                       f" Carapace Shields alter your missile die ({dieNum}). Choose -1 damage"
                                        " or -1 to hit.", view=view)
 
     @staticmethod
