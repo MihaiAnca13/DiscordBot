@@ -16,7 +16,7 @@ import random
 from discord.ui import View, Button
 
 # Nebula Sectors (295/395) are one hex split into three Subsectors. Edges are
-# indexed 0=N, 1=NE, 2=SE, 3=S, 4=SW, 5=NW; the parent board position holds
+# indexed 0=N, 1=NE, 2=SE, 3=S, 4=SW, 5=NW at zero rotation; the parent board position holds
 # the Ancient subsector, subsectors b/c the discovery ones.
 NEBULA_WEDGES = {"": (1, 2), "b": (0, 5), "c": (3, 4)}
 
@@ -397,15 +397,23 @@ class GamestateHelper:
                 sub = tile if suffix == "" else {**copy.deepcopy(tile), **tile["subsectors"][suffix],
                                                  "ancient": 0, "player_ships": [], "nebula_parent": position}
                 # every Nebula edge is a wormhole, and siblings connect through internal wormholes
-                sub["adjacent"] = ([neighbors[d] for d in NEBULA_WEDGES[suffix]]
+                sub["adjacent"] = ([neighbors[(d - orientation // 60) % 6] for d in NEBULA_WEDGES[suffix]]
                                    + [position + s for s in suffixes if s != suffix])
                 sub["nebula_internal"] = [position + s for s in suffixes if s != suffix]
                 self.gamestate["board"][position + suffix] = sub
         self.update()
 
     def nebula_subsector_for_edge(self, parent, edge):
-        # edge: direction from the Nebula hex to its neighbour (Nebulas are always placed unrotated)
-        return parent + next(s for s, wedge in NEBULA_WEDGES.items() if edge in wedge)
+        local_edge = (edge + self.gamestate["board"][parent]["orientation"] // 60) % 6
+        return parent + next(s for s, wedge in NEBULA_WEDGES.items() if local_edge in wedge)
+
+    def get_tile_label(self, position):
+        tile = self.gamestate["board"][position]
+        if "nebula_internal" not in tile:
+            return position
+        parent = tile.get("nebula_parent", position)
+        suffix = position[len(parent):].upper() or "A"
+        return f"{parent}-{suffix}"
 
     def add_control(self, color, position):
         self.gamestate["board"][position]["owner"] = color
@@ -793,10 +801,7 @@ class GamestateHelper:
             return False
         if self.gamestate["players"][playerID][f"{popType}_pop_cubes"] < 1:
             return False
-        self.gamestate["board"][position]["disc_pop"] = [1]
-        self.gamestate["players"][playerID][f"{popType}_pop_cubes"] -= 1
-        self.update()
-        return True
+        return self.add_pop_specific("disc", popType, 0, position, playerID)
     
 
     def lookAtAllTheTiles(self, color):

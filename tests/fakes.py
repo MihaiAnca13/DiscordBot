@@ -54,13 +54,13 @@ class FakeChannel:
         self.messages.append(FakeMessage(self))
         return self.messages[-1]
 
-    async def edit(self, **kwargs):
-        pass
-
     async def fetch_message(self, message_id):
         if message_id in self.deleted:
             raise discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), "Unknown Message")
         return FakeMessage(self)
+
+    async def edit(self, **kwargs):
+        self.edited = kwargs
 
     def message_with(self, custom_id):
         """The latest message carrying this button, as Discord hands it to the press."""

@@ -76,6 +76,21 @@ def test_first_shot_opponent_shoots_before_kurita(make_game, run):
                           "(Defender) Roll Initative 3 Ships"]
 
 
+def test_refresh_preserves_the_current_first_shot_turn(make_game, run):
+    game = _combat_game(make_game)
+    game.get_player(1)["base_cruiser_speed"] = 5
+    game.get_player(2)["base_cruiser_speed"] = 4
+    tile = _start_pairing(game, ["blue-cru"], ["red-cru"])
+    channel = FakeInteraction().channel
+    assert _prompts(game, run, channel, 1) == [(4, "red")]
+
+    run(Combat.refreshCombatPrompt(game, POS, channel))
+
+    assert (tile["currentSpeed"], tile["currentRoller"]) == (4, "red")
+    assert tile["firstShotPhase"] == "opponent"
+    assert _prompts(game, run, channel, 1) == [(5, "blue")]
+
+
 def test_first_shot_delays_kurita_missiles(make_game, run):
     game = _combat_game(make_game)
     game.get_player(1).update({"base_interceptor_speed": 6, "base_cruiser_speed": 5})

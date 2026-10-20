@@ -163,7 +163,8 @@ class Combat:
                     tiles.append((int(tile_map[tile]["sector"]), tile))
             else:
                 sides = Combat.findSidesInTile(game, tile)
-                if len(sides) == 1 and "ai" not in sides[0] and tile_map[tile].get("owner") == 0:
+                if (len(sides) == 1 and "ai" not in sides[0] and tile_map[tile].get("owner") == 0
+                        and tile_map[tile].get("type") != "nebula"):
                     tiles.append((int(tile_map[tile]["sector"]), tile))
         return sorted(tiles, key=lambda x: x[0], reverse=True)
 
@@ -240,7 +241,6 @@ class Combat:
         tile = game.gamestate["board"][pos]
         tile["firstShotSide"] = Combat.firstShotSideOf(game, tile["attacker"], tile["defender"])
         tile["firstShotPhase"] = "opponent" if tile["firstShotSide"] else None
-        game.setCurrentRoller(None, pos)
         game.setCurrentRoller(None, pos)
         for side in sides:
             for player in side:
@@ -1711,7 +1711,24 @@ class Combat:
                             break
 
     @staticmethod
-    async def promptNextSpeed(game: GamestateHelper, pos: str, channel, update: bool):
+    async def refreshCombatPrompt(game: GamestateHelper, pos: str, channel):
+        tile = game.gamestate["board"][pos]
+        if len(Combat.currentPairing(game, pos)) != 2 or Combat.isDracoAgainstAncients(game, pos):
+            await channel.send("There is no active combat at that position.")
+            return
+        if (tile.get("unresolvedHits", 0) > 0 or tile.get("pendingRiftDice")
+                or any(tile.get("pendingRiftBackfire", {}).values())):
+            await channel.send("Resolve the pending hits and Rift Cannon effects before rolling again.")
+            return
+        if (tile.get("wolfPack") or tile.get("pendingWolfPack") or tile.get("ghostsRetreatPending")
+                or any(not tile.get("phaseModuleReady", {}).get(color)
+                       for color in tile.get("phaseModuleColors", []))):
+            await channel.send("Resolve the pending faction ability choices before rolling again.")
+            return
+        await Combat.promptNextSpeed(game, pos, channel, False, repeat=True)
+
+    @staticmethod
+    async def promptNextSpeed(game: GamestateHelper, pos: str, channel, update: bool, repeat: bool = False):
         if Carapace.has_pending_missiles(game, pos):
             return
         currentSpeed = None
@@ -1727,7 +1744,7 @@ class Combat:
 
         nextPair = Combat.nextSpeedPair(sortedSpeeds, currentSpeed, currentRoller)
         phase = game.gamestate["board"][pos].get("firstShotPhase")
-        if phase is not None:
+        if phase is not None and not repeat:
             firstShotSide = game.gamestate["board"][pos].get("firstShotSide") or []
             phaseSpeeds = [pair for pair in sortedSpeeds
                            if (pair[1] in firstShotSide) == (phase == "kurita")]
@@ -1743,7 +1760,9 @@ class Combat:
                     nextPair = next((pair for pair in sortedSpeeds if pair[1] in firstShotSide), None)
         nextSpeed = -20
         nextOwner = ""
-        if nextPair is not None:
+        if repeat and currentSpeed is not None and currentRoller is not None:
+            nextSpeed, nextOwner = currentSpeed, currentRoller
+        elif nextPair is not None:
             nextSpeed, nextOwner = nextPair
         if nextSpeed == -20:
             await Combat.checkForMorphShield(game, pos, channel, ships, list(attacker) + list(defender))
@@ -2016,17 +2035,14 @@ class Combat:
         """Techno-Magic: at the start of a combat, one temporary Upgrade 1 per ship blueprint.
         The attacker chooses first, the defender last."""
         tile = game.gamestate["board"][pos]
-        pairing = Combat.sideOf(tile.get("attacker")) + Combat.sideOf(tile.get("defender"))
-        for color in pairing:
-            if color == "ai":
+        colors = Combat.sideOf(tile.get("attacker")) + Combat.sideOf(tile.get("defender"))
+        for color in colors:
+            if not color or color == "ai":
                 continue
             player = game.getPlayerObjectFromColor(color)
             if not FactionData.has(player, "techno_magic"):
                 continue
-            view = View()
-            for ship in game.getShipsWithParts(player):
-                view.add_item(Button(label=ship.capitalize(), style=discord.ButtonStyle.blurple,
-                                     custom_id=f"FCID{color}_technoMagic_{pos}_{ship}"))
+            view = UpgradeButtons.getTechnoMagicView(game, player, pos)
             if len(view.children):
                 await channel.send(f"{player['player_name']}, Techno-Magic lets you temporarily Upgrade 1 on each"
                                    " ship blueprint for this combat. The new parts are removed when the battle"
@@ -2067,7 +2083,7 @@ class Combat:
                     player[f"{ship}_parts"] = parts
                 game.update_player(player_helper)
                 await channel.send(f"Techno-Magic wears off: the temporary ship parts are removed"
-                                               f" from {player['player_name']}'s blueprints.")
+                                   f" from {player['player_name']}'s blueprints.")
             else:
                 # every install belongs to a combat that is still pending; the pop itself must persist
                 game.update()

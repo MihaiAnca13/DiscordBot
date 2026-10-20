@@ -30,3 +30,11 @@ def test_ra_artwork_key_matches_the_name_lookups():
     # DrawHelper asks for <key>_image.png, name_trade_<key>.png and the class images; the key
     # those lookups produce is what the files above are named after.
     assert FactionData.artwork_name("Remnants of Ra") == "ra"
+
+
+def test_ra_ambassador_has_transparent_token_corners():
+    with Image.open("images/resources/components/factions/ra_ambassador.png") as image:
+        alpha = image.getchannel("A")
+        for corner in [(0, 0), (511, 0), (0, 511), (511, 511)]:
+            assert alpha.getpixel(corner) == 0
+        assert alpha.getpixel((256, 256)) == 255

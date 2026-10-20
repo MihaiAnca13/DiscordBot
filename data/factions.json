@@ -2414,7 +2414,7 @@
         "ra": {
                 "name": "Remnants of Ra",
                 "artwork": "ra",
-                "setup_color": "blue",
+                "setup_color": "yellow",
                 "community": true,
                 "abilities": [
                         "artifact_disc_pop"

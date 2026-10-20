@@ -292,6 +292,23 @@ def test_phase_module_is_offered_only_to_the_wraith_with_ships_in_the_tile(make_
     assert not hydran_channel.sent
 
 
+@pytest.mark.parametrize("pending", ["phase_module", "wolfPack", "pendingWolfPack", "ghostsRetreatPending"])
+def test_combat_refresh_waits_for_faction_choices(make_game, run, pending):
+    game = phase_combat(make_game)
+    channel = FakeInteraction().channel
+    tile = game.gamestate["board"]["101"]
+    if pending == "phase_module":
+        run_offer(game, channel)
+    else:
+        tile[pending] = "blue" if pending == "ghostsRetreatPending" else {"color": "blue"}
+    current_turn = (tile.get("currentSpeed"), tile.get("currentRoller"))
+
+    run(Combat.refreshCombatPrompt(game, "101", channel))
+
+    assert "pending faction ability choices" in channel.sent[-1][0]
+    assert (tile.get("currentSpeed"), tile.get("currentRoller")) == current_turn
+
+
 def test_phase_module_menu_lists_only_the_blueprints_in_the_tile(make_game):
     game = phase_combat(make_game, blue_ships=("blue-int", "blue-cru"))
     channel = FakeInteraction().channel

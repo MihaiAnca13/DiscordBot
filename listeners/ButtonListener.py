@@ -204,6 +204,9 @@ class ButtonListener(commands.Cog):
         if customID == "showGame":
             await TurnButtons.showGame(game, interaction)
             return
+        if customID.startswith("refreshCombatPrompt"):
+            await Combat.refreshCombatPrompt(game, customID.split("_")[1], interaction.channel)
+            return
         if customID.startswith("refreshImage"):
             await Combat.refreshImage(game, customID, interaction)
             return
@@ -332,6 +335,8 @@ class ButtonListener(commands.Cog):
             await UpgradeButtons.chooseUpgrade(game, player, interaction, customID, player_helper)
         elif customID.startswith("undoUpgrade"):
             await UpgradeButtons.undoUpgrade(game, player, interaction, customID, player_helper)
+        elif customID.startswith("restartTechnoMagic"):
+            await UpgradeButtons.restartTechnoMagic(game, player, interaction, customID.split("_")[1])
         elif customID.startswith("technoMagic"):
             await Combat.technoMagicUpgrade(game, customID, player, interaction, player_helper)
         elif customID.startswith("phaseModuleShip"):
