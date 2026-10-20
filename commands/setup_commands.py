@@ -158,16 +158,18 @@ class SetupCommands(commands.GroupCog, name="setup"):
                               community_parts: Optional[bool] = False,
                               community_rep_mod: Optional[bool] = False,
                               ban_factions: Optional[bool] = False,
+                              alliances: Optional[bool] = False,
                               community_factions: bool = False):
         """
         :param ai_ship_type: Choose which type of AI ships to use.
         :param rift_cannon: Rift cannons are enabled by default.
         :param turn_order_variant: Pass turn order is enabled by default.
-        :param galactic_event_tiles: Supernova/black-holes/Pulsars are disabled by default.
+        :param galactic_event_tiles: Supernova/black-holes/Pulsars/Nebula Sectors are disabled by default.
         :param hyperlanes: Hyperlanes for 4p and 5p are default off.
         :param ban_factions: Used to ban 10-playerCount factions from the draft.
         :param community_parts: Turns on community changes to improved hull and phase shield.
         :param community_rep_mod: Turns on the community reputation mod.
+        :param alliances: Enables the Alliances variant; needs 4 or more players.
         :param community_factions: Includes community factions in the draft.
         :return:
         """
@@ -250,12 +252,20 @@ class SetupCommands(commands.GroupCog, name="setup"):
             else:
                 msgBig +="## Hyperlanes have been enabled for this game"
         if galactic_event_tiles:
-            msgBig += "\n## Galactic Event Tiles have been added to this game"
+            msgBig += "\n## Galactic Event Tiles and Nebula Sectors have been added to this game"
         if rift_cannon:
             msgBig += "\n## Rift Cannons have been added to this game"
+        if alliances:
+            if player_count < 4:
+                alliances = False
+                msgBig += ("\n## Alliances require at least 4 players,"
+                           " so they have not been enabled for this game")
+            else:
+                msgBig += "\n## Alliances have been enabled for this game"
         if msgBig != "":
             await actions.send(msgBig)
 
+        game.setAlliances(alliances)
         game.setup_techs_and_outer_rim(player_count, galactic_event_tiles, hyperlanes)
         drawing = DrawHelper(game.gamestate)
 
