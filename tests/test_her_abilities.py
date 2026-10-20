@@ -310,7 +310,7 @@ def test_blueprint_menus_offer_every_printed_slot(start_game, press):
     inter = press_edited(press, channel, inter, "FCIDblue_chooseDifferentShip_")
     inter = press(channel, 1, next(cid for cid in buttons(channel)
                                    if cid.startswith("FCIDblue_upgradeShip_") and "cruiser" in cid))
-    assert len(inter.message.edited["view"].children) == 6 + 1
+    assert len(inter.message.edited["view"].children) == 5 + 1
 
 
 def test_the_extra_interceptor_hull_is_a_replaceable_slot(start_game, press):
@@ -336,7 +336,7 @@ def test_cruiser_has_no_hull_slot_and_costs_four(start_game):
     model = PlayerShip(player, "cruiser")
     assert model.hull == 0
     assert model.cost == 4
-    assert len(player["cruiser_parts"]) == 6
+    assert len(player["cruiser_parts"]) == 5
     assert "hul" not in player["cruiser_parts"]
 
 

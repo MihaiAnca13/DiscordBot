@@ -611,7 +611,7 @@ class Combat:
             return
         if len(hittableShips) > 1:
             msg = (f"{interaction.user.mention}, choose what ship to hit with the die that rolled a {dieNum}."
-                   f" You will deal {dieDam} damage. The bot has calculated that you can hit these ships.")
+                   f" You will deal {str(dieDam).rstrip('!')} damage. The bot has calculated that you can hit these ships.")
             view = View()
             for ship in hittableShips:
                 label, emoji = Combat.getTargetButton(game, pos, ship)
@@ -1759,8 +1759,7 @@ class Combat:
         if nextOwner not in ("", "ai") and nextSpeed < 99:
             playerObj = game.getPlayerObjectFromColor(nextOwner)
             spine_modes = FactionData.has(playerObj, "spine_cannons") and any(
-                speed2 == nextSpeed and len(FactionData.of(playerObj).get("spine_cannon_slots", {})
-                                              .get(shipType, [])) > 1
+                speed2 == nextSpeed and len(PlayerHelper.get_spine_cannon_slots(playerObj, shipType)) > 1
                 for speed2, shipType, _count in Combat.getCombatantShipsBySpeed(game, nextOwner, ships, pos))
 
         if [nextSpeed, nextOwner] in game.getRetreatingUnits(pos):
@@ -2472,6 +2471,8 @@ class Combat:
         ship = buttonID.split("_")[3]
         dieNum = buttonID.split("_")[4]
         dieDam = buttonID.split("_")[5]
+        carapace_bypass = dieDam.endswith("!")
+        dieDam = dieDam.rstrip("!")
         deferEnd = deferEnd or buttonID.endswith("_defer")
         shipType = ship.split("-")[1]
         shipOwner = ship.split("-")[0]
@@ -2487,8 +2488,8 @@ class Combat:
             player = game.get_player_from_color(shipOwner)
             shipModel = PlayerShip(game.gamestate["players"][player], shipType)
         ship_class = shipModel.ship_type if shipOwner != "ai" else shipType.replace("adv", "")
-        damage_value = Carapace.incoming_damage(game, pos, shipOwner, ship_class,
-                                                colorOrAI, int(dieDam))
+        damage_value = int(dieDam) if carapace_bypass else Carapace.incoming_damage(
+            game, pos, shipOwner, ship_class, colorOrAI, int(dieDam))
         damage = game.add_damage(ship, pos, damage_value)
         if colorOrAI != "ai":
             msg = (f"{interaction.user.mention} dealt {damage_value} damage to a"

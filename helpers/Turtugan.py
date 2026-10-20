@@ -373,7 +373,8 @@ class Carapace:
         game.update()
         from helpers.CombatHelper import Combat
         computer = entry["computer"] - (1 if mode == "hit" else 0)
-        damage = max(0, entry["dieDam"] - 1) if mode == "damage" else entry["dieDam"]
+        # "-1 Damage" is the shield's own reduction (incoming_damage); "!" marks -1 to Hit, which replaces it
+        damage = entry["dieDam"] if mode == "damage" else f"{entry['dieDam']}!"
         ships = tile["player_ships"][:]
         hittable = Combat.getOpponentUnitsThatCanBeHit(game, entry["color"], ships, entry["dieNum"],
                                                         computer, pos, entry["speed"])

@@ -130,6 +130,7 @@ def test_carapace_does_not_apply_to_another_faction(make_game, run):
 def missile_game(make_game):
     game = combat_game(make_game, tur_ships=("teal-cru",), red_ships=("red-cru",))
     game.gamestate["players"]["2"]["cruiser_parts"] = ["elc", "ioc", "anm", "nus", "hul", "nud"]
+    game.gamestate["players"]["1"]["cruiser_parts"] = ["hul", "hul", "hul", "hul"]  # survives a 4-damage die
     game.update()
     return game
 
@@ -172,7 +173,18 @@ def test_missile_can_take_minus_one_damage(make_game, run, no_random, press):
     run(Combat.rollDice(game, inter.data["custom_id"], inter))
     damage_id = next(cid for cid in buttons(ch) if "FCIDred_carapaceMissile_202_damage_" in cid)
     press(ch, 2, damage_id)
-    assert reload(game).gamestate["board"]["202"]["damage_tracker"]["teal-cru"] == 2
+    assert reload(game).gamestate["board"]["202"]["damage_tracker"]["teal-cru"] == 3
+
+
+def test_missile_minus_one_to_hit_keeps_full_damage(make_game, run, no_random, press):
+    game = missile_game(make_game)
+    engage(game, "cruiser")
+    ch = channel()
+    no_random([6])
+    inter = FakeInteraction(ch, custom_id="rollDice_202_red_101_attacker")
+    run(Combat.rollDice(game, inter.data["custom_id"], inter))
+    press(ch, 2, next(cid for cid in buttons(ch) if "FCIDred_carapaceMissile_202_hit_" in cid))
+    assert reload(game).gamestate["board"]["202"]["damage_tracker"]["teal-cru"] == 4
 
 
 def test_a_double_pressed_missile_choice_applies_once(make_game, run, no_random, press):
@@ -188,7 +200,7 @@ def test_a_double_pressed_missile_choice_applies_once(make_game, run, no_random,
     inter2 = FakeInteraction(ch, custom_id=handler_id)
     state = reload(game)
     run(Carapace.resolve_missile(state, state.get_player(2), inter2, handler_id))
-    assert reload(game).gamestate["board"]["202"]["damage_tracker"]["teal-cru"] == 2
+    assert reload(game).gamestate["board"]["202"]["damage_tracker"]["teal-cru"] == 3
     assert "already resolved" in inter2.followup.sent[0][0]
 
 

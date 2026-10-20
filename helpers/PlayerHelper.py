@@ -21,16 +21,17 @@ class PlayerHelper:
         return index in FactionData.of(player).get("reputation_only_slots", [])
 
     @staticmethod
+    def blueprint_key(ship_type):
+        """A ship's key in per-blueprint faction data: int -> interceptor, drd -> dread."""
+        return {"int": "interceptor", "cru": "cruiser", "drd": "dread", "sb": "starbase"}.get(ship_type, ship_type)
+
+    @staticmethod
     def get_phase_module_slots(player, ship_type):
-        ship_type = {"int": "interceptor", "cru": "cruiser", "drd": "dread", "sb": "starbase"}.get(
-            ship_type, ship_type)
-        return FactionData.of(player).get("phase_module_slots", {}).get(ship_type, [])
+        return FactionData.of(player).get("phase_module_slots", {}).get(PlayerHelper.blueprint_key(ship_type), [])
 
     @staticmethod
     def get_spine_cannon_slots(player, ship_type):
-        ship_type = {"int": "interceptor", "cru": "cruiser", "drd": "dread", "sb": "starbase"}.get(
-            ship_type, ship_type)
-        return FactionData.of(player).get("spine_cannon_slots", {}).get(ship_type, [])
+        return FactionData.of(player).get("spine_cannon_slots", {}).get(PlayerHelper.blueprint_key(ship_type), [])
 
     @staticmethod
     def is_spine_gun(part):

@@ -8,7 +8,7 @@ from Buttons.Upgrade import UpgradeButtons
 from helpers.CombatHelper import Combat
 from helpers.DrawHelper import DrawHelper
 from helpers.PlayerHelper import PlayerHelper
-from tests.fakes import FakeInteraction, buttons, player_helper, player_stats, reload
+from tests.fakes import FakeChannel, FakeInteraction, buttons, player_helper, player_stats, reload
 
 
 @pytest.fixture(autouse=True)
@@ -54,6 +54,14 @@ def test_spine_hit_mode_turns_a_five_into_a_hit(make_game, no_random, run):
     no_random([5])
     run(Combat.rollDice(game, "rollDice_101_blue_2_deleteMsg", inter))
     assert "damage_tracker" not in game.gamestate["board"]["101"]
+
+
+def test_spine_roll_modes_are_offered_when_the_cruiser_fires(make_game, run):
+    game = _combat_game(make_game, ["nus", "hul", "nud", "ioc", "ioc"])
+    game.gamestate["players"]["2"]["cruiser_parts"] = ["nus", "hul", "hul"]  # unarmed, so only blue rolls
+    channel = FakeChannel("aeb1-actions")
+    run(Combat.promptNextSpeed(game, "101", channel, False))
+    assert any(cid.endswith("_spinehit") for cid in buttons(channel))
 
 
 def test_spine_damage_mode_adds_the_augment_weapons_damage(make_game, no_random, run):
