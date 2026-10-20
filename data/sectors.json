@@ -6636,6 +6636,10 @@
   "253": {
     "owner": 0,
     "name": "Turtuga",
+    "number_snap": [
+      680,
+      350
+    ],
     "ring": 2,
     "disctile": 0,
     "player_ships": [],

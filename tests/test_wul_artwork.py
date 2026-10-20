@@ -14,9 +14,6 @@ WULFEN_ARTWORK = {
     "images/resources/components/layouts/blueprints/classes/wulfen_cruiser_class.png": ((300, 115), "RGBA"),
     "images/resources/components/layouts/blueprints/classes/wulfen_dreadnought_class.png": ((315, 148), "RGBA"),
     "images/resources/components/layouts/blueprints/classes/wulfen_starbase_class.png": ((300, 115), "RGBA"),
-    "images/resources/components/layouts/blueprints/wulfen_cruiser_blueprint.png": ((550, 400), "RGBA"),
-    "images/resources/components/layouts/blueprints/wulfen_dreadnought_blueprint.png": ((550, 400), "RGBA"),
-    "images/resources/components/layouts/blueprints/wulfen_starbase_blueprint.png": ((550, 400), "RGBA"),
 }
 
 
@@ -37,3 +34,4 @@ def test_wulfen_artwork_key_matches_the_name_lookups():
 def test_wulfen_has_no_interceptor_art():
     assert not Path("images/resources/components/layouts/blueprints/classes/"
                     "wulfen_interceptor_class.png").exists()
+

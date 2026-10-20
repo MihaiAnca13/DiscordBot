@@ -203,10 +203,11 @@ def test_player_area_draws_three_wulfen_blueprints(start_game, monkeypatch):
     image = DrawHelper(game.gamestate).player_area(player)
 
     assert image.size == (5000, 800)
-    assert not [path for path in loaded if "wulfen_interceptor" in path]
+    joined = " ".join(loaded)
+    assert "blueprint_interceptor.png" not in joined
     for ship in ("cruiser", "dreadnought", "starbase"):
-        assert f"wulfen_{ship}_blueprint.png" in " ".join(loaded)
-        assert f"wulfen_{ship}_class.png" in " ".join(loaded)
+        assert f"blueprint_{ship}.png" in joined
+        assert f"wulfen_{ship}_class.png" in joined
 
 
 def _wolf_game(make_game):
