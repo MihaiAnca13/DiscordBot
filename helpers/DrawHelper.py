@@ -501,6 +501,16 @@ class DrawHelper:
                 for resource in ["neutral", "neutraladv", "money", "moneyadv", "science", "scienceadv",
                                  "material", "materialadv", "orbital", "disc"]:
                     paste_resourcecube(tile, tile_image, resource, color, disc_center)
+            draw = ImageDraw.Draw(tile_image)
+            for player in self.gamestate["players"].values():
+                for placement in player.get("harvester_placements", []):
+                    if placement["position"] != position:
+                        continue
+                    x, y = (345 / 1024 * mult * c for c in
+                            tile[f"{placement['square']}{int(placement['index']) + 1}_snap"])
+                    radius = 30 * mult
+                    draw.ellipse((x - radius, y - radius, x + radius, y + radius),
+                                 outline=player["color"], width=int(5 * mult))
             if tile.get("type") == "nebula":
                 tile_image = tile_image.rotate(rotation)
                 self.label_nebula_subsectors(tile_image, position, rotation)

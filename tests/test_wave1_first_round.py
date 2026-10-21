@@ -117,6 +117,14 @@ def test_wave1_community_factions_setup_and_first_round(games_dir, run, press, m
         assert len(player["owned_tiles"]) >= 1
     assert reload(game).gamestate["activePlayerColor"] == [colors[1]]
 
+    # Turtugan's starting Harvester farms the unsettled advanced science square of its home.
+    tur, tur_color = FACTIONS.index("tur") + 1, colors[FACTIONS.index("tur") + 1]
+    press(channel, tur, f"FCID{tur_color}_startPlaceHarvester")
+    press(channel, tur, f"FCID{tur_color}_harvesterSector_314")
+    press(channel, tur, f"FCID{tur_color}_placeHarvester_314_scienceadv_0_science")
+    assert reload(game).get_player(tur)["harvester_placements"] == [
+        {"position": "314", "square": "scienceadv", "index": 0, "resource": "science"}]
+
     for pid in range(1, 9):
         press(channel, pid, f"FCID{colors[pid]}_passForRound")
     press(channel, 1, "runUpkeep")
