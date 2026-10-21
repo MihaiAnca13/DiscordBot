@@ -46,7 +46,7 @@ def finish_build(press, channel, color="blue"):
     inter = press(channel, 1, next(cid for cid in view_ids(inter) if cid.startswith(f"FCID{color}_finishBuild_")))
     inter = press(channel, 1, next(cid for cid in buttons(channel) if cid.startswith(f"FCID{color}_spendMaterial_")))
     return press(channel, 1, next(cid for cid in view_ids(inter)
-                                   if cid.startswith(f"FCID{color}_finishSpendForBuild_")))
+                                  if cid.startswith(f"FCID{color}_finishSpendForBuild_")))
 
 
 def build_one_unit(press, channel, color="blue", first=True):
@@ -517,7 +517,6 @@ def test_phase_module_bombing_only_tile_offers_neutron_bombs_when_powered(make_g
     assert any("spend 2 Power" in content for content, _kwargs in bombing.sent)
 
 
-
 @pytest.mark.parametrize("change", ["round", "fleet", "owner", "population", "combat"])
 def test_phase_module_rejects_obsolete_bombing_prompt(make_game, run, press, change):
     blue = player_stats("wra", color="blue", military_tech=["phm", "neb"], wraithSouls=2)
@@ -615,6 +614,7 @@ def test_rolling_is_refused_until_the_phase_module_declaration_is_done(make_game
 
     asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_speed",
                                          FakeInteraction(channel, message=message)))
+
     async def prompt(_game, _pos, _channel, _update):
         return None
     monkeypatch.setattr(Combat, "promptNextSpeed", prompt)
@@ -650,11 +650,11 @@ def test_declared_power_is_spent_once_and_survives_the_next_combat(make_game, ru
 
     monkeypatch.setattr(Combat, "promptNextSpeed", prompt)
     run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_speed",
-                                FakeInteraction(channel, message=message)))
+                                 FakeInteraction(channel, message=message)))
     run(Combat.phaseModuleDone(game, "phaseModuleDone_101_blue",
-                              FakeInteraction(channel, message=message)))
+                               FakeInteraction(channel, message=message)))
     run(Combat.phaseModuleDone(game, "phaseModuleDone_101_blue",
-                              FakeInteraction(channel, message=message)))
+                               FakeInteraction(channel, message=message)))
     game = reload(game)
     assert game.get_player(1)["wraithPowerSpent"] == 2
     assert game.get_player(1)["wraithSouls"] == 2

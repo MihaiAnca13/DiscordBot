@@ -34,4 +34,3 @@ def test_wulfen_artwork_key_matches_the_name_lookups():
 def test_wulfen_has_no_interceptor_art():
     assert not Path("images/resources/components/layouts/blueprints/classes/"
                     "wulfen_interceptor_class.png").exists()
-

@@ -186,8 +186,8 @@ class ExploreButtons:
     async def reservedTile(game: GamestateHelper, player, interaction: discord.Interaction, customID: str):
         position, choice, token = customID.split("_")[1:4]
         if position not in ExploreButtons.getTilesToExplore(game, player):
-            await interaction.followup.send(f"{player['player_name']}, you cannot explore position {position} right now.",
-                                            ephemeral=True)
+            await interaction.followup.send(
+                f"{player['player_name']}, you cannot explore position {position} right now.", ephemeral=True)
             return
         if not DeepSpace.can_offer(player, position) and choice != "random":
             await interaction.followup.send("That sector is no longer in your Deep Space reserve.", ephemeral=True)

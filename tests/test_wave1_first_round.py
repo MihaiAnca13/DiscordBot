@@ -81,7 +81,7 @@ def test_wave1_community_factions_setup_and_first_round(games_dir, run, press, m
     press(channel, 2, find_button(channel, f"FCID{colors[2]}_keepDiscForPoints"))
     press(channel, 3, f"FCID{colors[3]}_setupTech")
     press(channel, 3, next(cid for cid in buttons(channel)
-                            if cid.startswith(f"FCID{colors[3]}_getTech_")))
+                           if cid.startswith(f"FCID{colors[3]}_getTech_")))
 
     explored = []
     for pid, key in enumerate(FACTIONS, 1):

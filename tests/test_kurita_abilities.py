@@ -16,7 +16,6 @@ from tests.fakes import FakeInteraction, POS, board_tile, offered_ids, player_he
 
 @pytest.fixture(autouse=True)
 def _no_render(monkeypatch):
-    from PIL import Image
     monkeypatch.setattr("helpers.CombatHelper.DrawHelper", lambda *a, **k: type(
         "NoDraw", (), {"player_area": lambda self, player: None,
                        "show_player_ship_area": lambda self, image: None})())
@@ -235,8 +234,8 @@ def test_full_track_replacement_keeps_the_adjustment(make_game, run):
     game.get_player(1)["reputation_track"] = [1, 2, 3, 4]
 
     run(ReputationButtons.resolveGainingReputation(game, 1, FakeInteraction(),
-                                                    player_helper(game, "blue"), False,
-                                                    battle_rep_adjustment=1))
+                                                   player_helper(game, "blue"), False,
+                                                   battle_rep_adjustment=1))
 
     player = game.getPlayerObjectFromColor("blue")
     assert player["reputation_track"][0] == 5
@@ -248,8 +247,8 @@ def test_returned_tile_drops_its_battle_marker(make_game, run):
     game.get_player(1)["reputation_track"] = [4, 4, 4, 4]
 
     run(ReputationButtons.resolveGainingReputation(game, 1, FakeInteraction(),
-                                                    player_helper(game, "blue"), False,
-                                                    battle_rep_adjustment=1))
+                                                   player_helper(game, "blue"), False,
+                                                   battle_rep_adjustment=1))
 
     player = game.getPlayerObjectFromColor("blue")
     assert player["reputation_track"] == [4, 4, 4, 4]
@@ -264,8 +263,8 @@ def test_replacement_compares_tile_plus_marker(make_game, run):
     player["reputationBonuses"] = {"1": -1, "2": 1}
 
     run(ReputationButtons.resolveGainingReputation(game, 1, FakeInteraction(),
-                                                    player_helper(game, "blue"), False,
-                                                    battle_rep_adjustment=1))
+                                                   player_helper(game, "blue"), False,
+                                                   battle_rep_adjustment=1))
 
     player = game.getPlayerObjectFromColor("blue")
     assert player["reputation_track"] == [4, 3, 4, 4]
@@ -280,7 +279,7 @@ def test_replacing_a_marked_tile_with_a_plain_draw_drops_the_marker(make_game, r
     player["reputationBonuses"] = {"1": 1}
 
     run(ReputationButtons.resolveGainingReputation(game, 1, FakeInteraction(),
-                                                    player_helper(game, "blue"), False))
+                                                   player_helper(game, "blue"), False))
 
     player = game.getPlayerObjectFromColor("blue")
     assert player["reputation_track"] == [4, 4, 4, 4]

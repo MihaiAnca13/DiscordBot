@@ -94,4 +94,3 @@ def test_kurita_reputation_only_slots_stay_out_of_relations():
     player["color"] = "blue"
     player["reputation_track"] = [1, 2, 3, 4]
     assert [index for index in range(4) if PlayerHelper.is_reputation_only_slot(player, index)] == [2, 3]
-

@@ -149,7 +149,6 @@ class PlayerShip(Ship):
             return ship_type
 
 
-
 class AI_Ship(Ship):
     def __init__(self, ship_type, advanced=False, wa=False):
         super().__init__()

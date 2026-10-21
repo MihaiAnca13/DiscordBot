@@ -383,7 +383,7 @@ class Carapace:
         damage = entry["dieDam"] if mode == "damage" else f"{entry['dieDam']}!"
         ships = tile["player_ships"][:]
         hittable = Combat.getOpponentUnitsThatCanBeHit(game, entry["color"], ships, entry["dieNum"],
-                                                        computer, pos, entry["speed"])
+                                                       computer, pos, entry["speed"])
         if hittable:
             await Combat.offerHitPrompt(game, interaction, pos, entry["color"], hittable,
                                         entry["dieNum"], damage, entry["counter"], deferEnd=True)

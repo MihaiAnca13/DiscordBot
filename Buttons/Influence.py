@@ -177,7 +177,8 @@ class InfluenceButtons:
         await interaction.message.delete()
         await interaction.channel.send(f"{p1['player_name']} you may remove up to {apt} disk{'s' if apt != 1 else ''}"
                                        f" and influence up to {apt} space{'s' if apt != 1 else ''}. You may also"
-                                       " refresh colony ships or put down population at any time during this resolution.",
+                                       " refresh colony ships or put down population at any time during this"
+                                       " resolution.",
                                        view=view)
 
     @staticmethod

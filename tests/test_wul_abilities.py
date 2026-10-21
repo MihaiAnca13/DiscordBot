@@ -2,12 +2,9 @@
 import pytest
 from PIL import Image
 
-from Buttons.Build import BuildButtons
-from Buttons.Move import MoveButtons
 from Buttons.Upgrade import UpgradeButtons
 from helpers.CombatHelper import Combat
 from helpers.DrawHelper import DrawHelper
-from helpers.PlayerHelper import PlayerHelper
 from tests.fakes import FakeChannel, FakeInteraction, buttons, player_helper, player_stats, reload
 
 
@@ -130,7 +127,7 @@ def test_upgrade_menu_filters_spine_slots_to_guns(start_game, press):
     game.update()
     press(channel, 1, "FCIDblue_startUpgrade")
     inter = press(channel, 1, next(c for c in buttons(channel)
-                                    if "_upgradeShip_" in c and c.endswith("_cruiser_dummy")))
+                                   if "_upgradeShip_" in c and c.endswith("_cruiser_dummy")))
     menu = {c.custom_id: c.label for c in inter.message.edited["view"].children}
     inter = press(channel, 1, next(c for c in menu if "_selectOldPart_" in c and c.endswith("_3")))
     offered = {c.custom_id.split("_")[5] for c in inter.message.edited["view"].children
@@ -163,7 +160,7 @@ def test_a_valid_spine_replacement_can_be_undone(start_game, press):
 
     press(channel, 1, "FCIDblue_startUpgrade")
     inter = press(channel, 1, next(c for c in buttons(channel)
-                                    if "_upgradeShip_" in c and c.endswith("_starbase_dummy")))
+                                   if "_upgradeShip_" in c and c.endswith("_starbase_dummy")))
     menu = {c.custom_id: c.label for c in inter.message.edited["view"].children}
     inter = press(channel, 1, next(c for c in menu if "_selectOldPart_" in c and c.endswith("_3")))
     menu = {c.custom_id: c.label for c in inter.message.edited["view"].children}

@@ -37,9 +37,9 @@ def test_abilities_come_from_the_faction_data():
 
 def test_rho_trades_money_on_the_factions_own_ratio():
     player = player_stats("rho", science=0, money=6, materials=0)
+    hyd = player_stats("hyd", science=0, money=6, materials=0)
     assert ResearchButtons.getPlayerTotalAvailableScience(player, None) == 4
-    assert ResearchButtons.getPlayerTotalAvailableScience(player_stats("hyd", science=0, money=6,
-                                                                      materials=0), None) == 2
+    assert ResearchButtons.getPlayerTotalAvailableScience(hyd, None) == 2
 
 
 def test_rho_pays_two_resources_for_one_money_trade(run):

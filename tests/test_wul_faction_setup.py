@@ -47,7 +47,6 @@ def test_setup_loads_the_wulfen_blueprints(start_game, press):
 
 
 def test_general_setup_gives_two_brown_factions_different_colours(games_dir, run, monkeypatch):
-    import asyncio
     from helpers.GamestateHelper import GamestateHelper
     from setup.GameInit import GameInit
     from tests.fakes import FakeChannel, FakeInteraction

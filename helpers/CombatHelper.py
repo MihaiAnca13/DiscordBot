@@ -615,7 +615,8 @@ class Combat:
             return
         if len(hittableShips) > 1:
             msg = (f"{interaction.user.mention}, choose what ship to hit with the die that rolled a {dieNum}."
-                   f" You will deal {str(dieDam).rstrip('!')} damage. The bot has calculated that you can hit these ships.")
+                   f" You will deal {str(dieDam).rstrip('!')} damage. The bot has calculated that you can hit"
+                   f" these ships.")
             view = View()
             for ship in hittableShips:
                 label, emoji = Combat.getTargetButton(game, pos, ship)
