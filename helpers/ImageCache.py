@@ -125,8 +125,6 @@ class ImageCacheHelper:
         elif "tech_" in filename.lower():
             return (188,187)
         elif "blueprint" in filename.lower():
-            if filename.lower().startswith("wulfen_"):
-                return Image.open(os.path.join(folder, filename)).convert("RGBA").size
             if "dread" in filename.lower():
                 return (561,400)
             else:
@@ -136,7 +134,7 @@ class ImageCacheHelper:
         elif "player_layout" in filename.lower():
             return (4897,795)
         elif "classes" in folder.lower():
-            return Image.open(os.path.join(folder, filename)).size
+            return (90,33)
         elif "factionimages" in folder.lower():
             return (600,600)
         return (70, 70)

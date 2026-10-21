@@ -3391,7 +3391,7 @@
                 "base_dread_speed": 0,
                 "base_dread_nrg": 0,
                 "base_dread_comp": 0,
-                "base_starbase_speed": 3,
+                "base_starbase_speed": 4,
                 "base_starbase_nrg": 3,
                 "base_starbase_comp": 0,
                 "spine_cannon_slots": {

@@ -86,7 +86,7 @@ def test_a_plasma_augment_adds_two(make_game, no_random, run):
     })
     inter = FakeInteraction()
     no_random([6])
-    run(Combat.rollDice(game, "rollDice_101_blue_3_deleteMsg_spinedmg", inter))
+    run(Combat.rollDice(game, "rollDice_101_blue_4_deleteMsg_spinedmg", inter))
     # Ion Cannon 1 + Plasma augment 2
     assert game.gamestate["board"]["101"]["damage_tracker"]["red-cru"] == 3
 
@@ -214,8 +214,8 @@ def test_player_area_draws_three_wulfen_blueprints(start_game, monkeypatch):
     joined = " ".join(loaded)
     assert "blueprint_interceptor.png" not in joined
     for ship in ("cruiser", "dreadnought", "starbase"):
-        assert f"wulfen_{ship}_blueprint.png" in joined
-        assert f"blueprint_{ship}.png" not in joined
+        assert f"blueprint_{ship}.png" in joined
+        assert f"wulfen_{ship}_class.png" in joined
 
 
 def _wolf_game(make_game):
