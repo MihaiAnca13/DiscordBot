@@ -1,14 +1,15 @@
 """Turtugan's three faction rules.
 
-Deep Space Explorers keeps two S3 sectors on the player and offers them on a
-future Explore action. Harvesters are starbases that move and farm an
-unsettled planet. Carapace Shields is per-tile, per-class combat state.
+Deep Space Explorers keeps two S3 sectors the game did not deal into its deck
+and marks the ring-3 slots next to the home sector for them. Harvesters are
+starbases that move and farm an unsettled planet. Carapace Shields is per-tile,
+per-class combat state.
 """
 import asyncio
-import random
 
 import discord
 from discord.ui import View, Button
+from jproperties import Properties
 
 from helpers import FactionData
 
@@ -20,15 +21,50 @@ class DeepSpace:
 
     @staticmethod
     def draw_reserve(game, player):
-        """Setup: take two S3 sectors out of the deck and keep them on the player."""
+        """Setup: take two S3 sectors the game did not deal into its deck and keep them on the player.
+
+        The two slots next to the home sector are marked for them, so the map shows where they go.
+        """
         if not FactionData.has(player, "deep_space_explorers"):
             return
         reserve = player.setdefault("deep_space_sectors", [])
-        deck = game.gamestate.get("tile_deck_300", [])
-        while len(reserve) < 2 and deck:
-            random.shuffle(deck)
-            reserve.append(deck.pop(0))
+        spare = game.gamestate.setdefault("sector3_spare", [])
+        while len(reserve) < 2 and spare:
+            reserve.append(spare.pop(0))
+        DeepSpace.mark_positions(game, player)
         game.update()
+
+    @staticmethod
+    def mark_positions(game, player):
+        """Mark the two ring-3 slots next to the home sector as this player's extra S3 sectors."""
+        home = game.get_system_coord(player["home_planet"])
+        if home is False:
+            return
+        for position in DeepSpace.neighbours(game, home):
+            if position not in game.gamestate["board"]:
+                continue
+            if game.gamestate["board"][position].get("sector") != "sector3back":
+                continue
+            game.gamestate["board"][position]["deep_space"] = player["color"]
+            player.setdefault("deep_space_positions", []).append(position)
+            if len(player["deep_space_positions"]) == 2:
+                return
+
+    @staticmethod
+    def neighbours(game, position):
+        """The map positions next to a position."""
+        configs = Properties()
+        if game.gamestate.get("5playerhyperlane"):
+            name = "data/tileAdjacencies_5p.properties"
+            if game.gamestate.get("player_count") == 4:
+                name = "data/tileAdjacencies_4p.properties"
+        else:
+            name = "data/tileAdjacencies.properties"
+        with open(name, "rb") as f:
+            configs.load(f)
+        if position not in configs:
+            return []
+        return configs.get(position)[0].split(",")
 
     @staticmethod
     async def post_reserve(game, player, channel):
@@ -38,14 +74,15 @@ class DeepSpace:
         drawing = DrawHelper(game.gamestate)
         reserve = player.get("deep_space_sectors", [])
         if not reserve:
-            await channel.send(f"{player['player_name']}, the S3 deck ran out before Deep Space Explorers"
-                               " could reserve any sectors.")
+            await channel.send(f"{player['player_name']}, there were no extra S3 sectors for Deep Space"
+                               " Explorers to reserve.")
             return
+        slots = ", ".join(player.get("deep_space_positions", []))
         for tile in reserve:
             image = await asyncio.to_thread(drawing.base_tile_image, tile)
             file = await asyncio.to_thread(drawing.show_single_tile, image)
-            await channel.send(f"{player['player_name']}, Deep Space Explorers reserves S3 sector {tile}.",
-                               file=file)
+            await channel.send(f"{player['player_name']}, Deep Space Explorers reserves S3 sector {tile},"
+                               f" for the marked slots {slots}.", file=file)
 
     @staticmethod
     def can_offer(player, position):

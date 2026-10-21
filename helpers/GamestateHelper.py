@@ -1134,6 +1134,8 @@ class GamestateHelper:
             random.shuffle(third_sector_tiles)
             self.gamestate["tile_deck_300"].append(third_sector_tiles.pop(0))
             sector_draws -= 1
+        # the S3 sectors the game did not deal into the deck: extra ones a faction can use
+        self.gamestate["sector3_spare"] = third_sector_tiles
 
         while tech_draws > 0:
             random.shuffle(self.gamestate["tech_deck"])

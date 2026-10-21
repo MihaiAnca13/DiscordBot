@@ -16,13 +16,44 @@ def offer_reserved_choice(press, channel, position):
                 and "_random_" not in cid)
 
 
-def test_setup_reserves_two_sectors_and_removes_them_from_the_deck(start_game):
+def test_setup_reserves_two_sectors_without_taking_them_from_the_deck(start_game):
     game, _channel = start_game(factions=["tur", "eri"])
     player = game.get_player(1)
     reserve = player["deep_space_sectors"]
     assert len(reserve) == 2
+    # the sectors come from the ones the game did not deal into the deck
     assert not set(reserve) & set(game.gamestate["tile_deck_300"])
     assert not DeepSpace.has_reserve(game.get_player(2))
+
+
+def test_setup_marks_two_ring_three_slots_next_to_the_home(start_game):
+    game, _channel = start_game(factions=["tur", "eri"])
+    player = game.get_player(1)
+    home = game.get_system_coord(player["home_planet"])
+    marked = player["deep_space_positions"]
+    assert len(marked) == 2
+    for position in marked:
+        assert position != home
+        assert game.gamestate["board"][position]["sector"] == "sector3back"
+        assert game.gamestate["board"][position]["deep_space"] == player["color"]
+
+
+def test_the_marked_slot_gets_the_same_border_as_an_owned_sector(make_game):
+    from helpers.DrawHelper import DrawHelper
+
+    stats = {"name": "Turtugan", "artwork": "turtugan", "color": "teal", "home_planet": "253",
+             "player_name": "teal"}
+    game = make_game({"players": {"1": stats},
+                      "board": {"301": {"sector": "sector3back", "orientation": 0, "deep_space": "teal"},
+                                "302": {"sector": "sector3back", "orientation": 0}},
+                      "player_count": 2})
+    drawing = DrawHelper(game.gamestate)
+
+    def border_pixels(image):
+        return sum(1 for pixel in image.convert("RGB").getdata() if pixel == (0, 203, 170))
+
+    assert border_pixels(drawing.board_tile_image("301")) > 0
+    assert border_pixels(drawing.board_tile_image("302")) == 0
 
 
 def test_reserved_sector_is_offered_on_a_ring_three_position(start_game, press):
@@ -135,6 +166,6 @@ def test_a_short_deck_takes_what_is_available(make_game):
              "player_name": "blue"}
     game = make_game({"players": {"1": stats},
                       "board": {"201": {"sector": "253", "orientation": 0, "player_ships": []}},
-                      "tile_deck_300": ["301"]})
+                      "tile_deck_300": ["301"], "sector3_spare": ["302"]})
     game.setup_finished()
-    assert game.get_player(1)["deep_space_sectors"] == ["301"]
+    assert game.get_player(1)["deep_space_sectors"] == ["302"]
