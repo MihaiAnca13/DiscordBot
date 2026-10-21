@@ -1,4 +1,5 @@
 from discord.ui import View
+from PIL import Image
 
 from Buttons.Explore import ExploreButtons
 from Buttons.Harvester import HarvesterButtons
@@ -208,6 +209,32 @@ def test_a_second_placement_replaces_the_first_in_the_same_sector(start_game):
     assert Harvester.record(game, player, "201", "materialadv", 0, "material")
     assert len(player["harvester_placements"]) == 1
     assert player["harvester_placements"][0]["square"] == "materialadv"
+
+
+def test_the_harvester_circle_has_a_black_border_on_both_sides(make_game, monkeypatch):
+    """The circle on the map is the player's colour, ringed in black so it pops."""
+    monkeypatch.setattr(DrawHelper, "use_image",
+                        lambda self, filename: Image.new("RGBA", (1024, 890), (255, 255, 255, 255)))
+    monkeypatch.setattr(DrawHelper, "use_resized_image",
+                        lambda self, filename, size: self.use_image(filename).resize(size))
+    stats = player_stats("tur", color="teal")
+    stats["harvester_placements"] = [
+        {"position": "201", "square": "science", "index": 0, "resource": "science"}]
+    game = make_game({
+        "player_count": 2,
+        "players": {"1": stats},
+        "board": {"201": {"sector": "253", "orientation": 0, "owner": "teal",
+                          "science_pop": [0], "science1_snap": [700, 700]}},
+    })
+
+    pixels = DrawHelper(game.gamestate).board_tile_image("201").convert("RGB").load()
+    row = [pixels[x, 700] for x in range(600, 800)]
+    teal = [index for index, colour in enumerate(row) if colour == (0, 128, 128)]
+    assert teal, "the harvester circle is not drawn"
+
+    first, last = teal[0], teal[-1]
+    assert row[first - 1] == (0, 0, 0), "no black border outside the circle"
+    assert row[last + 1] == (0, 0, 0), "no black border inside the circle"
 
 
 def test_a_grey_planet_asks_for_the_resource(make_game, run):

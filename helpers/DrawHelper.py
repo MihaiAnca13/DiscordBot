@@ -508,8 +508,17 @@ class DrawHelper:
                     x, y = (345 / 1024 * mult * c for c in
                             tile[f"{placement['square']}{int(placement['index']) + 1}_snap"])
                     radius = 30 * mult
+                    ring = int(5 * mult)
+                    border = int(2 * mult)
+                    # a thin black ring inside and outside the coloured one, so it pops
+                    draw.ellipse((x - radius - border, y - radius - border,
+                                  x + radius + border, y + radius + border),
+                                 outline=(0, 0, 0), width=border)
                     draw.ellipse((x - radius, y - radius, x + radius, y + radius),
-                                 outline=player["color"], width=int(5 * mult))
+                                 outline=player["color"], width=ring)
+                    draw.ellipse((x - radius + ring, y - radius + ring,
+                                  x + radius - ring, y + radius - ring),
+                                 outline=(0, 0, 0), width=border)
             if tile.get("type") == "nebula":
                 tile_image = tile_image.rotate(rotation)
                 self.label_nebula_subsectors(tile_image, position, rotation)
