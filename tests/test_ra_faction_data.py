@@ -7,7 +7,7 @@ def test_ra_faction_stats_match_printed_board():
     ra = FACTIONS["ra"]
     assert ra["name"] == "Remnants of Ra"
     assert (ra["materials"], ra["science"], ra["money"]) == (3, 3, 2)
-    assert (ra["colony_ships"], ra["base_colony_ships"]) == (3, 3)
+    assert (ra["colony_ships"], ra["base_colony_ships"]) == (4, 3)  # +1 for the first-round artifact cube, like Exiles' orbital
     assert ra["home_planet"] == "255"
     assert ra["military_tech"] == ["plc"]
     assert ra["trade_value"] == 4

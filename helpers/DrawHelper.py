@@ -1243,9 +1243,14 @@ class DrawHelper:
                     pop_image = self.use_resized_image(pop_path, (42,42))
                     context.paste(pop_image, (reputationX+x*150+30, 600+60), mask=pop_image)
 
-        if FactionData.has(player, "honour_victorious") or FactionData.has(player, "soul_hunters"):
-            bonus = (player.get("wraithSouls", 0) if FactionData.has(player, "soul_hunters")
-                     else player.get("battleRepPoints", 0))
+        font = ImageFont.truetype("images/resources/arial.ttf", size=50)
+        for slot, bonus in player.get("reputationBonuses", {}).items():
+            if isinstance(player["reputation_track"][int(slot)], int):
+                text_drawable_image.text((reputationX + int(slot) * 150 + 110, 710), f"{bonus:+d}",
+                                         (255, 255, 255), font=font, anchor="mm", stroke_width=3,
+                                         stroke_fill=(0, 0, 0))
+        if FactionData.has(player, "soul_hunters"):
+            bonus = player.get("wraithSouls", 0)
             points = self.use_resized_image("images/resources/components/all_boards/points.png", (120, 120))
             bonus_x = reputationX + len(player["reputation_track"]) * 150
             context.paste(points, (bonus_x, 600), mask=points)
@@ -1253,7 +1258,7 @@ class DrawHelper:
                                      anchor="mm")
 
         # Alliance tiles sit to the right of the reputation track.
-        allianceX = 4600 + (150 if FactionData.has(player, "honour_victorious") else 0)
+        allianceX = 4600
         for allianceTile, betrayed in player.get("alliances", {}).items():
             side = "betrayed" if betrayed else "ally"
             alliance_path = (f"images/resources/components/alliances/"
@@ -1855,7 +1860,7 @@ class DrawHelper:
         if "magPartPoints" in player:
             points += player["magPartPoints"]
         if "gameEnded" in self.gamestate or showPrivateRegardless:
-            points += player.get("battleRepPoints", 0)
+            points += FactionData.battle_rep_points(player)
         points += player.get("wraithSouls", 0)
 
         if "rep" in player.get("discoveryTileBonusPointTiles", []):

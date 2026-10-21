@@ -347,3 +347,15 @@ def test_wolf_pack_keeps_a_six_from_a_killing_attack(make_game, no_random, run, 
     assert "FCIDblue_wolfPackSave_101" in buttons(inter.channel)
     run(Combat.wolfPackChoice(game, "wolfPackSave_101", FakeInteraction(inter.channel)))
     assert ended == ["101"]
+
+
+def test_wolf_pack_bank_expires_at_the_end_of_the_engagement_round(make_game, run):
+    game = _wolf_game(make_game)
+    tile = game.gamestate["board"]["101"]
+    tile["wolfPackRerolls"] = {"blue": 1}
+    tile["currentSpeed"], tile["currentRoller"] = 0, "red"  # last shooter of the round
+    game.update()
+
+    run(Combat.promptNextSpeed(game, "101", FakeInteraction().channel, False))
+
+    assert "wolfPackRerolls" not in reload(game).gamestate["board"]["101"]

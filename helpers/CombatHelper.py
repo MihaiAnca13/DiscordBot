@@ -1764,6 +1764,9 @@ class Combat:
             nextSpeed, nextOwner = currentSpeed, currentRoller
         elif nextPair is not None:
             nextSpeed, nextOwner = nextPair
+        if nextSpeed == -20 or (currentSpeed is not None and currentSpeed > 90 and 0 <= nextSpeed < 90):
+            # Wolf Pack saved rerolls only last for the engagement round they were earned in
+            game.gamestate["board"][pos].pop("wolfPackRerolls", None)
         if nextSpeed == -20:
             await Combat.checkForMorphShield(game, pos, channel, ships, list(attacker) + list(defender))
             await Carapace.offer(game, channel, pos)

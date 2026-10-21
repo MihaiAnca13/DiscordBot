@@ -38,30 +38,32 @@ class ReputationButtons:
             player_helper.stats["money"] += gained
             msg += f" You also gained {gained} money."
 
-        found = False
-        for x, tile in enumerate(player_helper.stats["reputation_track"]):
-            if tile in ("rep", "mixed"):
-                player_helper.stats["reputation_track"][x] = highest
-                game.gamestate["reputation_tiles"].remove(highest)
-                found = True
-                break
-        if not found:
-            lowest = highest
-            loc = 0
-            for x, tile in enumerate(player_helper.stats["reputation_track"]):
-                if isinstance(tile, int) and tile < lowest:
-                    loc = x
-                    lowest = tile
-            if lowest != highest:
-                msg += f" You replaced a reputation tile with the value of {str(lowest)}"
-                player_helper.stats["reputation_track"][loc] = highest
-                game.gamestate["reputation_tiles"].append(lowest)
-                game.gamestate["reputation_tiles"].remove(highest)
+        # Kurita: the +1/-1 belongs to the slot of the tile it was drawn with, so compare tile + marker
+        track = player_helper.stats["reputation_track"]
+        bonuses = player_helper.stats.setdefault("reputationBonuses", {})
+        marker = f" ({battle_rep_adjustment:+d})" if battle_rep_adjustment else ""
+        newValue = highest + battle_rep_adjustment
+        loc = next((x for x, tile in enumerate(track) if tile in ("rep", "mixed")), None)
+        if loc is None:
+            worth = {x: tile + bonuses.get(str(x), 0) for x, tile in enumerate(track) if isinstance(tile, int)}
+            lowestLoc = min(worth, key=worth.get, default=None)
+            if lowestLoc is not None and worth[lowestLoc] < newValue:
+                loc = lowestLoc
+                lowestMarker = f" ({bonuses[str(loc)]:+d})" if bonuses.get(str(loc)) else ""
+                msg += f" You replaced a reputation tile with the value of {track[loc]}{lowestMarker}"
+                game.gamestate["reputation_tiles"].append(track[loc])
             else:
-                msg += " It was lower or equal to your highest value reputation tile, so you put it back in the bag."
-        if battle_rep_adjustment:
-            player_helper.stats["battleRepPoints"] = (
-                player_helper.stats.get("battleRepPoints", 0) + battle_rep_adjustment)
+                msg += (f" {highest}{marker} was lower or equal to your lowest reputation tile,"
+                        " so you put it back in the bag.")
+        if loc is not None:
+            track[loc] = highest
+            game.gamestate["reputation_tiles"].remove(highest)
+            if battle_rep_adjustment:
+                bonuses[str(loc)] = battle_rep_adjustment
+            else:
+                bonuses.pop(str(loc), None)
+        if not bonuses:
+            player_helper.stats.pop("reputationBonuses")
         game.update_player(player_helper)
         game.update()
         if not queue:

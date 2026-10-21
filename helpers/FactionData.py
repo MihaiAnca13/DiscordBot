@@ -31,3 +31,9 @@ def has(player, ability):
 def artwork_name(full_name):
     """The image and emoji key of a faction: artwork names differ from data keys (exl -> exile)."""
     return BY_NAME.get(full_name, {}).get("artwork", full_name)
+
+
+def battle_rep_points(player):
+    """Kurita: the +1/-1 battle markers sitting next to the reputation tiles still on the track."""
+    bonuses = player.get("reputationBonuses", {})
+    return sum(bonuses.get(str(x), 0) for x, tile in enumerate(player["reputation_track"]) if isinstance(tile, int))
