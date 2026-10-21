@@ -76,6 +76,18 @@ def finish_standard_build(press, channel, ship="Interceptor"):
 
 # --- Raid --------------------------------------------------------------------
 
+def test_the_player_area_prints_the_raid_and_regroup_annotations():
+    """The info sheet prints +1 MOV under the build count and +1 BUI under the move count."""
+    heralds = player_stats("her", color="red")
+    assert DrawHelper.action_annotation(heralds, "build") == "+1 MOV"
+    assert DrawHelper.action_annotation(heralds, "move") == "+1 BUI"
+    assert DrawHelper.action_annotation(heralds, "influence") is None
+
+    other = player_stats("hyd", color="blue")
+    assert DrawHelper.action_annotation(other, "build") is None
+    assert DrawHelper.action_annotation(other, "move") is None
+
+
 def test_raid_build_before_the_move_spends_one_disc_and_returns_to_move(start_game, press):
     game, channel = setup_game(start_game)
     press(channel, 1, "FCIDblue_startMove")

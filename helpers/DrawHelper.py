@@ -646,6 +646,16 @@ class DrawHelper:
         return self.use_image(f"images/resources/components/factions/{faction}_board.png").crop((49, 252, 154, 357))
 
     @staticmethod
+    def action_annotation(player, action):
+        """The extra activation the Heralds print under a count: Raid adds a build to a move,
+        Regroup adds a move to a build."""
+        if action == "build" and FactionData.has(player, "regroup"):
+            return "+1 MOV"
+        if action == "move" and FactionData.has(player, "raid"):
+            return "+1 BUI"
+        return None
+
+    @staticmethod
     def blueprint_cell(origin, col, row):
         """Top-left of a (column, half-row) cell of the 817px blueprint art, scaled to the 424px pasted blueprint."""
         return int(origin[0] + (18 + 262 * col) * 0.52), int(origin[1] + (160 + 65.5 * row) * 0.52)
@@ -1176,6 +1186,11 @@ class DrawHelper:
             font = ImageFont.truetype("images/resources/arial.ttf", size=35)
             text_drawable_image.text((50 + int(116 * x), 607), f"{action_activation}", color, font=font,
                                              stroke_width=stroke_width, stroke_fill=stroke_color)
+            annotation = DrawHelper.action_annotation(player, action)
+            if annotation:
+                annotation_font = ImageFont.truetype("images/resources/arial.ttf", size=28)
+                text_drawable_image.text((50 + int(116 * x) + 10, 672), annotation, color, font=annotation_font,
+                                         anchor="mm", stroke_width=stroke_width, stroke_fill=stroke_color)
         font = ImageFont.truetype("images/resources/arial.ttf", size=35)
         # the colony ships one Influence action may flip (Buttons/Influence.py)
         text_drawable_image.text((618, 417), f"{FactionData.of(player).get('influence_colony_ships', 2)}",
