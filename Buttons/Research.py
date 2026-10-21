@@ -123,12 +123,15 @@ class ResearchButtons:
     async def offerSetupTech(game: GamestateHelper, player, interaction: discord.Interaction):
         """Techno-Mages may spend part of their initial science on one technology before the game begins."""
         if player.get("name") != "Techno-Mages":
-            return
+            return False
         view = View()
         view.add_item(Button(label="Buy 1 Technology", style=discord.ButtonStyle.blurple,
                              custom_id=f"FCID{player['color']}_setupTech"))
+        view.add_item(Button(label="No thanks", style=discord.ButtonStyle.red,
+                             custom_id=f"FCID{player['color']}_declineSetupTech"))
         await interaction.channel.send(f"{player['player_name']}, you may spend part of your initial science to"
                                        " buy 1 technology before the game begins if you wish.", view=view)
+        return True
 
     @staticmethod
     async def offerAncientInstinctUpgrade(player, interaction: discord.Interaction, tech: str, tech_details):
@@ -245,6 +248,14 @@ class ResearchButtons:
                                               emoji=Emoji.getEmojiByName(techName),
                                               custom_id=f"FCID{player['color']}_getTech_{tech}_{tech_type}"))
                     buttonCount += 1
+        if setup:
+            # the pre-game purchase is optional, so the menu has to be able to be declined
+            decline = Button(label="No thanks", style=discord.ButtonStyle.red,
+                             custom_id=f"FCID{player['color']}_declineSetupTech")
+            if len(view.children) < 25:
+                view.add_item(decline)
+            else:
+                view2.add_item(decline)
         if player["name"] == "Rho Indi Syndicate":
             await interaction.channel.send(f"{player['player_name']}, select the tech you would like to acquire. "
                                            "The discounted cost is in parentheses. You currently have "
@@ -256,7 +267,7 @@ class ResearchButtons:
                                            f"You currently have {str(player['science'])} science,"
                                            " and can trade other resources for science"
                                            f" at a {str(player['trade_value'])}:1 ratio", view=view)
-        if buttonCount > 26:
+        if view2.children:
             await interaction.channel.send(view=view2)
         await interaction.followup.send(file=await asyncio.to_thread(drawing.show_available_techs), ephemeral=True)
         if "shrine_in_storage" in player and len(ShrineButtons.getInitialShrineButtons(game, player).children) > 1:

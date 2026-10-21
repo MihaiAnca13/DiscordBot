@@ -49,13 +49,13 @@ class DiscoveryTileButtons:
         #    game.fillInDiscTiles()
         if game.gamestate["board"][tile]["disctile"] == 0:
             await interaction.followup.send("No discovery tile in tile " + tile)
-            return
+            return False
         if player.get("name") == "Atlantians":
             # identical draws collapse to one choice
             choices = list(dict.fromkeys(DiscoveryTileButtons.drawAtlantiansDiscoveryChoices(game, tile)))
             if not choices:
                 await interaction.channel.send("No eligible discovery tiles remain in the deck.")
-                return
+                return False
             game.gamestate["board"][tile]["disctile"] = 0
             game.update()
             if len(choices) > 1:
@@ -72,7 +72,7 @@ class DiscoveryTileButtons:
                 await interaction.channel.send(
                     f"{player['player_name']} drew two discovery tiles. Choose one to resolve;"
                     " the other is discarded.", view=view, files=files)
-                return
+                return True
             disc = choices[0]
         else:
             disc = game.getNextDiscTile(tile)
@@ -82,6 +82,7 @@ class DiscoveryTileButtons:
                     disc = game.gamestate["discTiles"].pop()
                 game.update()
         await DiscoveryTileButtons.sendDiscoveryTileOptions(game, tile, interaction, player, disc)
+        return True
 
     @staticmethod
     async def selectDiscTile(game: GamestateHelper, interaction: discord.Interaction, buttonID: str, player):

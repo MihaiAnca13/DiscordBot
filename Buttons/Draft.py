@@ -1,11 +1,7 @@
-import asyncio
 import random
 import config
 import discord
-from Buttons.Turn import TurnButtons
-from Buttons.DiscoveryTile import DiscoveryTileButtons
-from Buttons.Population import PopulationButtons
-from Buttons.Research import ResearchButtons
+from Buttons.PreGame import PreGameButtons
 from helpers.EmojiHelper import Emoji
 from helpers.GamestateHelper import GamestateHelper
 from discord.ui import View, Button
@@ -116,7 +112,8 @@ class DraftButtons:
         await interaction.channel.send(f"{interaction.user.mention} drafted {factionName}.")
         if factionKey == "exl":
             await interaction.followup.send(f"REMINDER {interaction.user.mention}: You start with one extra colony "
-                                            f"ship to be used on your first turn to populate your starting orbital.")
+                                            f"ship to be used to populate your starting orbital before the game "
+                                            f"begins.")
         await interaction.message.delete()
         game.removeFromKey("draftingPlayers", playerID)
         game.addToKey("draftedFactions", (playerID, factionKey))
@@ -247,22 +244,6 @@ class DraftButtons:
         await interaction.channel.send("Done With Setup!")
 
         if is_initial_setup:
-            for player_id in temp_player_list:
-                player = game.get_player(player_id, interaction)
-                if player is not None and "anl" in player.get("nano_tech", []):
-                    home = game.getLocationFromID(player["home_planet"])
-                    game.addDiscTile(home)
-                    await DiscoveryTileButtons.exploreDiscoveryTile(game, home, interaction, player)
-                if player is not None:
-                    await PopulationButtons.offerAncientsCube(game, player, interaction,
-                                                              game.getLocationFromID(player["home_planet"]))
-                    await ResearchButtons.offerSetupTech(game, player, interaction)
-
-        asyncio.create_task(game.showUpdate("Start of Game", interaction))
-        player = game.get_player(temp_player_list[0],interaction)
-        TurnButtons.startNewTurn(player, game)
-        view = TurnButtons.getStartTurnButtons(game, player, "dummy")
-        game.updatePingTime()
-        await interaction.channel.send(f"## {game.getPlayerEmoji(player)} started their turn.")
-        await interaction.channel.send(f"{player['player_name']} use these buttons to do your turn"
-                                       + game.displayPlayerStats(player), view=view)
+            await PreGameButtons.startPreGame(game, interaction, temp_player_list)
+        elif not game.preGameTasks():
+            await PreGameButtons.startGame(game, interaction, temp_player_list[0])

@@ -13,6 +13,7 @@ from Buttons.Explore import ExploreButtons
 from Buttons.Influence import InfluenceButtons
 from Buttons.Move import MoveButtons
 from Buttons.Population import PopulationButtons
+from Buttons.PreGame import PreGameButtons
 from Buttons.Pulsar import PulsarButtons
 from Buttons.Research import ResearchButtons
 from Buttons.Shrine import ShrineButtons
@@ -38,7 +39,7 @@ ANSWER_BUTTONS = ("selectDiscTile", "exploreDiscoveryTile", "keepDiscForPoints",
                   "getTech", "getFreeTech", "placeWarpPortal",
                   "offerRelationsTo", "acceptRelationsWith", "declineRelationsWith", "formMinorRelations",
                   "reducePopFor", "addCubeToTrack", "drawReputation", "dontDrawReputation",
-                  "ancientsCube", "setupTech")
+                  "ancientsCube", "setupTech", "preGameOrbital", "declineSetupTech")
 
 
 class ButtonListener(commands.Cog):
@@ -274,6 +275,8 @@ class ButtonListener(commands.Cog):
             # deleting the offer makes the pre-game purchase one technology
             await interaction.message.delete()
             await ResearchButtons.startResearch(game, player, player_helper, interaction, False, setup=True)
+        elif customID.startswith("declineSetupTech"):
+            await PreGameButtons.declineSetupTech(game, player, interaction)
         elif customID.startswith("placeWarpPortal"):
             await ResearchButtons.placeWarpPortal(interaction, game, player, customID)
         elif customID.startswith("payAtRatio"):
@@ -324,6 +327,8 @@ class ButtonListener(commands.Cog):
             await PopulationButtons.fillPopulation(game, player, interaction, customID)
         elif customID.startswith("ancientsCube"):
             await PopulationButtons.placeAncientsCube(game, player, interaction, customID)
+        elif customID.startswith("preGameOrbital"):
+            await PreGameButtons.placeExilesOrbital(game, player, interaction, customID)
         elif customID.startswith("startInfluence"):
             game.updateSaveFile()
             await InfluenceButtons.startInfluence(game, player, interaction)
@@ -424,6 +429,8 @@ class ButtonListener(commands.Cog):
             await BlackHoleButtons.blackHoleReturnStart(game, player, customID, player_helper, interaction)
         elif customID.startswith("blackHoleFinish"):
             await BlackHoleButtons.blackHoleFinish(game, player, customID, player_helper, interaction)
+        # a pre-game action may have been the last one the game was waiting for
+        await PreGameButtons.completeTask(game, interaction, player, customID)
         end_time = time.perf_counter()
         elapsed_time = end_time - start_time
         if elapsed_time > 5:

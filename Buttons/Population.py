@@ -158,19 +158,20 @@ class PopulationButtons:
         """Remnants of Ra: Power of the Ancients puts a cube on the influence disc of an artifact sector."""
         tileState = game.gamestate["board"][tile]
         if player.get("name") != "Remnants of Ra" or not tileState.get("artifact"):
-            return
+            return False
         if tileState.get("disc_pop", [0])[0]:
-            return
+            return False
         view = View()
         for pop in ["money", "science", "material"]:
             if player[f"{pop}_pop_cubes"] > 0:
                 view.add_item(Button(label=pop.capitalize(), style=discord.ButtonStyle.blurple,
                                      custom_id=f"FCID{player['color']}_ancientsCube_{pop}_{tile}"))
         if len(view.children) == 0:
-            return
+            return False
         await interaction.channel.send(f"{player['player_name']}, your Power of the Ancients places an additional"
                                        f" population cube on your influence disc in tile {tile}."
                                        " Spend one colony ship and choose which type of cube.", view=view)
+        return True
 
     @staticmethod
     async def placeAncientsCube(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str):
