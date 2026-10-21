@@ -11,7 +11,6 @@ from helpers import FactionData
 from helpers.ImageCache import ImageCacheHelper
 from helpers.PlayerHelper import PlayerHelper
 from helpers.ShipHelper import PlayerShip
-from helpers.Turtugan import Carapace
 
 
 _properties_cache = {}
@@ -1284,7 +1283,6 @@ class DrawHelper:
         font = ImageFont.truetype("images/resources/arial.ttf", size=35)
         blueprint_slots = FactionData.of(player).get("blueprint_slots", {})
         slot_cells = {}
-        ship_origins = {}
         for slot, ship in enumerate(ships):
             shipFullName = self.getShipFullName(ship)
             if ship == "orb" and faction != "exile":
@@ -1311,7 +1309,6 @@ class DrawHelper:
                 # keep the stat header, draw the faction's own slot shape below it
                 ship_blueprint = ship_blueprint.crop((0, 0, ship_blueprint.width, 83))
                 slot_cells[ship] = self.draw_blueprint_slots(context, (2250 + 550 * slot + mod, 70), layout)
-            ship_origins[ship] = (2250 + 550 * slot + mod, 70)
             context.paste(ship_blueprint, (2250 + 550 * slot+mod, 70))
             counter = slot
             shipMod = PlayerShip(player, shipFullName)
@@ -1440,16 +1437,6 @@ class DrawHelper:
                                           [(220, 30, 30), (240, 190, 20)], [0, 12]):
                 x, y = cells[index]
                 draw.rectangle((x - 3, y - 3 + drop, x + 139, y + 139 + drop), outline=frame, width=6)
-        if FactionData.has(player, "carapace_shields"):
-            for ship_class, (col, row) in FactionData.of(player).get("carapace_module", {}).items():
-                ship = Carapace.SHORT[ship_class]
-                if ship not in ship_origins:
-                    continue
-                x, y = self.blueprint_cell(ship_origins[ship], col, row)
-                module = self.use_image("images/resources/components/factions/turtugan_carapace"
-                                        + ("_starbase.png" if ship == "sb" else ".png"))
-                context.paste(module, (x, y), mask=module)
-
         if "shrine_in_storage" in player:
             shrine_board_path = "images/resources/components/factions/shrine_board.png"
             shrine_board_image = self.use_image(shrine_board_path)

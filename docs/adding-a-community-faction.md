@@ -41,7 +41,6 @@ The fields in use:
 | `influence_colony_ships` | `Buttons/Influence.py`, the player area drawing | colony ships one Influence action flips (default 2) |
 | `reputation_only_slots` | `PlayerHelper.is_reputation_only_slot` | indices of the reputation track with no ambassador slot |
 | `blueprint_slots` | `DrawHelper.draw_blueprint_slots` | per ship (`interceptor`/`cruiser`/`dread`/`starbase`), one `[column, half-row]` cell per parts entry when the printed slot shape is not the standard one |
-| `carapace_module` | the player area drawing | Turtugan: the cell under each blueprint that shows the Carapace module and its engaged toggle |
 | `portrait_image` | `DrawHelper.faction_portrait` | use `factionImages/<art>_image.png` instead of the standard board crop |
 | `abilities` | `FactionData.has(player, "...")` | named abilities the implementation is guarded by |
 | `vp_per_*` | `DrawHelper.get_public_points` | end-of-game points per owned tile, artifact tile, shrine, orbital population or Ancient ship |

@@ -3255,25 +3255,7 @@
                                 ]
                         ]
                 },
-                "portrait_image": true,
-                "carapace_module": {
-                        "interceptor": [
-                                1,
-                                4
-                        ],
-                        "cruiser": [
-                                0,
-                                5
-                        ],
-                        "dread": [
-                                0,
-                                5
-                        ],
-                        "starbase": [
-                                1,
-                                4
-                        ]
-                }
+                "portrait_image": true
         },
         "wul": {
                 "name": "The Wulfen",
