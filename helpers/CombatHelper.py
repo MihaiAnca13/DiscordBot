@@ -2629,14 +2629,20 @@ class Combat:
                 asyncio.create_task(interaction.channel.send(f"{interaction.user.name}, your reputation draw has been queued"))
             else:
                 asyncio.create_task(interaction.channel.send(f"{interaction.user.name} drew {num_options} reputation tiles."))
-            asyncio.create_task(interaction.message.delete())
+            try:
+                await interaction.message.delete()
+            except discord.NotFound:
+                print(f"Message {interaction.message.id} was already deleted.")
         else:
             adjustment = game.gamestate.get("battleRepAdjustments", {}).pop(
                 f"{system}-{drawOrder}-{color}", 0)
             await ReputationButtons.resolveGainingReputation(game, num_options, interaction, player_helper, False,
                                                              battle_rep_adjustment=adjustment)
             asyncio.create_task(interaction.channel.send(f"{interaction.user.name} drew {num_options} reputation tiles."))
-            asyncio.create_task(interaction.message.delete())
+            try:
+                await interaction.message.delete()
+            except discord.NotFound:
+                print(f"Message {interaction.message.id} was already deleted.")
 
     @staticmethod
     async def refreshImage(game: GamestateHelper, buttonID: str, interaction: discord.Interaction):
