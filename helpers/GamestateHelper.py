@@ -1220,10 +1220,16 @@ class GamestateHelper:
         return newSaveNum - oldSaveNum + 1
 
     def backUpToLastSaveFile(self):
+        phase = self.gamestate.get("pre_game")
+        if phase is not None and not phase.get("started"):
+            return False
         saveFile = self.get_saveFile()
         newSaveNum = str(saveFile["newestSaveNum"])
         if newSaveNum in saveFile:
             newestSave = saveFile[newSaveNum]
+            saved_phase = newestSave.get("pre_game", {})
+            if (phase is not None or saved_phase) and not saved_phase.get("started"):
+                return False
             self.gamestate = newestSave
             saveFile["newestSaveNum"] -= 1
             self.update()

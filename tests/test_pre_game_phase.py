@@ -1,13 +1,17 @@
 """The pre-game phase: the factions that have something to do before the game starts
 do it now, and the first turn waits for them.
 """
+import json
 import random
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
 from Buttons.Draft import DraftButtons
+from commands.game_commands import GameCommands
+from commands.player_commands import PlayerCommands
 from helpers.DrawHelper import DrawHelper
 from helpers.GamestateHelper import GamestateHelper
 from setup.GameInit import GameInit
@@ -115,6 +119,29 @@ def test_a_turn_cannot_be_restarted_before_the_game_starts(games_dir, run, press
     assert "activePlayerColor" not in state
 
 
+def test_start_turn_slash_command_is_blocked_during_pre_game(games_dir, run, monkeypatch):
+    game, channel = start_pre_game(games_dir, run, monkeypatch)
+    interaction = FakeInteraction(channel, user_id=1)
+
+    run(PlayerCommands(None).start_turn.callback(PlayerCommands(None), interaction))
+
+    assert "activePlayerColor" not in reload(game).gamestate
+    assert interaction.response.sent[0][0] == "The game has not started yet."
+
+
+def test_slash_undo_during_pre_game_does_not_consume_a_save(games_dir, run, monkeypatch):
+    game, channel = start_pre_game(games_dir, run, monkeypatch)
+    game.updateSaveFile()
+    before = game.get_saveFile()
+    interaction = FakeInteraction(channel)
+
+    run(GameCommands(None).undo_to_last_turn_start.callback(GameCommands(None), interaction))
+
+    assert game.get_saveFile() == before
+    assert "activePlayerColor" not in reload(game).gamestate
+    assert "has not started" in interaction.response.sent[0][0]
+
+
 def test_a_game_without_pre_game_actions_starts_right_away(games_dir, run, press, monkeypatch):
     random.seed(0)
     GameInit("No pre game actions", [[1, "<@1>"], [2, "<@2>"]],
@@ -189,6 +216,62 @@ def test_discovery_part_can_be_installed_before_first_turn(games_dir, run, press
     assert state["players"]["2"]["interceptor_parts"][-1] == "mus"
     assert state["pre_game"]["tasks"] == []
     assert state["activePlayerColor"] == ["teal"]
+
+
+@pytest.mark.parametrize("legacy_button", [False, True])
+def test_upgrade_part_menu_save_button_completes_pre_game_discovery(
+        games_dir, run, press, monkeypatch, legacy_button):
+    game, channel = start_pre_game(games_dir, run, monkeypatch, ["anm", "anm"])
+    finish_other_actions(channel, press)
+    press(channel, 2, find_button(channel, "FCIDblue_usedDiscForAbility_"))
+    upgrade_menu = press(channel, 2, find_button(channel, "FCIDblue_upgradeShip_1_interceptor_anm"))
+    save_button = next(button.custom_id for button in upgrade_menu.message.edited["view"].children
+                       if button.label == "Save For Future Upgrade Action")
+    assert save_button == "FCIDblue_saveDiscoveryPart"
+    if legacy_button:
+        save_button = "FCIDblue_deleteMsg"
+        for button in upgrade_menu.message.edited["view"].children:
+            if button.label == "Save For Future Upgrade Action":
+                button.custom_id = save_button
+        upgrade_menu.message.components = [SimpleNamespace(children=upgrade_menu.message.edited["view"].children)]
+    press(channel, 2, save_button, message=upgrade_menu.message)
+
+    state = reload(game).gamestate
+    assert state["pre_game"]["tasks"] == []
+    assert state["activePlayerColor"] == ["teal"]
+
+
+@pytest.mark.parametrize("undo_kind", ["slash", "button"])
+@pytest.mark.parametrize("has_phase", [True, False])
+def test_undo_does_not_restore_or_consume_pre_game_snapshot_after_start(
+        games_dir, run, press, monkeypatch, undo_kind, has_phase):
+    game, channel = start_pre_game(games_dir, run, monkeypatch)
+    finish_other_actions(channel, press)
+    press(channel, 2, find_button(channel, "FCIDblue_selectDiscTile_"))
+    press(channel, 2, "FCIDblue_keepDiscForPoints")
+    # Model the setup snapshot that can be left by setup tooling or other callers.
+    setup_snapshot = reload(game).gamestate
+    if has_phase:
+        setup_snapshot["pre_game"]["started"] = False
+    else:
+        del setup_snapshot["pre_game"]
+    save_file = game.get_saveFile()
+    save_file["1"] = setup_snapshot
+    save_file["newestSaveNum"] = 1
+    with open(games_dir / f"{game.game_id}_saveFile.json", "w") as f:
+        json.dump(save_file, f)
+    before_save = reload(game).get_saveFile()
+
+    if undo_kind == "slash":
+        interaction = FakeInteraction(channel)
+        run(GameCommands(None).undo_to_last_turn_start.callback(GameCommands(None), interaction))
+        assert "setup" in interaction.response.sent[0][0]
+    else:
+        press(channel, 1, "FCIDteal_restartTurn")
+
+    assert reload(game).gamestate["pre_game"]["started"]
+    assert reload(game).gamestate["activePlayerColor"] == ["teal"]
+    assert reload(game).get_saveFile() == before_save
 
 
 def test_turn_actions_are_blocked_until_all_players_finish_setup(games_dir, run, press, monkeypatch):
@@ -273,3 +356,76 @@ def test_stale_setup_buttons_cannot_buy_again_after_game_starts(games_dir, run, 
 
     assert reload(game).get_player(4) == before
     assert reload(game).gamestate["activePlayerColor"] == ["teal"]
+
+
+def test_shared_undo_rejects_current_setup_without_consuming_save(games_dir, run, monkeypatch):
+    game, channel = start_pre_game(games_dir, run, monkeypatch)
+    game.updateSaveFile()
+    before_state = reload(game).gamestate
+    before_save = game.get_saveFile()
+
+    assert not game.backUpToLastSaveFile()
+
+    assert reload(game).gamestate == before_state
+    assert game.get_saveFile() == before_save
+
+
+def test_non_muon_discovery_part_install_finishes_setup(games_dir, run, press, monkeypatch):
+    game, channel = start_pre_game(games_dir, run, monkeypatch, ["anm", "anm"])
+    finish_other_actions(channel, press)
+    press(channel, 2, find_button(channel, "FCIDblue_usedDiscForAbility_"))
+    menu = press(channel, 2, find_button(channel, "FCIDblue_upgradeShip_1_interceptor_anm"))
+    part_button = next(button.custom_id for button in menu.message.edited["view"].children
+                       if button.custom_id.endswith("_anm_0"))
+
+    press(channel, 2, part_button, message=menu.message)
+
+    state = reload(game).gamestate
+    assert state["players"]["2"]["interceptor_parts"][0] == "anm"
+    assert state["pre_game"]["tasks"] == []
+    assert state["pre_game"]["started"]
+
+
+def test_discovery_change_ship_then_save_keeps_menu_usable(games_dir, run, press, monkeypatch):
+    game, channel = start_pre_game(games_dir, run, monkeypatch, ["anm", "anm"])
+    finish_other_actions(channel, press)
+    press(channel, 2, find_button(channel, "FCIDblue_usedDiscForAbility_"))
+    menu = press(channel, 2, find_button(channel, "FCIDblue_upgradeShip_1_interceptor_anm"))
+    back = next(button.custom_id for button in menu.message.edited["view"].children
+                if button.label == "Choose Different Ship")
+    press(channel, 2, back, message=menu.message)
+    press(channel, 2, find_button(channel, "FCIDblue_saveDiscoveryPart"))
+
+    state = reload(game).gamestate
+    assert "anm" in state["players"]["2"]["ancient_parts"]
+    assert state["pre_game"]["started"]
+
+
+@pytest.mark.parametrize("undo_kind", ["slash", "button"])
+def test_mid_game_undo_preserves_completed_setup_and_restores_turn_menu(
+        games_dir, run, press, monkeypatch, undo_kind):
+    game, channel = start_pre_game(games_dir, run, monkeypatch)
+    finish_other_actions(channel, press)
+    press(channel, 2, find_button(channel, "FCIDblue_selectDiscTile_"))
+    press(channel, 2, find_button(channel, "FCIDblue_keepDiscForPoints"))
+    before = reload(game).get_player(1)
+    press(channel, 1, "FCIDteal_startResearch")
+    assert reload(game).get_player(1)["influence_discs"] == before["influence_discs"] - 1
+
+    if undo_kind == "slash":
+        interaction = FakeInteraction(channel, user_id=1)
+        run(GameCommands(None).undo_to_last_turn_start.callback(GameCommands(None), interaction))
+        run(PlayerCommands(None).start_turn.callback(PlayerCommands(None), interaction))
+    else:
+        press(channel, 1, "FCIDteal_restartTurn")
+
+    state = reload(game).gamestate
+    assert state["players"]["1"] == before
+    assert state["pre_game"]["started"]
+    assert state["pre_game"]["tasks"] == []
+    assert state["activePlayerColor"] == ["teal"]
+    assert "FCIDteal_startResearch" in buttons(channel)
+    press(channel, 4, "FCIDpurple_setupTech")
+    assert reload(game).gamestate["pre_game"]["started"]
+    assert any("already finished" in content for content, kwargs in
+               press(channel, 4, "FCIDpurple_getTech_neb_military_setup").followup.sent)

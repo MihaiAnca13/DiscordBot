@@ -47,13 +47,19 @@ class TurnButtons:
     async def restartTurn(player, game: GamestateHelper, interaction: discord.Interaction):
         try:
             color = player["color"]
-            await interaction.message.delete()
-            if game.preGameTasks():
+            if game.gamestate.get("pre_game") and not game.gamestate["pre_game"].get("started"):
                 # the game has not started yet: there is no turn to go back to, and rolling
                 # back would undo the setup the pre-game phase is built on
                 await interaction.channel.send("The game has not started yet, so there is no turn to restart.")
                 return
-            game.backUpToLastSaveFile()
+            await interaction.message.delete()
+            if not game.backUpToLastSaveFile():
+                view = TurnButtons.getStartTurnButtons(game, player, "dummy")
+                await interaction.channel.send("There is no eligible turn-start save, so the current turn remains"
+                                               " unchanged.")
+                await interaction.channel.send(player["player_name"] + " use buttons to do your turn"
+                                               + game.displayPlayerStats(player), view=view)
+                return
             game = GamestateHelper(interaction.channel)
             player = game.getPlayerObjectFromColor(color)
             view = TurnButtons.getStartTurnButtons(game, player, "dummy")

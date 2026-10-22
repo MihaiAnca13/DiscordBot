@@ -137,7 +137,7 @@ class UpgradeButtons:
                                             f"{actions}_{discTileUpgrade}")))
         if discTileUpgrade in DISCOVERY_PART_IDS:
             view.add_item(Button(label="Save For Future Upgrade Action", style=discord.ButtonStyle.red,
-                                 custom_id=f"FCID{player['color']}_deleteMsg"))
+                                 custom_id=f"FCID{player['color']}_saveDiscoveryPart"))
         await UpgradeButtons.showMenu(interaction, f"{interaction.user.mention}, "
                                                    f"pick which part of your {ship} to replace or remove.", view)
 
@@ -154,9 +154,8 @@ class UpgradeButtons:
             await interaction.followup.send("The Phase Module is built in and cannot be replaced.", ephemeral=True)
             return
         if discTileUpgrade not in ("dummy", "free", "phase") and not discTileUpgrade.startswith("tm"):
-            await UpgradeButtons.chooseUpgrade(game, player, interaction,
-                                               customID + "_" + discTileUpgrade, player_helper)
-            return
+            return await UpgradeButtons.chooseUpgrade(game, player, interaction,
+                                                      customID + "_" + discTileUpgrade, player_helper)
 
         available_parts = player_helper.getAvailableShipParts()
         if discTileUpgrade.startswith("tm"):

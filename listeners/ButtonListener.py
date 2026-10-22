@@ -202,6 +202,11 @@ class ButtonListener(commands.Cog):
                                                 ephemeral=True)
                 return
 
+        # Save buttons already posted before the setup phase used the generic delete id.
+        if customID == "deleteMsg" and any(
+                getattr(button, "label", None) == "Save For Future Upgrade Action"
+                for row in interaction.message.components for button in getattr(row, "children", [])):
+            customID = "saveDiscoveryPart"
         if "deleteMsg" in customID:
             await interaction.message.delete()
         if customID == "showGame":
@@ -344,7 +349,7 @@ class ButtonListener(commands.Cog):
         elif customID.startswith("upgradeShip"):
             task_result = await UpgradeButtons.upgradeShip(game, player, interaction, customID, player_helper)
         elif customID.startswith("selectOldPart"):
-            await UpgradeButtons.selectOldPart(game, player, interaction, customID, player_helper)
+            task_result = await UpgradeButtons.selectOldPart(game, player, interaction, customID, player_helper)
         elif customID.startswith("chooseUpgrade"):
             task_result = await UpgradeButtons.chooseUpgrade(game, player, interaction, customID, player_helper)
         elif customID.startswith("undoUpgrade"):
