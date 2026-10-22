@@ -16,6 +16,9 @@ class FakeGame:
     def get_player_from_color(self, color):
         return "1"
 
+    def preGameTasks(self):
+        return []
+
     def playerResearchTech(self, player_id, tech, tech_type):
         self.player[f"{tech_type}_tech"].append(tech)
 

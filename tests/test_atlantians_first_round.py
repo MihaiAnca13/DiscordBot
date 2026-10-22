@@ -49,12 +49,14 @@ def test_atlantians_and_terran_explore_then_pass(games_dir, run, press, monkeypa
     assert state["players"]["1"]["reputation_track"] == ["rep", "rep", "mixed", "mixed"]
     assert state["players"]["2"]["name"] == "Terran Federation"
     assert state["board"]["201"]["sector"] == "266"
-    assert state["activePlayerColor"] == ["blue"]
+    # the game waits for the pre-game phase: the Atlantians still have their tile to resolve
+    assert "activePlayerColor" not in state
     choice = find_button(channel, "FCIDblue_selectDiscTile_")
     assert choice.split("_")[2] == "sci"
     press(channel, 1, choice)
     press(channel, 1, find_button(channel, "FCIDblue_usedDiscForAbility_"))
     assert reload(game).get_player(1)["science"] == 8
+    assert reload(game).gamestate["activePlayerColor"] == ["blue"]
 
     explored_positions = []
     for player_id, color in [(1, "blue"), (2, "red")]:

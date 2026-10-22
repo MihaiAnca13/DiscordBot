@@ -48,6 +48,11 @@ class TurnButtons:
         try:
             color = player["color"]
             await interaction.message.delete()
+            if game.preGameTasks():
+                # the game has not started yet: there is no turn to go back to, and rolling
+                # back would undo the setup the pre-game phase is built on
+                await interaction.channel.send("The game has not started yet, so there is no turn to restart.")
+                return
             game.backUpToLastSaveFile()
             game = GamestateHelper(interaction.channel)
             player = game.getPlayerObjectFromColor(color)

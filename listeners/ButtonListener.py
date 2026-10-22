@@ -14,6 +14,7 @@ from Buttons.Harvester import HarvesterButtons
 from Buttons.Influence import InfluenceButtons
 from Buttons.Move import MoveButtons
 from Buttons.Population import PopulationButtons
+from Buttons.PreGame import PreGameButtons
 from Buttons.Pulsar import PulsarButtons
 from Buttons.Research import ResearchButtons
 from Buttons.Shrine import ShrineButtons
@@ -41,7 +42,9 @@ ANSWER_BUTTONS = ("selectDiscTile", "exploreDiscoveryTile", "keepDiscForPoints",
                   "offerRelationsTo", "acceptRelationsWith", "declineRelationsWith", "formMinorRelations",
                   "reducePopFor", "addCubeToTrack", "drawReputation", "dontDrawReputation",
                   "ancientsCube", "setupTech", "reservedTile", "carapaceDone", "carapaceMissile",
-                  "wolfPack", "phaseModuleDone", "phaseModuleNone", "phaseBombing")
+                  "wolfPack", "phaseModuleDone", "phaseModuleNone", "phaseBombing",
+                  "preGameOrbital", "declineSetupTech", "saveDiscoveryPart", "gain3resource",
+                  "finishSetupResources")
 
 
 class ButtonListener(commands.Cog):
@@ -212,6 +215,9 @@ class ButtonListener(commands.Cog):
             return
         if player is None:
             return
+        if not await PreGameButtons.canResolve(game, interaction, player, customID):
+            return
+        task_result = False
         # The guard above compares this against the raw custom id, FCID prefix included.
         game.saveLastButtonPressed(interaction.data["custom_id"], pressed_at, interaction.message.id)
         if customID.startswith("tradeAtRatio"):
@@ -273,19 +279,23 @@ class ButtonListener(commands.Cog):
             await ExploreButtons.discardTile(game, interaction, player, customID)
         elif customID.startswith("keepDiscForPoints"):
             await DiscoveryTileButtons.keepDiscForPoints(game, player_helper, interaction)
+            task_result = True
         elif customID.startswith("exploreDiscoveryTile"):
             await DiscoveryTileButtons.exploreDiscoveryTile(game, customID.split("_")[1], interaction, player)
         elif customID.startswith("selectDiscTile"):
             await DiscoveryTileButtons.selectDiscTile(game, interaction, customID, player)
         elif customID.startswith("usedDiscForAbility"):
-            await DiscoveryTileButtons.usedDiscForAbility(game, player_helper, interaction, customID, player)
+            task_result = await DiscoveryTileButtons.usedDiscForAbility(game, player_helper, interaction, customID, player)
         elif customID.startswith("getFreeTech"):
-            await DiscoveryTileButtons.getFreeTech(game, interaction, customID, player)
+            task_result = await DiscoveryTileButtons.getFreeTech(game, interaction, customID, player)
+        elif customID in ("saveDiscoveryPart", "finishSetupResources"):
+            await interaction.message.delete()
+            task_result = True
         elif customID.startswith("startResearch"):
             game.updateSaveFile()
             await ResearchButtons.startResearch(game, player, player_helper, interaction, True)
         elif customID.startswith("getTech"):
-            await ResearchButtons.getTech(game, player, player_helper, interaction, customID)
+            task_result = await ResearchButtons.getTech(game, player, player_helper, interaction, customID)
         elif customID.startswith("ancientInstinctUpgrade"):
             await interaction.message.delete()
             await UpgradeButtons.startUpgrade(game, player, interaction, False, customID.split("_")[1], "dum")
@@ -293,14 +303,18 @@ class ButtonListener(commands.Cog):
             # deleting the offer makes the pre-game purchase one technology
             await interaction.message.delete()
             await ResearchButtons.startResearch(game, player, player_helper, interaction, False, setup=True)
+        elif customID.startswith("declineSetupTech"):
+            task_result = await PreGameButtons.declineSetupTech(game, player, interaction)
         elif customID.startswith("placeWarpPortal"):
             await ResearchButtons.placeWarpPortal(interaction, game, player, customID)
+            task_result = True
         elif customID.startswith("payAtRatio"):
             await ResearchButtons.payAtRatio(game, player, player_helper, interaction, customID)
         elif customID.startswith("gain5resource"):
             await ResearchButtons.gain5resource(game, player, player_helper, interaction, customID)
         elif customID.startswith("gain3resource"):
             await ResearchButtons.gain3resource(game, player, player_helper, interaction, customID)
+            task_result = True
         elif customID.startswith("startBuild"):
             if "2" not in customID:
                 game.updateSaveFile()
@@ -328,11 +342,11 @@ class ButtonListener(commands.Cog):
             await interaction.message.delete()
             await UpgradeButtons.startUpgrade(game, player, interaction, False, discTile,actions)
         elif customID.startswith("upgradeShip"):
-            await UpgradeButtons.upgradeShip(game, player, interaction, customID, player_helper)
+            task_result = await UpgradeButtons.upgradeShip(game, player, interaction, customID, player_helper)
         elif customID.startswith("selectOldPart"):
             await UpgradeButtons.selectOldPart(game, player, interaction, customID, player_helper)
         elif customID.startswith("chooseUpgrade"):
-            await UpgradeButtons.chooseUpgrade(game, player, interaction, customID, player_helper)
+            task_result = await UpgradeButtons.chooseUpgrade(game, player, interaction, customID, player_helper)
         elif customID.startswith("undoUpgrade"):
             await UpgradeButtons.undoUpgrade(game, player, interaction, customID, player_helper)
         elif customID.startswith("restartTechnoMagic"):
@@ -358,7 +372,9 @@ class ButtonListener(commands.Cog):
         elif customID.startswith("fillPopulation"):
             await PopulationButtons.fillPopulation(game, player, interaction, customID)
         elif customID.startswith("ancientsCube"):
-            await PopulationButtons.placeAncientsCube(game, player, interaction, customID)
+            task_result = await PopulationButtons.placeAncientsCube(game, player, interaction, customID)
+        elif customID.startswith("preGameOrbital"):
+            task_result = await PreGameButtons.placeExilesOrbital(game, player, interaction, customID)
         elif customID.startswith("startInfluence"):
             game.updateSaveFile()
             await InfluenceButtons.startInfluence(game, player, interaction)
@@ -481,6 +497,8 @@ class ButtonListener(commands.Cog):
             await BlackHoleButtons.blackHoleReturnStart(game, player, customID, player_helper, interaction)
         elif customID.startswith("blackHoleFinish"):
             await BlackHoleButtons.blackHoleFinish(game, player, customID, player_helper, interaction)
+        # a pre-game action may have been the last one the game was waiting for
+        await PreGameButtons.completeTask(game, interaction, player, customID, task_result)
         end_time = time.perf_counter()
         elapsed_time = end_time - start_time
         if elapsed_time > 5:

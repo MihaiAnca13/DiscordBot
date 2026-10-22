@@ -221,6 +221,10 @@ class GamestateHelper:
                      if self.gamestate["board"][tile]["sector"] == str(id)),
                     None)
 
+    def preGameTasks(self):
+        """The pre-game actions still to do, as [player id, task] pairs."""
+        return self.gamestate.get("pre_game", {}).get("tasks", [])
+
     def get_gamestate(self):
         with open(f"{config.gamestate_path}/{self.game_id}.json", "r") as f:
             return json.load(f)

@@ -85,7 +85,7 @@ class UpgradeButtons:
         # only a discovery tile part can be saved for a later Upgrade action
         if discTileUpgrade in DISCOVERY_PART_IDS:
             view.add_item(Button(label="Save For Future Upgrade Action", style=discord.ButtonStyle.red,
-                                 custom_id=f"FCID{player['color']}_deleteMsg"))
+                                 custom_id=f"FCID{player['color']}_saveDiscoveryPart"))
         if button:
             await interaction.message.delete()
             if discTileUpgrade == "dummy":
@@ -110,9 +110,8 @@ class UpgradeButtons:
         player_helper.setOldShipParts(ship)
         game.update_player(player_helper)
         if discTileUpgrade == "mus":
-            await UpgradeButtons.chooseUpgrade(game, player, interaction,
-                                               f"chooseUpgrade_{actions}_{ship}_dummy_mus_5_mus", player_helper)
-            return
+            return await UpgradeButtons.chooseUpgrade(game, player, interaction,
+                                                      f"chooseUpgrade_{actions}_{ship}_dummy_mus_5_mus", player_helper)
         with open("data/parts.json", "r") as f:
             part_stats = json.load(f)
         phase_slots = PlayerHelper.get_phase_module_slots(player, ship)
@@ -296,6 +295,8 @@ class UpgradeButtons:
             view = UpgradeButtons.getTechnoMagicView(game, player, discTileUpgrade[2:])
             await interaction.channel.send(f"{player['player_name']}, choose another combat blueprint to upgrade"
                                            " or undo this Techno-Magic part.", view=view)
+
+        return True
 
     @staticmethod
     async def undoUpgrade(game: GamestateHelper, player, interaction: discord.Interaction,

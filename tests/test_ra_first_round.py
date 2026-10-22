@@ -60,7 +60,8 @@ def test_remnants_of_ra_atlantians_and_techno_mages_explore_then_pass(games_dir,
     assert state["players"]["3"]["science_pop_cubes"] == 10
     assert state["board"]["205"]["sector"] == "266"
     assert state["board"]["209"]["sector"] == "244"
-    assert state["activePlayerColor"] == ["yellow"]
+    # the pre-game phase holds the first turn back until every faction is done
+    assert "activePlayerColor" not in state
 
     # Power of the Ancients includes the home sector: the setup offers the disc cube.
     press(channel, 1, find_button(channel, "FCIDyellow_ancientsCube_science_"))
@@ -79,6 +80,8 @@ def test_remnants_of_ra_atlantians_and_techno_mages_explore_then_pass(games_dir,
     press(channel, 3, next(cid for cid in buttons(channel) if cid.startswith("FCIDpurple_getTech_")))
     assert reload(game).get_player(3)["military_tech"] == ["neb"]
     assert reload(game).get_player(3)["influence_discs"] == discs
+    # every pre-game action is done, so the first turn starts
+    assert reload(game).gamestate["activePlayerColor"] == ["yellow"]
 
     explored_positions = []
     for player_id, color in [(1, "yellow"), (2, "blue"), (3, "purple")]:
