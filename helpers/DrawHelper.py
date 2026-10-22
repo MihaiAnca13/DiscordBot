@@ -1398,6 +1398,7 @@ class DrawHelper:
             part_data = json.load(f)
 
         def process_parts(parts, coords, refX, square_size, shipType, cells=None):
+            muon_count = 0
             for counter, part in enumerate(parts):
                 is_phase_module = counter in PlayerHelper.get_phase_module_slots(
                     player, "dread" if shipType == "dreadnought" else shipType)
@@ -1410,7 +1411,17 @@ class DrawHelper:
                     part_path = "images/resources/components/factions/wraith_phase_module.png"
                 part_image = self.use_resized_image(part_path, (square_size,square_size+8))
                 if part == "mus":
-                    part_image = part_image.resize((int(square_size * 0.69), int(square_size * 0.69)))
+                    # Keep sources below the header, in a labelled column beside the blueprints.
+                    muon_column = ["interceptor", "cruiser", "dreadnought", "starbase", "orbital"].index(shipType)
+                    part_image = part_image.resize((64, 64))
+                    scaled_x = 4600 + 80 * muon_column
+                    scaled_y = 180 + muon_count * 68
+                    if muon_count == 0:
+                        text_drawable_image.text((scaled_x, 145), ships[muon_column].upper(), color, font=font)
+                    context.paste(part_image, (scaled_x, scaled_y),
+                                  mask=part_image)
+                    muon_count += 1
+                    continue
                 if cells:
                     context.paste(part_image, cells[counter], mask=part_image)
                     continue

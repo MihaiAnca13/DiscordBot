@@ -1,7 +1,31 @@
 """The full game render: the map must keep clear of the round order strip under it."""
 from PIL import Image
+import pytest
 
 from helpers.DrawHelper import DrawHelper
+
+
+@pytest.mark.parametrize("faction", ["wul", "eri"])
+def test_muon_sources_render_outside_dreadnought_slots(start_game, monkeypatch, faction):
+    monkeypatch.setattr(DrawHelper, "use_image",
+                        lambda self, filename: Image.new("RGBA", (1024, 890), "white"))
+    muon_color = (255, 0, 255, 255)
+
+    def part_image(self, filename, size):
+        color = muon_color if filename.endswith("/muon_source.png") else "white"
+        return Image.new("RGBA", size, color)
+
+    monkeypatch.setattr(DrawHelper, "use_resized_image", part_image)
+    game, _channel = start_game(factions=[faction, "eri"])
+    player = game.get_player(1)
+    player["dread_parts"].extend(["mus", "mus"])
+
+    image = DrawHelper(game.gamestate).player_area(player)
+
+    x, y = 4760, 180
+    size = 64
+    assert image.getpixel((x + size // 2, y + size // 2)) == muon_color
+    assert image.getpixel((x + size // 2, y + size + 4 + size // 2)) == muon_color
 
 
 def test_show_game_leaves_a_gap_between_the_map_and_the_round_order(start_game, monkeypatch):
