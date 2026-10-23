@@ -64,8 +64,8 @@ def test_setup_gives_turtugan_its_home_ships_and_reserve(start_game):
     reserve = player["deep_space_sectors"]
     assert len(reserve) == 2
     assert all(tile.isdigit() for tile in reserve)
-    assert reserve[0] in game.displayPlayerStats(player)
-    assert reserve[1] in game.displayPlayerStats(player)
+    assert "Deep Space reserve: 2 hidden S3 sectors" in game.displayPlayerStats(player)
+    assert all(tile not in game.displayPlayerStats(player) for tile in reserve)
 
 
 def test_only_turtugan_gets_a_deep_space_reserve(start_game):
@@ -87,7 +87,9 @@ def test_general_setup_posts_the_reserved_sectors(games_dir, run):
     assert state.get_player(1)["color"] == "teal"
     assert len(reserve) == 2
     messages = [content for content, _ in channel.sent if content]
-    reserve_messages = [content for content in messages if "Deep Space Explorers reserves S3 sector" in content]
-    assert len(reserve_messages) == 2
-    assert all(tile in " ".join(reserve_messages) for tile in reserve)
+    reserve_messages = [content for content in messages if "Deep Space Explorers reserves" in content]
+    assert len(reserve_messages) == 1
+    assert "2 hidden S3 sectors" in reserve_messages[0]
+    assert all(tile not in reserve_messages[0] for tile in reserve)
+    assert all(not kwargs for content, kwargs in channel.sent if content in reserve_messages)
     assert state.gamestate["board"]["201"]["sector"] == "253"

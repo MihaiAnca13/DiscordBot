@@ -21,11 +21,14 @@ def test_turtugan_explores_with_a_reserved_sector_then_passes(start_game, press,
     sectors = json.load(open("data/sectors.json"))
     reserved = next(tile for tile in reserve if sectors[tile]["ancient"] == 0)
 
+    player["deep_space_sectors"] = [reserved] + [tile for tile in reserve if tile != reserved]
+    game.update()
+
     press(channel, 1, "FCIDblue_startExplore")
     position = next(cid.split("_")[2] for cid in buttons(channel)
                     if cid.startswith("FCIDblue_exploreTile_3"))
     press(channel, 1, f"FCIDblue_exploreTile_{position}")
-    press(channel, 1, find_button(channel, f"FCIDblue_reservedTile_{position}_{reserved}_"))
+    press(channel, 1, find_button(channel, f"FCIDblue_reservedTile_{position}_reserve_"))
     press(channel, 1, find_button(channel, f"FCIDblue_placeTile_{position}_{reserved}_"))
     press(channel, 1, find_button(channel, f"FCIDblue_addInfluenceFinish_{position}"))
     press(channel, 1, "FCIDblue_finishAction")

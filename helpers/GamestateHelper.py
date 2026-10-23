@@ -392,7 +392,9 @@ class GamestateHelper:
                 discard = 0
                 if "tile_discard_deck_300" in self.gamestate:
                     discard = len(self.gamestate["tile_discard_deck_300"])
-                if adjTile not in self.gamestate["board"] and len(self.gamestate["tile_deck_300"]) + discard > 0 and adjTile in configs:
+                if (adjTile not in self.gamestate["board"] and adjTile in configs
+                        and (len(self.gamestate["tile_deck_300"]) + discard > 0
+                             or DeepSpace.keep_outer_rim(self))):
                     self.add_tile(adjTile, 0, "sector3back")
         if position is not None and tile.get("type") == "nebula":
             neighbors = configs.get(position)[0].split(",")
@@ -678,7 +680,7 @@ class GamestateHelper:
         msg += f"\nYou have {player['colony_ships']}/{player['base_colony_ships']} colony ships ready at this time."
         if FactionData.has(player, "deep_space_explorers"):
             reserve = player.get("deep_space_sectors", [])
-            msg += f"\nDeep Space Sectors: {', '.join(reserve) if reserve else 'none'}"
+            msg += f"\nDeep Space reserve: {len(reserve)} hidden S3 sectors"
         harvesters = player.get("harvester_placements", [])
         if harvesters:
             msg += "\nHarvesters: " + ", ".join(f"{item['position']} {item['square']} (+1 {item['resource']})"

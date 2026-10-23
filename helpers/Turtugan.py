@@ -1,15 +1,12 @@
 """Turtugan's three faction rules.
 
 Deep Space Explorers keeps two S3 sectors the game did not deal into its deck
-and marks the ring-3 slots next to the home sector for them. Harvesters are
+as a separate reserve to draw from while exploring the outer sectors. Harvesters are
 starbases that move and farm an unsettled planet. Carapace Shields is per-tile,
 per-class combat state.
 """
-import asyncio
-
 import discord
 from discord.ui import View, Button
-from jproperties import Properties
 
 from helpers import FactionData
 
@@ -21,68 +18,26 @@ class DeepSpace:
 
     @staticmethod
     def draw_reserve(game, player):
-        """Setup: take two S3 sectors the game did not deal into its deck and keep them on the player.
-
-        The two slots next to the home sector are marked for them, so the map shows where they go.
-        """
+        """Keep two undealt S3 sectors in the player's separate reserve."""
         if not FactionData.has(player, "deep_space_explorers"):
             return
         reserve = player.setdefault("deep_space_sectors", [])
         spare = game.gamestate.setdefault("sector3_spare", [])
         while len(reserve) < 2 and spare:
             reserve.append(spare.pop(0))
-        DeepSpace.mark_positions(game, player)
         game.update()
-
-    @staticmethod
-    def mark_positions(game, player):
-        """Mark the two ring-3 slots next to the home sector as this player's extra S3 sectors."""
-        home = game.get_system_coord(player["home_planet"])
-        if home is False:
-            return
-        for position in DeepSpace.neighbours(game, home):
-            if position not in game.gamestate["board"]:
-                continue
-            if game.gamestate["board"][position].get("sector") != "sector3back":
-                continue
-            game.gamestate["board"][position]["deep_space"] = player["color"]
-            player.setdefault("deep_space_positions", []).append(position)
-            if len(player["deep_space_positions"]) == 2:
-                return
-
-    @staticmethod
-    def neighbours(game, position):
-        """The map positions next to a position."""
-        configs = Properties()
-        if game.gamestate.get("5playerhyperlane"):
-            name = "data/tileAdjacencies_5p.properties"
-            if game.gamestate.get("player_count") == 4:
-                name = "data/tileAdjacencies_4p.properties"
-        else:
-            name = "data/tileAdjacencies.properties"
-        with open(name, "rb") as f:
-            configs.load(f)
-        if position not in configs:
-            return []
-        return configs.get(position)[0].split(",")
 
     @staticmethod
     async def post_reserve(game, player, channel):
         if not FactionData.has(player, "deep_space_explorers"):
             return
-        from helpers.DrawHelper import DrawHelper
-        drawing = DrawHelper(game.gamestate)
         reserve = player.get("deep_space_sectors", [])
         if not reserve:
             await channel.send(f"{player['player_name']}, there were no extra S3 sectors for Deep Space"
                                " Explorers to reserve.")
             return
-        slots = ", ".join(player.get("deep_space_positions", []))
-        for tile in reserve:
-            image = await asyncio.to_thread(drawing.base_tile_image, tile)
-            file = await asyncio.to_thread(drawing.show_single_tile, image)
-            await channel.send(f"{player['player_name']}, Deep Space Explorers reserves S3 sector {tile},"
-                               f" for the marked slots {slots}.", file=file)
+        await channel.send(f"{player['player_name']}, Deep Space Explorers reserves {len(reserve)} hidden"
+                           " S3 sectors in a separate stack for future Explore actions.")
 
     @staticmethod
     def can_offer(player, position):
@@ -102,14 +57,13 @@ class DeepSpace:
         player["deep_space_choice"] = position
         game.update()
         view = View()
-        for tile in player["deep_space_sectors"]:
-            view.add_item(Button(label=f"Reserved S3: {tile}", style=discord.ButtonStyle.green,
-                                 custom_id=f"FCID{player['color']}_reservedTile_{position}_{tile}_{token}"))
+        view.add_item(Button(label="Draw from Reserve", style=discord.ButtonStyle.green,
+                             custom_id=f"FCID{player['color']}_reservedTile_{position}_reserve_{token}"))
         if DeepSpace.can_draw(game):
             view.add_item(Button(label="Draw Random", style=discord.ButtonStyle.blurple,
                                  custom_id=f"FCID{player['color']}_reservedTile_{position}_random_{token}"))
-        await interaction.channel.send(f"{player['player_name']}, choose a reserved S3 sector or draw a random"
-                                       " one for this Explore action.", view=view)
+        await interaction.channel.send(f"{player['player_name']}, choose a stack to draw an S3 sector"
+                                       " from for this Explore action.", view=view)
 
     @staticmethod
     def take(game, player, position, choice, token):
@@ -123,16 +77,16 @@ class DeepSpace:
                 game.update()
                 return None, "empty"
             return game.tile_draw(position), None
-        if choice not in player.get("deep_space_sectors", []):
+        if choice != "reserve" or not DeepSpace.has_reserve(player):
             game.update()
             return None, "missing"
-        player["deep_space_sectors"].remove(choice)
+        tile = player["deep_space_sectors"].pop(0)
         game.update()
-        return choice, None
+        return tile, None
 
     @staticmethod
     def keep_outer_rim(game):
-        """A held S3 sector needs its map position to survive the outer-rim cleanup."""
+        """Keep unexplored outer-sector positions available while a reserve can supply them."""
         return any(player.get("deep_space_sectors")
                    for player in game.gamestate.get("players", {}).values())
 

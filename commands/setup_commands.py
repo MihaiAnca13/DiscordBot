@@ -482,9 +482,9 @@ class SetupCommands(commands.GroupCog, name="setup"):
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "wulfen_board.png"))
 
         message = "\n".join(["# Turtugan",
-                             "- **Deep Space Explorers:** At the start of the game place 2 extra S3 sectors"
-                             " near your faction board. You may explore these at any time during the game,"
-                             " placing them in any available S3 sector you could explore.",
+                             "- **Deep Space Explorers:** Keep 2 extra S3 sectors in a separate hidden stack."
+                             " When exploring an outer-sector position, you may draw the next tile from"
+                             " this reserve instead of the normal stack, even if the normal stack is empty.",
                              "- **Harvesters:** Starbases are Harvesters, which can move, and at the end of"
                              " any Turn can be placed over an unsettled planet in the sector they are in,"
                              " generating 1 resource of any type that planet could generate (including"

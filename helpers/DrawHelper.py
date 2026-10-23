@@ -519,12 +519,6 @@ class DrawHelper:
                     draw.ellipse((x - radius + ring, y - radius + ring,
                                   x + radius - ring, y + radius - ring),
                                  outline=(0, 0, 0), width=border)
-            if tile.get("deep_space"):
-                # the faction's extra S3 sector: the same border an owned sector has
-                line = self.use_image(f"images/resources/masks/{tile['deep_space']}_line.png")
-                for _ in range(6):
-                    tile_image.paste(line, (int(78 * mult), 0), mask=line)
-                    tile_image = tile_image.rotate(60)
             if tile.get("type") == "nebula":
                 tile_image = tile_image.rotate(rotation)
                 self.label_nebula_subsectors(tile_image, position, rotation)
