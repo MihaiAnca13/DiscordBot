@@ -1076,6 +1076,11 @@ class DrawHelper:
         stroke_width = 2
         textHeightForP = 670
         text_drawable = ImageDraw.Draw(context)
+        if FactionData.has(player, "deep_space_explorers"):
+            reserve_font = ImageFont.truetype("images/resources/arial.ttf", size=20)
+            # Between discovery tiles (ending at 450) and action icons (starting at 470).
+            text_drawable.text((10, 451), f"S3 reserve: {len(player.get('deep_space_sectors', []))}",
+                               fill=(255, 255, 255), font=reserve_font, anchor="lt")
         if player.get("passed"):
             text_drawable.text((10, textHeightForP), "Passed", fill=(255, 0, 0), font=font,
                                stroke_width=stroke_width, stroke_fill=stroke_color)
