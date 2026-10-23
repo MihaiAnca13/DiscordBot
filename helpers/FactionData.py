@@ -37,3 +37,18 @@ def battle_rep_points(player):
     """Kurita: the +1/-1 battle markers sitting next to the reputation tiles still on the track."""
     bonuses = player.get("reputationBonuses", {})
     return sum(bonuses.get(str(x), 0) for x, tile in enumerate(player["reputation_track"]) if isinstance(tile, int))
+
+
+def starting_sector_line(faction_key, sectors):
+    """List all home-sector planets, including unpopulated advanced squares."""
+    sector = sectors[FACTIONS[faction_key]["home_planet"]]
+    planets = []
+    for resource, icon, label in (("money", "🟡", "Money"),
+                                  ("science", "🟣", "Science"),
+                                  ("material", "🟤", "Materials"),
+                                  ("neutral", "⚪", "Neutral")):
+        for suffix, prefix in (("", ""), ("adv", "Advanced ")):
+            count = len(sector[f"{resource}{suffix}_pop"])
+            if count:
+                planets.append(f"{count} {icon} {prefix}{label}")
+    return "- Starting sector planets: " + ", ".join(planets)
