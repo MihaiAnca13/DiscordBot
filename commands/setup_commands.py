@@ -508,11 +508,11 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- **Deep Space Explorers:** Keep 2 extra S3 sectors in a separate hidden stack."
                              " When exploring an outer-sector position, you may draw the next tile from"
                              " this reserve instead of the normal stack, even if the normal stack is empty.",
-                             "- **Harvesters:** Starbases are Harvesters, which can move, and at the end of"
-                             " any Turn can be placed over an unsettled planet in the sector they are in,"
-                             " generating 1 resource of any type that planet could generate (including"
-                             " Advanced Planets you could not otherwise populate). With each Explore action"
-                             " you may move a Harvester 1 activation. Harvester may not remove its Drive.",
+                             "- **Harvesters:** Starbases are Harvesters. They can move 1 activation per Explore"
+                             " action and may be placed over an unsettled planet in their sector at the end of"
+                             " any Turn. During Production, they generate 1 resource of any type that planet"
+                             " produces, even on Advanced Planets you cannot populate. Harvesters cannot remove"
+                             " their Drive.",
                              "- **Carapace Shields:** At the start of any combat or engagement round you may"
                              " engage or disengage Carapace Shields for any class of ship in the battle."
                              " Once engaged, that ship gets the following: -1 Damage from all its weapons"
