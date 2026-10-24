@@ -57,7 +57,7 @@ class DraftButtons:
                            view=DraftButtons.getDraftButtons(game))
 
     @staticmethod
-    def getDraftButtons(game: GamestateHelper):
+    def getDraftButtons(game: GamestateHelper, start: int = 0):
         view = View()
         factionsAvailable = [("Hydran Progress", "hyd"),
                              ("Eridani Empire", "eri"),
@@ -84,6 +84,7 @@ class DraftButtons:
         draftedFactionKeys = {key for playerID, key in game.gamestate["draftedFactions"]}
         colorsAlreadyChosen = {DraftButtons.getColor(key) for key in draftedFactionKeys
                                if key not in communityFactionKeys}
+        offered = []
         for faction, key in factionsAvailable:
             if key in draftedFactionKeys:
                 continue
@@ -91,6 +92,8 @@ class DraftButtons:
                 continue
             if key in bannedFactions:
                 continue
+            offered.append((faction, key))
+        for faction, key in offered[start:start + 24]:
             shorterName = faction
             if "(" in faction:
                 shorterName = shorterName[:(faction.find("(")-1)]
@@ -100,7 +103,16 @@ class DraftButtons:
             emoji = Emoji.getEmojiByName(shortFaction + "token")
             view.add_item(Button(label=f"{faction}", emoji=emoji, style=discord.ButtonStyle.gray,
                                  custom_id=f"draftFaction_{key}_{faction}"))
+        if len(offered) > start + 24:
+            view.add_item(Button(label="More Factions", style=discord.ButtonStyle.blurple,
+                                 custom_id=f"draftMore_{start + 24}"))
         return view
+
+    @staticmethod
+    async def draftMore(game: GamestateHelper, interaction: discord.Interaction, customID: str):
+        start = int(customID.split("_")[1])
+        await interaction.message.delete()
+        await interaction.channel.send("More factions:", view=DraftButtons.getDraftButtons(game, start))
 
     @staticmethod
     async def draftFaction(game: GamestateHelper, interaction: discord.Interaction, customID: str):

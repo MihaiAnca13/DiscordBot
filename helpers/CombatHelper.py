@@ -735,10 +735,12 @@ class Combat:
 
         attacker_ships.sort(key=ship_size, reverse=True)
         old_length = len(Combat.findPlayersInTile(game, pos))
+        gained = 0
         for index, ship in enumerate(attacker_ships):
-            game.destroy_ship(ship, pos, defenders[index % len(defenders)])
+            gained += game.destroy_ship(ship, pos, defenders[index % len(defenders)])
 
-        await interaction.channel.send("The stalemate destroyed the attacking ships.")
+        await interaction.channel.send("The stalemate destroyed the attacking ships."
+                                       + (f" Call To Arms gained {gained} materials." if gained else ""))
         await Combat.checkCombatEnd(game, interaction, pos, old_length)
 
     @staticmethod
@@ -1182,6 +1184,10 @@ class Combat:
                             split = True
                         base_damage = Combat.translateColorToDamage(die, random_number)
                         total_damage = base_damage + damage_bonus
+                        if (random_number == 6 and die != "pink" and colorOrAI != "ai"
+                                and FactionData.has(game.getPlayerObjectFromColor(colorOrAI),
+                                                    "built_for_war")):
+                            total_damage += 1
                         if not split:
                             dieNums.append([random_number, total_damage, die, source, roll_id, total_damage])
                         else:
@@ -1718,6 +1724,23 @@ class Combat:
     async def checkForMorphShield(game: GamestateHelper, pos: str, channel, ships, players):
         for playerColor in players:
             if playerColor != "ai":
+                playerObj = game.getPlayerObjectFromColor(playerColor)
+                if FactionData.has(playerObj, "regenerative_hull"):
+                    # Heal every ship that still has a repair part, unless this pairing includes the Ancients.
+                    if not ("ai" in players and any("anc" in ship for ship in ships)):
+                        repaired = 0
+                        player = game.get_player_from_color(playerColor)
+                        for ship in Combat.getCombatantShipsBySpeed(game, playerColor, ships, pos):
+                            shipModel = PlayerShip(game.gamestate["players"][player], ship[1])
+                            shipName = playerColor + "-" + ship[1]
+                            if shipModel.repair > 0 and game.gamestate["board"][pos].get(
+                                    "damage_tracker", {}).get(shipName, 0) > 0:
+                                game.repair_damage(shipName, pos)
+                                repaired += 1
+                        if repaired:
+                            await channel.send(f"{playerObj['player_name']} repaired {repaired} damage"
+                                               " with Regenerative Hull.")
+                    continue
                 for ship in Combat.getCombatantShipsBySpeed(game, playerColor, ships, pos):
                     player = game.get_player_from_color(playerColor)
                     shipModel = PlayerShip(game.gamestate["players"][player], ship[1])
@@ -2559,7 +2582,7 @@ class Combat:
                 game.setUnresolvedHits(hitsToAssign, pos)
             if shipModel.hull < damage:
                 if colorOrAI not in ship:
-                    game.destroy_ship(ship, pos, colorOrAI)
+                    gained = game.destroy_ship(ship, pos, colorOrAI)
                 else:
                     dummyKiller = "ai"
                     attackerSide = Combat.sideOf(game.gamestate["board"][pos].get("attacker"))
@@ -2568,7 +2591,10 @@ class Combat:
                         dummyKiller = attackerSide[0]
                     if defenderSide and colorOrAI not in defenderSide:
                         dummyKiller = defenderSide[0]
-                    game.destroy_ship(ship, pos, dummyKiller)
+                    gained = game.destroy_ship(ship, pos, dummyKiller)
+                if gained:
+                    owner = game.getPlayerObjectFromColor(shipOwner)
+                    msg += f" Call To Arms: {owner['player_name']} gained {gained} materials."
                 if colorOrAI != "ai":
                     msg += (f"{interaction.user.name} destroyed the"
                             f" {Combat.translateShipAbrToName(shipType)}{suffix}"

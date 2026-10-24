@@ -462,11 +462,20 @@ class GamestateHelper:
         return damage
 
     def destroy_ship(self, ship: str, position, destroyer):
+        gained = 0
+        owner = ship.split("-")[0]
+        tile = self.gamestate["board"][position]
         if "orb" not in ship:
             self.remove_units([ship], position)
         else:
             self.remove_pop(["orbital_pop"], position,
                             self.get_player_from_color(self.gamestate["board"][position]["owner"]), True)
+        if owner != "ai" and tile.get("owner") != owner:
+            player = self.getPlayerObjectFromColor(owner)
+            if FactionData.has(player, "call_to_arms"):
+                gained = {"int": 1, "cru": 2, "drd": 3}.get(
+                    ship.split("-")[1].replace("adv", ""), 0)
+                player["materials"] += gained
 
         if "damage_tracker" in self.gamestate["board"][position]:
             if ship in self.gamestate["board"][position]["damage_tracker"]:
@@ -477,6 +486,7 @@ class GamestateHelper:
                 self.gamestate["board"][position][key] = []
             self.gamestate["board"][position][key].append(ship.split("-")[1])
         self.update()
+        return gained
 
     def cleanAllTheTiles(self):
         for position in self.gamestate["board"]:
@@ -1059,6 +1069,17 @@ class GamestateHelper:
 
         self.gamestate["players"][str(player_id)].update({"color": color})
         self.gamestate["players"][str(player_id)].update(faction_data[faction])
+        # Starting techs are copied in, not researched, so apply their activation bonus here.
+        with open("data/techs.json", "r") as f:
+            tech_data = json.load(f)
+        for tech in (faction_data[faction].get("military_tech", [])
+                     + faction_data[faction].get("grid_tech", [])
+                     + faction_data[faction].get("nano_tech", [])):
+            details = tech_data.get(tech, {})
+            if details.get("activ1"):
+                self.gamestate["players"][str(player_id)][f"{details['activ1']}_apt"] += 1
+                if details["activ1"] == "upgrade":
+                    self.gamestate["players"][str(player_id)][f"{details['activ1']}_apt"] += 1
         self.gamestate["players"][str(player_id)].update({"passed": False})
         self.gamestate["players"][str(player_id)].update({"perma_passed": False})
         name = self.gamestate["players"][str(player_id)]["player_name"]
@@ -1084,6 +1105,12 @@ class GamestateHelper:
                 home = self.get_system_coord(p1.stats["home_planet"])
                 for ship in FactionData.of(p1.stats).get("starting_ships", ["int"]):
                     self.gamestate["board"][home]["player_ships"].append(f"{p1.stats['color']}-{ship}")
+                if FactionData.has(p1.stats, "money_is_power"):
+                    tile = self.gamestate["board"][home]
+                    if tile.get("moneyadv_pop") == [0] and p1.stats["money_pop_cubes"] > 0:
+                        tile["moneyadv_pop"] = [1]
+                        p1.stats["money_pop_cubes"] -= 1
+                        self.update_player(p1)
                 DeepSpace.draw_reserve(self, p1.stats)
 
                 if FactionData.has(p1.stats, "setup_reputation_tiles"):

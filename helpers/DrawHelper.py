@@ -661,6 +661,8 @@ class DrawHelper:
             return "+1 MOV"
         if action == "move" and FactionData.has(player, "raid"):
             return "+1 BUI"
+        if action in ("build", "move") and FactionData.has(player, "infinite_possibilities"):
+            return "+1 UPG"
         return None
 
     @staticmethod
@@ -1195,7 +1197,7 @@ class DrawHelper:
                     font = ImageFont.truetype("images/resources/arial.ttf", size=50)
                     text_drawable_image.text((70 + int(116 * x), 500), f"x{num}", color, font=font,
                                              stroke_width=stroke_width, stroke_fill=stroke_color)
-            action_activation = player[f"{action}_apt"]
+            action_activation = FactionData.action_apt(player, action)
             font = ImageFont.truetype("images/resources/arial.ttf", size=35)
             text_drawable_image.text((50 + int(116 * x), 607), f"{action_activation}", color, font=font,
                                              stroke_width=stroke_width, stroke_fill=stroke_color)
@@ -1779,12 +1781,25 @@ class DrawHelper:
                     if "anc" in ship:
                         points += vp["vp_per_ancient_ship"]
         techTypes = ["military_tech", "grid_tech", "nano_tech"]
+        tech_vp = FactionData.tech_track_vp(player)
         for tType in techTypes:
-            if len(player.get(tType, [])) > 3:
-                if len(player[tType]) == 7:
-                    points += 5
-                else:
-                    points += len(player[tType]) - 3
+            count = len(player.get(tType, []))
+            if count < len(tech_vp):
+                points += tech_vp[count]
+        centre = next((tile for tile in tile_map.values() if tile.get("sector") == "001"), None)
+        if centre and isinstance(centre.get("owner"), str):
+            owner = centre["owner"]
+            allied = owner == color
+            if not allied:
+                owner_player = next((p for p in self.gamestate.get("players", {}).values()
+                                     if p.get("color") == owner), None)
+                if owner_player:
+                    shared = set(player.get("alliances", {})).intersection(
+                        owner_player.get("alliances", {}))
+                    allied = any(not player["alliances"][tile] and not owner_player["alliances"][tile]
+                                 for tile in shared)
+            if allied:
+                points += vp.get("vp_per_centre", 0)
         if "disc_tiles_for_points" in player:
             points += player["disc_tiles_for_points"] * 2
         points += vp.get("discovery_part_vp", 0) * PlayerHelper.installed_discovery_part_count(player)

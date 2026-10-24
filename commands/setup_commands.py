@@ -12,6 +12,13 @@ from helpers.DrawHelper import DrawHelper
 from helpers import FactionData
 
 
+async def faction_autocomplete(interaction: discord.Interaction, current: str):
+    """Discord caps choices at 25 per option; autocomplete keeps the whole faction list."""
+    current = current or ""
+    return [choice for choice in SetupCommands.factionChoices
+            if current.lower() in choice.name.lower()][:25]
+
+
 class SetupCommands(commands.GroupCog, name="setup"):
     def __init__(self, bot):
         self.bot = bot
@@ -51,7 +58,11 @@ class SetupCommands(commands.GroupCog, name="setup"):
                       app_commands.Choice(name="Kurita Prefecture", value="kur"),
                       app_commands.Choice(name="Turtugan", value="tur"),
                       app_commands.Choice(name="The Wulfen", value="wul"),
-                      app_commands.Choice(name="The Wraith", value="wra")]
+                      app_commands.Choice(name="The Wraith", value="wra"),
+                      app_commands.Choice(name="Children of Cog", value="cog"),
+                      app_commands.Choice(name="Legion of Midas", value="mid"),
+                      app_commands.Choice(name="The Horde", value="hor"),
+                      app_commands.Choice(name="Vorlons", value="vor")]
     
     @app_commands.choices(ai_ship_type=ai_choices2)
     @app_commands.choices(ai_ship=ai_ship_choices)
@@ -65,18 +76,21 @@ class SetupCommands(commands.GroupCog, name="setup"):
     
 
     @app_commands.command(name="game")
-    @app_commands.choices(faction1=factionChoices, faction2=factionChoices, faction3=factionChoices,
-                          faction4=factionChoices, faction5=factionChoices, faction6=factionChoices,faction7=factionChoices,faction8=factionChoices,faction9=factionChoices)
+    @app_commands.autocomplete(faction1=faction_autocomplete, faction2=faction_autocomplete,
+                               faction3=faction_autocomplete, faction4=faction_autocomplete,
+                               faction5=faction_autocomplete, faction6=faction_autocomplete,
+                               faction7=faction_autocomplete, faction8=faction_autocomplete,
+                               faction9=faction_autocomplete)
     async def game(self, interaction: discord.Interaction,
-                   player1: discord.Member, faction1: app_commands.Choice[str],
-                   player2: discord.Member, faction2: app_commands.Choice[str],
-                   player3: Optional[discord.Member] = None, faction3: Optional[app_commands.Choice[str]] = None,
-                   player4: Optional[discord.Member] = None, faction4: Optional[app_commands.Choice[str]] = None,
-                   player5: Optional[discord.Member] = None, faction5: Optional[app_commands.Choice[str]] = None,
-                   player6: Optional[discord.Member] = None, faction6: Optional[app_commands.Choice[str]] = None,
-                   player7: Optional[discord.Member] = None, faction7: Optional[app_commands.Choice[str]] = None,
-                   player8: Optional[discord.Member] = None, faction8: Optional[app_commands.Choice[str]] = None,
-                   player9: Optional[discord.Member] = None, faction9: Optional[app_commands.Choice[str]] = None,):
+                   player1: discord.Member, faction1: str,
+                   player2: discord.Member, faction2: str,
+                   player3: Optional[discord.Member] = None, faction3: Optional[str] = None,
+                   player4: Optional[discord.Member] = None, faction4: Optional[str] = None,
+                   player5: Optional[discord.Member] = None, faction5: Optional[str] = None,
+                   player6: Optional[discord.Member] = None, faction6: Optional[str] = None,
+                   player7: Optional[discord.Member] = None, faction7: Optional[str] = None,
+                   player8: Optional[discord.Member] = None, faction8: Optional[str] = None,
+                   player9: Optional[discord.Member] = None, faction9: Optional[str] = None,):
 
         temp_player_list = [player1, player2, player3, player4, player5, player6,player7, player8,player9]
         temp_playerID_list = []
@@ -87,7 +101,10 @@ class SetupCommands(commands.GroupCog, name="setup"):
         temp_faction_list = [faction1, faction2, faction3, faction4, faction5, faction6, faction7, faction8, faction9]
         for faction in temp_faction_list:
             if faction is not None:
-                temp_factionID_list.append(faction.value)
+                if faction not in FactionData.FACTIONS:
+                    await interaction.response.send_message("Unknown faction.", ephemeral=True)
+                    return
+                temp_factionID_list.append(faction)
         game = GamestateHelper(interaction.channel)
         await DraftButtons.generalSetup(interaction, game, temp_playerID_list, temp_factionID_list)
 
@@ -582,6 +599,65 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- The board prints home sector 226; the bot uses the free sector 254"
                              " (225 is the Terran Union home and 226 is the Planta home)."])
         await sendCommunitySheet(message, "wraith_board.png")
+
+        message = "\n".join(["# Children of Cog",
+                             FactionData.starting_sector_line("cog", sectors),
+                             "- Start with Nanorobots in the Nano Tech track.",
+                             "- **Mechanical Mind:** Alternative tech board, prioritising breadth over depth.",
+                             "- **Infinite Possibilities:** Upgrade 3. Gain an additional upgrade activation as the"
+                             " first or last activation when you perform a Build or Move action.",
+                             "- **Adaptive Transformation:** Using an upgrade activation, replace two Interceptors"
+                             " with a Cruiser gaining 1 Material; or two Cruisers with a Dreadnought gaining"
+                             " 2 Materials. Using an upgrade activation and 1 Material, replace a Cruiser with two"
+                             " Interceptors; or for 2 Materials replace a Dreadnought with two Cruisers. All ships"
+                             " must be in the same sector.",
+                             "- The board prints home sector 254; the bot uses the free sector 256"
+                             " (254 is the Wraith home)."])
+        await factionThread.send(message, file=drawing.get_file(boardPrefix + "cog_board.png"))
+
+        message = "\n".join(["# Legion of Midas",
+                             FactionData.starting_sector_line("mid", sectors),
+                             "- Start with Advanced Economy in the Grid Tech track.",
+                             "- **Midas Touch:** Before you perform an action, you can spend money to perform an"
+                             " additional activation of the same type: Explore 4, Research 3, Upgrade 1, Build 1,"
+                             " Move 1, Influence 1 (an additional action disk). With 7 or fewer action disks left,"
+                             " each cost is 1 higher.",
+                             "- **Money is Power:** During game setup, place a Population Cube in the Advanced"
+                             " Money Population Square on your Starting Sector.",
+                             "- **All That Glitters:** Midas earn 1 Money instead of 2 when passing first."])
+        await factionThread.send(message, file=drawing.get_file(boardPrefix + "midas_board.png"))
+
+        message = "\n".join(["# The Horde",
+                             FactionData.starting_sector_line("hor", sectors),
+                             "- Start with Neutron Bombs in the Military Tech track and Nanorobots in the Nano"
+                             " Tech track.",
+                             "- **Built for War:** +1 damage when you hit with an unmodified 6. Does not apply to"
+                             " Rift weapons.",
+                             "- **Reduced Initiative:** Interceptors, Cruisers and Starbases have 1 less initiative.",
+                             "- **Raid:** Move actions include a Build activation.",
+                             "- **Call To Arms:** Gain Materials when your ships are destroyed in a sector you do"
+                             " not control: Interceptor 1, Cruiser 2, Dreadnought 3.",
+                             "- **Battle Focus:** Upgrade activations must be spent on different ship classes.",
+                             "- **Alternative Tech Board:** 4 slots per track, with discounts -1, -3, -5.",
+                             "- The board prints home sector 255; the bot uses the free sector 288"
+                             " (255 is the Remnants of Ra home)."])
+        await factionThread.send(message, file=drawing.get_file(boardPrefix + "horde_board.png"))
+
+        message = "\n".join(["# Vorlons",
+                             FactionData.starting_sector_line("vor", sectors),
+                             "- Start with Regenerative Hull in the Nano Tech track.",
+                             "- **Tech Masters:** For an increased Science cost, you may put a Tech in the wrong"
+                             " Tech Tray. The extra cost is 2 the first time, then 1 more each subsequent time"
+                             " (3 the second, 4 the third). This extra cost cannot be reduced by discounts.",
+                             "- **Organic Tech:** Whenever you research a new Tech, you may have 1 free Upgrade"
+                             " activation for that Tech only.",
+                             "- **Few in Number:** Only flip back 1 Colony Ship on an Influence action.",
+                             "- **Regenerative Hull:** All ships start with it. Heal does not work against Ancients,"
+                             " but does against Guardians and the GCDS.",
+                             "- **Research Discounts are all 1 more.**",
+                             "- **Centre Bonus:** 2 VP if you or an Ally control the Centre.",
+                             "- Trade 4:1. Four reputation slots."])
+        await factionThread.send(message, file=drawing.get_file(boardPrefix + "vorlons_board.png"))
 
         message = "\n".join(["Rift Reference"])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "Rift_Reference.png"))

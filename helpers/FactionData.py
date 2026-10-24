@@ -28,6 +28,30 @@ def has(player, ability):
     return ability in of(player).get("abilities", [])
 
 
+TECH_TRACK = [-8, -6, -4, -3, -2, -1, 0, 0]
+TECH_TRACK_VP = [0, 0, 0, 0, 1, 2, 3, 5]
+
+
+def tech_track(player):
+    """The faction's printed research discounts, indexed from the last slot."""
+    return of(player).get("tech_track", TECH_TRACK)
+
+
+def tech_track_max(player):
+    """How many Tech Tiles the faction's track holds (seven unless the board prints fewer)."""
+    return of(player).get("tech_track_max", 7)
+
+
+def tech_track_vp(player):
+    """End-game VP by number of Tech Tiles on one track."""
+    return of(player).get("tech_track_vp", TECH_TRACK_VP)
+
+
+def action_apt(player, action):
+    """The activations this action has, including a paid Midas Touch activation."""
+    return player[f"{action}_apt"] + (1 if player.get("midasBoost") == action else 0)
+
+
 def artwork_name(full_name):
     """The image and emoji key of a faction: artwork names differ from data keys (exl -> exile)."""
     return BY_NAME.get(full_name, {}).get("artwork", full_name)

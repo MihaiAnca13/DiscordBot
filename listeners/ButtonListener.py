@@ -20,6 +20,7 @@ from Buttons.Research import ResearchButtons
 from Buttons.Shrine import ShrineButtons
 from Buttons.Turn import TurnButtons
 from Buttons.Upgrade import UpgradeButtons
+from helpers import FactionData
 from helpers.CombatHelper import Combat
 from helpers.GameLock import game_lock
 from helpers.Turtugan import Carapace
@@ -341,6 +342,36 @@ class ButtonListener(commands.Cog):
         elif customID.startswith("startUpgrade"):
             game.updateSaveFile()
             await UpgradeButtons.startUpgrade(game, player, interaction, True, "dummy","dum")
+        elif customID.startswith("infiniteUpgrade"):
+            if (not FactionData.has(player, "infinite_possibilities")
+                    or player.get("infinitePossibilitiesUsed")):
+                await interaction.followup.send("That extra Upgrade activation is not available.",
+                                                ephemeral=True)
+                return
+            return_to = customID.split("_")[1] if "_" in customID else "finish"
+            player["infinitePossibilitiesUsed"] = True
+            player["infiniteUpgradeReturn"] = return_to
+            player["infiniteUpgradeAvailable"] = True
+            game.update()
+            if interaction.message is not None:
+                await interaction.message.delete()
+            await UpgradeButtons.startUpgrade(game, player, interaction, False, "free", "1")
+        elif customID.startswith("finishInfiniteUpgrade"):
+            await UpgradeButtons.finishInfiniteUpgrade(game, player, interaction, player_helper)
+        elif customID.startswith("adaptiveStart"):
+            await UpgradeButtons.adaptiveStart(game, player, interaction, customID)
+        elif customID.startswith("adaptiveSector"):
+            await UpgradeButtons.adaptiveSector(game, player, interaction, customID)
+        elif customID.startswith("backToUpgrade"):
+            await UpgradeButtons.backToUpgrade(game, player, interaction, customID)
+        elif customID.startswith("adaptiveSwap"):
+            await UpgradeButtons.adaptiveSwap(game, player, interaction, customID, player_helper)
+        elif customID.startswith("undoAdaptive"):
+            await UpgradeButtons.undoAdaptive(game, player, interaction, player_helper)
+        elif customID.startswith("midasTouch"):
+            await TurnButtons.midasTouch(player, game, interaction)
+        elif customID.startswith("midasAction"):
+            await TurnButtons.midasAction(player, game, interaction, customID)
         elif customID.startswith("chooseDifferentShip"):
             actions = customID.split("_")[1]
             discTile = customID.split("_")[2]
@@ -503,6 +534,8 @@ class ButtonListener(commands.Cog):
             await ShrineButtons.placeShrineFinal(game, player, interaction, customID, player_helper)
         elif customID.startswith("draftFaction"):
             await DraftButtons.draftFaction(game, interaction, customID)
+        elif customID.startswith("draftMore"):
+            await DraftButtons.draftMore(game, interaction, customID)
         elif customID.startswith("pulsarAction"):
             game.updateSaveFile()
             await PulsarButtons.pulsarAction(game, player, interaction, player_helper, customID)

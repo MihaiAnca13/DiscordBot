@@ -13,7 +13,7 @@ def test_kurita_only_appears_in_community_draft(community_mode):
     assert len(standard_buttons.children) == 16
     assert [button.label for button in standard_buttons.children].count("Kurita Prefecture") == 0
     assert [button.label for button in community_buttons.children].count("Kurita Prefecture") == 1
-    assert len(community_buttons.children) == 24
+    assert len(community_buttons.children) == 25
 
 
 def test_kurita_faction_color_is_supported_setup_color():

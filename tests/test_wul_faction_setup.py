@@ -10,7 +10,7 @@ def test_wulfen_only_appears_in_community_draft():
     assert len(standard_buttons.children) == 16
     assert "The Wulfen" not in [button.label for button in standard_buttons.children]
     assert [button.label for button in community_buttons.children].count("The Wulfen") == 1
-    assert len(community_buttons.children) == 24
+    assert len(community_buttons.children) == 25
 
 
 def test_wulfen_uses_brown_and_respects_bans():
