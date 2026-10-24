@@ -607,13 +607,26 @@ class Combat:
         return hittableShips
 
     @staticmethod
+    async def sendCombatReports(channel, reports):
+        text = "\n".join(reports)
+        while text:
+            split_at = text.rfind("\n", 0, 2001) if len(text) > 2000 else len(text)
+            if split_at <= 0:
+                split_at = 2000
+            await channel.send(text[:split_at])
+            text = text[split_at:].lstrip("\n")
+        reports.clear()
+
+    @staticmethod
     async def offerHitPrompt(game: GamestateHelper, interaction: discord.Interaction, pos: str,
                              colorOrAI: str, hittableShips, dieNum: int, dieDam: int,
-                             counter=None, deferEnd: bool = False):
+                             counter=None, deferEnd: bool = False, reports=None):
         """Offer one die's targets, or assign the hit when there is only one."""
         if not hittableShips:
             return
         if len(hittableShips) > 1:
+            if reports is not None:
+                await Combat.sendCombatReports(interaction.channel, reports)
             msg = (f"{interaction.user.mention}, choose what ship to hit with the die that rolled a {dieNum}."
                    f" You will deal {str(dieDam).rstrip('!')} damage. The bot has calculated that you can hit"
                    f" these ships.")
@@ -633,7 +646,7 @@ class Combat:
             buttonID = f"assignHitTo_{pos}_{colorOrAI}_{hittableShips[0]}_{dieNum}_{dieDam}"
             if deferEnd:
                 buttonID += "_defer"
-            await Combat.assignHitTo(game, buttonID, interaction, False, deferEnd=deferEnd)
+            await Combat.assignHitTo(game, buttonID, interaction, False, deferEnd=deferEnd, reports=reports)
 
     @staticmethod
     def canResolveStalemate(game: GamestateHelper, pos: str):
@@ -827,7 +840,7 @@ class Combat:
             shipModel = PlayerShip(game.gamestate["players"][player], shipType)
             if "pink" not in shipModel.dice:
                 continue
-            needed = shipModel.hull + 1 - game.add_damage(ship, pos, 0)
+            needed = shipModel.hull + 1 - game.gamestate["board"][pos].get("damage_tracker", {}).get(ship, 0)
             entries.append((ship, shipModel.cost, needed))
         entries.sort(key=lambda entry: entry[1], reverse=True)
         allocation = []
@@ -849,11 +862,13 @@ class Combat:
     @staticmethod
     async def applyRiftBackfire(game: GamestateHelper, colorOrAI, interaction: discord.Interaction, pos, totalDamage,
                                 deferEnd: bool = False):
+        reports = []
         for ship, damage in Combat.getRiftBackfireAllocation(game, colorOrAI,
                                                              game.gamestate["board"][pos]["player_ships"][:],
                                                              pos, totalDamage):
             buttonID = f"assignHitTo_{pos}_{colorOrAI}_{ship}_1_{damage}"
-            await Combat.assignHitTo(game, buttonID, interaction, False, deferEnd=deferEnd)
+            await Combat.assignHitTo(game, buttonID, interaction, False, deferEnd=deferEnd, reports=reports)
+        await Combat.sendCombatReports(interaction.channel, reports)
 
     @staticmethod
     async def resolvePendingRiftBackfire(game: GamestateHelper, colorOrAI, interaction: discord.Interaction,
@@ -879,6 +894,7 @@ class Combat:
         player = None
         ships = Combat.getCombatantShipsBySpeed(game, colorOrAI, player_ships, pos)
         update = False
+        reports = []
         for ship in ships:
             if ship[0] == speed or int(ship[0]+99) == speed:
                 unitType = ship[1].split("-")[1]
@@ -916,7 +932,7 @@ class Combat:
                         dieNums.append([random_number, Combat.translateColorToDamage(die, random_number), die])
                 if shipModel.computer > 0:
                     msg += f"\nThis ship type has a +{shipModel.computer} computer."
-                await interaction.channel.send(msg + msg2)
+                reports.append(msg + msg2)
                 oldNumPeeps = len(Combat.findPlayersInTile(game, pos))
                 for die in dieNums:
                     tile_map = game.gamestate["board"]
@@ -929,7 +945,7 @@ class Combat:
                     if all([dieNum + shipModel.computer > 5, len(hittableShips) == 0, oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
                         message = (f"The computer bonus for a die that rolled a {dieNum}"
                                    " was cancelled by the shields on each of the opponents ships.")
-                        await interaction.channel.send(message)
+                        reports.append(message)
                     if len(hittableShips) > 0:
                         update = True
                         if len(hittableShips) > 1:
@@ -937,7 +953,7 @@ class Combat:
                             oldShipVal = 0
                             ableToKillSomething = False
                             for option in hittableShips:
-                                damageOnShip = game.add_damage(option, pos, 0)
+                                damageOnShip = game.gamestate["board"][pos].get("damage_tracker", {}).get(option, 0)
                                 shipType = option.split("-")[1]
                                 shipOwner = option.split("-")[0]
                                 player = game.get_player_from_color(shipOwner)
@@ -956,11 +972,12 @@ class Combat:
                                             oldShipVal = shipModel2.cost
                                             ship = option
                             buttonID = f"assignHitTo_{pos}_{colorOrAI}_{ship}_{dieNum}_{dieDam}"
-                            await Combat.assignHitTo(game, buttonID, interaction, False)
+                            await Combat.assignHitTo(game, buttonID, interaction, False, reports=reports)
                         else:
                             ship = hittableShips[0]
                             buttonID = f"assignHitTo_{pos}_{colorOrAI}_{ship}_{dieNum}_{dieDam}"
-                            await Combat.assignHitTo(game, buttonID, interaction, False)
+                            await Combat.assignHitTo(game, buttonID, interaction, False, reports=reports)
+        await Combat.sendCombatReports(interaction.channel, reports)
         hitsToAssign = 0
         if "unresolvedHits" in game.gamestate["board"][pos]:
             hitsToAssign = game.gamestate["board"][pos]["unresolvedHits"]
@@ -1083,6 +1100,7 @@ class Combat:
         player = None
         ships = Combat.getCombatantShipsBySpeed(game, colorOrAI, player_ships, pos)
         update = False
+        reports = []
         popRiftProtector = True
         deferredEnd = False
         is_wolf = speed != 1000 and FactionData.has(game.getPlayerObjectFromColor(colorOrAI), "wolf_pack")
@@ -1298,8 +1316,9 @@ class Combat:
                                 update = True
                                 await Combat.offerHitPrompt(game, interaction, pos, colorOrAI, hittableShips,
                                                             dieNum, dieDam, counter=counter,
-                                                            deferEnd=dieColor == "pink" or is_wolf)
+                                                            deferEnd=dieColor == "pink" or is_wolf, reports=reports)
                                 deferredEnd = deferredEnd or dieColor == "pink" or is_wolf
+                    await Combat.sendCombatReports(interaction.channel, reports)
                     if shipRiftBackfire > 0:
                         await Combat.applyRiftBackfire(game, colorOrAI, interaction, pos, shipRiftBackfire,
                                                        deferEnd=True)
@@ -2499,7 +2518,7 @@ class Combat:
 
     @staticmethod
     async def assignHitTo(game: GamestateHelper, buttonID: str, interaction: discord.Interaction, button: bool,
-                          deferEnd: bool = False):
+                          deferEnd: bool = False, reports=None):
         pos = buttonID.split("_")[1]
         colorOrAI = buttonID.split("_")[2]
         ship = buttonID.split("_")[3]
@@ -2524,43 +2543,48 @@ class Combat:
         ship_class = shipModel.ship_type if shipOwner != "ai" else shipType.replace("adv", "")
         damage_value = int(dieDam) if carapace_bypass else Carapace.incoming_damage(
             game, pos, shipOwner, ship_class, colorOrAI, int(dieDam))
-        damage = game.add_damage(ship, pos, damage_value)
-        if colorOrAI != "ai":
-            msg = (f"{interaction.user.mention} dealt {damage_value} damage to a"
-                   f" {Combat.translateShipAbrToName(shipType)}{suffix} with a die that rolled a {str(dieNum)}. ")
-        else:
-            msg = (f"The AI dealt {damage_value} damage to a {Combat.translateShipAbrToName(shipType)}{suffix}"
-                   f" with a die that rolled a {str(dieNum)}. ")
-        msg += f"The damaged ship has {shipModel.hull - damage + 1}/{shipModel.hull + 1} hp left. "
-        oldLength = len(Combat.findPlayersInTile(game, pos))
-        if button:
-            # Count this hit before checkCombatEnd looks for hits still pending.
-            hitsToAssign = max(game.gamestate["board"][pos].get("unresolvedHits", 0) - 1, 0)
-            game.setUnresolvedHits(hitsToAssign, pos)
-        if shipModel.hull < damage:
-            if colorOrAI not in ship:
-                game.destroy_ship(ship, pos, colorOrAI)
-            else:
-                dummyKiller = "ai"
-                attackerSide = Combat.sideOf(game.gamestate["board"][pos].get("attacker"))
-                defenderSide = Combat.sideOf(game.gamestate["board"][pos].get("defender"))
-                if attackerSide and colorOrAI not in attackerSide:
-                    dummyKiller = attackerSide[0]
-                if defenderSide and colorOrAI not in defenderSide:
-                    dummyKiller = defenderSide[0]
-                game.destroy_ship(ship, pos, dummyKiller)
+        with game.batch_save():
+            damage = game.add_damage(ship, pos, damage_value)
             if colorOrAI != "ai":
-                msg += (f"{interaction.user.name} destroyed the"
-                        f" {Combat.translateShipAbrToName(shipType)}{suffix}"
-                        " due to the damage exceeding the ships hull.")
+                msg = (f"{interaction.user.mention} dealt {damage_value} damage to a"
+                       f" {Combat.translateShipAbrToName(shipType)}{suffix} with a die that rolled a {str(dieNum)}. ")
             else:
-                msg += (f"The AI destroyed the {Combat.translateShipAbrToName(shipType)}{suffix}"
-                        " due to the damage exceeding the ships hull.")
+                msg = (f"The AI dealt {damage_value} damage to a {Combat.translateShipAbrToName(shipType)}{suffix}"
+                       f" with a die that rolled a {str(dieNum)}. ")
+            msg += f"The damaged ship has {shipModel.hull - damage + 1}/{shipModel.hull + 1} hp left. "
+            oldLength = len(Combat.findPlayersInTile(game, pos))
+            if button:
+                # Count this hit before checkCombatEnd looks for hits still pending.
+                hitsToAssign = max(game.gamestate["board"][pos].get("unresolvedHits", 0) - 1, 0)
+                game.setUnresolvedHits(hitsToAssign, pos)
+            if shipModel.hull < damage:
+                if colorOrAI not in ship:
+                    game.destroy_ship(ship, pos, colorOrAI)
+                else:
+                    dummyKiller = "ai"
+                    attackerSide = Combat.sideOf(game.gamestate["board"][pos].get("attacker"))
+                    defenderSide = Combat.sideOf(game.gamestate["board"][pos].get("defender"))
+                    if attackerSide and colorOrAI not in attackerSide:
+                        dummyKiller = attackerSide[0]
+                    if defenderSide and colorOrAI not in defenderSide:
+                        dummyKiller = defenderSide[0]
+                    game.destroy_ship(ship, pos, dummyKiller)
+                if colorOrAI != "ai":
+                    msg += (f"{interaction.user.name} destroyed the"
+                            f" {Combat.translateShipAbrToName(shipType)}{suffix}"
+                            " due to the damage exceeding the ships hull.")
+                else:
+                    msg += (f"The AI destroyed the {Combat.translateShipAbrToName(shipType)}{suffix}"
+                            " due to the damage exceeding the ships hull.")
+        if reports is None:
             await interaction.channel.send(msg)
-            if not deferEnd:
-                await Combat.checkCombatEnd(game, interaction, pos, oldLength)
         else:
-            await interaction.channel.send(msg)
+            reports.append(msg)
+        if shipModel.hull < damage and not deferEnd:
+            if reports is not None and (oldLength != len(Combat.findPlayersInTile(game, pos))
+                                        or len(Combat.findSidesInTile(game, pos)) < 2):
+                await Combat.sendCombatReports(interaction.channel, reports)
+            await Combat.checkCombatEnd(game, interaction, pos, oldLength)
         if button:
             await interaction.message.delete()
             if hitsToAssign == 0:

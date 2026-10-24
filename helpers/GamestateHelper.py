@@ -1,5 +1,6 @@
 import asyncio
 import copy
+from contextlib import contextmanager
 import json
 import time
 import discord
@@ -13,6 +14,7 @@ from helpers.Turtugan import DeepSpace, Harvester
 import os
 from jproperties import Properties
 import random
+import tempfile
 from discord.ui import View, Button
 
 # Nebula Sectors (295/395) are one hex split into three Subsectors. Edges are
@@ -34,6 +36,8 @@ class GamestateHelper:
         else:
             game_id = nameID
         self.game_id = game_id
+        self.save_batch_depth = 0
+        self.has_pending_save = False
         self.gamestate = self.get_gamestate()
 
     def getPlayersID(self, player):
@@ -1207,13 +1211,33 @@ class GamestateHelper:
         self.gamestate["players"][playerid]["discoveryTileBonusPointTiles"] = []
         self.update()
 
-    def update(self):
+    @contextmanager
+    def batch_save(self):
+        """Persist completed mutations even when resolution raises an exception."""
+        self.save_batch_depth += 1
         try:
-            with open(f"{config.gamestate_path}/{self.game_id}.json", "w") as f:
-                json.dump(self.gamestate, f)
-        except (OSError, IOError, json.JSONDecodeError, PermissionError):
-            with open(f"{config.gamestate_path}/{self.game_id}.json", "w") as f:
-                json.dump(self.gamestate, f)
+            yield
+        finally:
+            self.save_batch_depth -= 1
+            if self.save_batch_depth == 0 and self.has_pending_save:
+                self.update()
+
+    def update(self):
+        if self.save_batch_depth:
+            self.has_pending_save = True
+            return
+        path = f"{config.gamestate_path}/{self.game_id}.json"
+        temporary_path = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", dir=config.gamestate_path,
+                                             delete=False) as save_file:
+                temporary_path = save_file.name
+                json.dump(self.gamestate, save_file)
+            os.replace(temporary_path, path)
+            self.has_pending_save = False
+        finally:
+            if temporary_path is not None and os.path.exists(temporary_path):
+                os.unlink(temporary_path)
 
     def getNumberOfSaveFiles(self):
         saveFile = self.get_saveFile()

@@ -752,7 +752,7 @@ class TestAllianceDiceAssignment:
         no_random([6, 6])
         hit = []
 
-        async def spy(_game, buttonID, _interaction, _flag):
+        async def spy(_game, buttonID, _interaction, _flag, reports=None):
             hit.append(buttonID.split("_")[3])
 
         monkeypatch.setattr(Combat, "assignHitTo", spy)
@@ -761,3 +761,4 @@ class TestAllianceDiceAssignment:
         run(Combat.rollDice(game, f"rollDice_{POS}_ai_2_deleteMsg", FakeInteraction()))
 
         assert hit and all(ship == "red-int" for ship in hit)
+        assert not game.gamestate["board"][POS].get("damage_tracker")
