@@ -303,6 +303,11 @@ class SetupCommands(commands.GroupCog, name="setup"):
 
         factionThread = await actions.create_thread(name="Faction Reference", auto_archive_duration=10080)
         boardPrefix = "images/resources/components/factions/"
+
+        async def sendCommunitySheet(message, board_file):
+            if community_factions:
+                await factionThread.send(message, file=drawing.get_file(boardPrefix + board_file))
+
         with open("data/sectors.json") as sector_file:
             sectors = json.load(sector_file)
 
@@ -460,7 +465,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- **Ancient Power:** Gain 1 VP for each discovery tile installed on a Ship Blueprint.",
                              "- **Price of Power:** Each ship costs 1 additional Materials for each discovery tile "
                              "beyond the first installed on its Ship Blueprint."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "atlantians_board.png"))
+        await sendCommunitySheet(message, "atlantians_board.png")
 
         message = "\n".join(["# Remnants of Ra",
                              FactionData.starting_sector_line("ra", sectors),
@@ -471,7 +476,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- **Secrets of the Ancients:** Gain 1 additional VP for each sector you control"
                              " with an artifact key.",
                              "- You flip only 1 colony ship per Influence action."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "ra_board.png"))
+        await sendCommunitySheet(message, "ra_board.png")
 
         message = "\n".join(["# Techno-Mages",
                              FactionData.starting_sector_line("tm", sectors),
@@ -486,7 +491,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              " (e.g. vs Spiral), the Defender chooses last.",
                              "- **Limited Manufacturing:** You only get 1 Activation with a Build Action, and you"
                              " may only flip 1 Colony Ship with an Influence action."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "tm_board.png"))
+        await sendCommunitySheet(message, "tm_board.png")
 
         message = "\n".join(["# The Wulfen",
                              FactionData.starting_sector_line("wul", sectors),
@@ -501,7 +506,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- Start with Fusion Source in the Grid tech track.",
                              "- 5 reputation slots (2 can hold ambassadors).",
                              "- Home sector Lupis (252)."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "wulfen_board.png"))
+        await sendCommunitySheet(message, "wulfen_board.png")
 
         message = "\n".join(["# Turtugan",
                              FactionData.starting_sector_line("tur", sectors),
@@ -521,7 +526,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- Start with a Harvester (Starbase) instead of an Interceptor.",
                              "- Modified ship designs: Slower, offboard Hull & Computer.",
                              "- Initial Technology: Starbase."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "turtugan_board.png"))
+        await sendCommunitySheet(message, "turtugan_board.png")
 
         message = "\n".join(["# Kurita Prefecture",
                              FactionData.starting_sector_line("kur", sectors),
@@ -540,7 +545,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- **Elite Warriors:** +1 to Hit off-board on all ships.",
                              "- **Ships:** Starbases have an extra Hull.",
                              "- Standard trade (3:1). Home system Edo (#251)."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "kurita_board.png"))
+        await sendCommunitySheet(message, "kurita_board.png")
 
         message = "\n".join(["# Heralds of Ragnarok",
                              FactionData.starting_sector_line("her", sectors),
@@ -553,7 +558,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- **Cruiser:** Cost 4 Materials instead of 5. One less Hull blueprint slot."
                              " Initiative bonus 2 instead of 1.",
                              "- 5 reputation slots: 1 ambassador-only, 2 mixed, 2 reputation-only."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "heralds_board.png"))
+        await sendCommunitySheet(message, "heralds_board.png")
 
         message = "\n".join(["# The Wraith",
                              FactionData.starting_sector_line("wra", sectors),
@@ -576,7 +581,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              " 2 colony ships flipped per Influence action.",
                              "- The board prints home sector 226; the bot uses the free sector 254"
                              " (225 is the Terran Union home and 226 is the Planta home)."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "wraith_board.png"))
+        await sendCommunitySheet(message, "wraith_board.png")
 
         message = "\n".join(["Rift Reference"])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "Rift_Reference.png"))

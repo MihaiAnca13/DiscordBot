@@ -451,6 +451,14 @@ class ButtonListener(commands.Cog):
             await Carapace.resolve_missile(game, player, interaction, customID)
         elif customID.startswith("moveFrom"):
             await MoveButtons.moveFrom(game, player, interaction, customID)
+        elif customID.startswith("moveQueueAdd"):
+            await MoveButtons.moveQueueAdd(game, player, interaction, customID)
+        elif customID.startswith("moveQueueReset"):
+            await MoveButtons.moveQueueReset(game, player, interaction, customID)
+        elif customID.startswith("moveQueueDone"):
+            await MoveButtons.moveQueueDone(game, player, interaction, customID)
+        elif customID.startswith("moveQueueContinue"):
+            await MoveButtons.moveQueueContinue(game, player, interaction, customID, player_helper)
         elif customID.startswith("moveThisShip"):
             await MoveButtons.moveThisShip(game, player, interaction, customID)
         elif customID.startswith("moveTo"):
