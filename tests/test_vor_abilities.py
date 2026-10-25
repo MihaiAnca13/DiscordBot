@@ -1,5 +1,4 @@
 """Vorlons: Tech Masters, Organic Tech, Few in Number, Regenerative Hull and the Centre bonus."""
-import pytest
 from PIL import Image
 
 from Buttons.Research import ResearchButtons

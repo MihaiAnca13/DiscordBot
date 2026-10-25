@@ -3910,6 +3910,7 @@
                 "base_colony_ships": 3,
                 "home_planet": "277",
                 "owned_tiles": [],
+                "midas_touch_costs": {"explore": 4, "research": 3, "upgrade": 1, "build": 1, "move": 1, "influence": 1},
                 "explore_apt": 1,
                 "research_apt": 1,
                 "upgrade_apt": 2,

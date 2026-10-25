@@ -27,6 +27,12 @@ ALLIANCE_TILES = ["nova", "flare", "vortex"]
 LAST_ROUND = 8
 
 
+def areAlliedByPlayer(playerA, playerB):
+    """True when two player dicts share a trade tile neither has betrayed."""
+    shared = set(playerA.get("alliances", {})).intersection(playerB.get("alliances", {}))
+    return any(not playerA["alliances"][tile] and not playerB["alliances"][tile] for tile in shared)
+
+
 class GamestateHelper:
     def __init__(self, game_id: discord.TextChannel = None, nameID: str = None):
         if game_id is not None:
@@ -1493,8 +1499,7 @@ class GamestateHelper:
         playerB = self.getPlayerObjectFromColor(colorB)
         if playerA is None or playerB is None:
             return False
-        shared = set(playerA.get("alliances", {})).intersection(playerB.get("alliances", {}))
-        return any(not playerA["alliances"][tile] and not playerB["alliances"][tile] for tile in shared)
+        return areAlliedByPlayer(playerA, playerB)
 
     def isFormerAlly(self, colorA, colorB):
         """True when colorA betrayed a tile colorB still holds faceup."""

@@ -46,6 +46,7 @@ The fields in use:
 | `abilities` | `FactionData.has(player, "...")` | named abilities the implementation is guarded by |
 | `vp_per_*` | `DrawHelper.get_public_points` | end-of-game points per owned tile, artifact tile, shrine, orbital population or Ancient ship |
 | `tech_track`, `tech_track_max`, `tech_track_vp` | `FactionData.tech_track`, `tech_track_max`, `tech_track_vp` | printed research discount by tiles already on the track, track length when it is not seven, and end-game VP by tile count |
+| `midas_touch_costs` | `TurnButtons.midasTouch` | the printed money costs per action for the paid extra activation |
 | `discovery_part_vp`, `discovery_part_ship_cost`, `money_trade_ratio`, `reputation_draw_money` | scoring, `PlayerHelper.get_ship_cost`, trade and reputation flows | the named number where an ability is a count |
 
 An ability whose behavior is a flow (Techno-Magic, Power of the Ancients,

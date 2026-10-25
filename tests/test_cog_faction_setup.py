@@ -1,6 +1,6 @@
 from Buttons.Draft import DraftButtons
 from commands.setup_commands import SetupCommands
-from tests.fakes import FakeGame, buttons, reload
+from tests.fakes import FakeGame, reload
 
 
 def test_cog_only_appears_in_the_community_draft():

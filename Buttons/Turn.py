@@ -496,8 +496,6 @@ class TurnButtons:
         await interaction.channel.send(message)
         game.update_player(player_helper)
 
-    MIDAS_COSTS = {"explore": 4, "research": 3, "upgrade": 1, "build": 1, "move": 1, "influence": 1}
-
     @staticmethod
     async def midasTouch(player, game: GamestateHelper, interaction: discord.Interaction):
         """Legion of Midas: pay gold before an action for one more activation of that action."""
@@ -507,9 +505,10 @@ class TurnButtons:
         if player.get("midasBoost"):
             await interaction.followup.send("You already paid for an extra activation this action.", ephemeral=True)
             return
+        costs = FactionData.of(player).get("midas_touch_costs", {})
         surcharge = 1 if player["influence_discs"] <= 7 else 0
         view = View()
-        for action, base in TurnButtons.MIDAS_COSTS.items():
+        for action, base in costs.items():
             cost = base + surcharge
             if player["money"] >= cost:
                 view.add_item(Button(label=f"{action.capitalize()} (+1 activation, {cost} money)",
@@ -531,13 +530,14 @@ class TurnButtons:
         from Buttons.Research import ResearchButtons
         from Buttons.Upgrade import UpgradeButtons
         action = buttonID.split("_")[1]
-        if action not in TurnButtons.MIDAS_COSTS:
+        costs = FactionData.of(player).get("midas_touch_costs", {})
+        if action not in costs:
             await interaction.followup.send("Unknown action for Midas Touch.", ephemeral=True)
             return
         if player.get("midasBoost"):
             await interaction.followup.send("You already paid for an extra activation this action.", ephemeral=True)
             return
-        cost = TurnButtons.MIDAS_COSTS[action] + (1 if player["influence_discs"] <= 7 else 0)
+        cost = costs[action] + (1 if player["influence_discs"] <= 7 else 0)
         if player["money"] < cost:
             await interaction.followup.send("You do not have enough money for Midas Touch.", ephemeral=True)
             return

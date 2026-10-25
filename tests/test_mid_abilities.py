@@ -2,7 +2,6 @@
 from Buttons.Turn import TurnButtons
 from Buttons.Upgrade import UpgradeButtons
 from helpers import FactionData
-from helpers.DrawHelper import DrawHelper
 from tests.fakes import FakeInteraction, buttons, player_helper, reload
 
 

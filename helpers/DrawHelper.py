@@ -1794,10 +1794,8 @@ class DrawHelper:
                 owner_player = next((p for p in self.gamestate.get("players", {}).values()
                                      if p.get("color") == owner), None)
                 if owner_player:
-                    shared = set(player.get("alliances", {})).intersection(
-                        owner_player.get("alliances", {}))
-                    allied = any(not player["alliances"][tile] and not owner_player["alliances"][tile]
-                                 for tile in shared)
+                    from helpers.GamestateHelper import areAlliedByPlayer
+                    allied = areAlliedByPlayer(player, owner_player)
             if allied:
                 points += vp.get("vp_per_centre", 0)
         if "disc_tiles_for_points" in player:

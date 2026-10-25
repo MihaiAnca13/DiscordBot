@@ -37,9 +37,10 @@ class MoveButtons:
 
     @staticmethod
     def getRemainingMoveActivations(player, moveCount: int, nested: bool):
-        if nested or moveCount <= 0 or moveCount > player["move_apt"]:
+        apt = FactionData.action_apt(player, "move")
+        if nested or moveCount <= 0 or moveCount > apt:
             return 1
-        return player["move_apt"] - moveCount + 1
+        return apt - moveCount + 1
 
     @staticmethod
     def getMovableShipsOfType(game: GamestateHelper, player, origin: str, shipType: str):
