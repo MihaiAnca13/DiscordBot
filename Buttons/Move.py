@@ -36,7 +36,7 @@ class MoveButtons:
 
     @staticmethod
     def getRemainingMoveActivations(player, moveCount: int, nested: bool):
-        if nested or moveCount <= 0 or moveCount > player["move_apt"]:
+        if nested or player.get("passed") or moveCount <= 0 or moveCount > player["move_apt"]:
             return 1
         return player["move_apt"] - moveCount + 1
 
@@ -148,6 +148,11 @@ class MoveButtons:
         parts = buttonID.split("_")
         origin, shipType, destination = parts[1], parts[2], parts[3]
         moveCount, remaining = int(parts[4]), int(parts[5])
+        if player.get("passed") or not 1 < moveCount <= player["move_apt"]:
+            await interaction.message.delete()
+            await interaction.channel.send("No move activations remain for the queued ship.")
+            await MoveButtons.sendMoveContinuation(player, interaction, moveCount - 1)
+            return
         if (MoveButtons.getMovableShipsOfType(game, player, origin, shipType) < 1
                 or destination not in MoveButtons.getTilesInRange(
                     game, player, origin, PlayerShip(player, shipType).getRange(),
@@ -525,7 +530,8 @@ class MoveButtons:
         if moveCount > 0 and player["move_apt"] > moveCount and not player.get("passed"):
             view.add_item(Button(label="Move an additional ship", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_startMove_{moveCount + 1}"))
-        if queue_remaining > 0:
+        if (queue_remaining > 0 and moveCount > 0 and player["move_apt"] > moveCount
+                and not player.get("passed")):
             view.add_item(Button(label=f"Move next queued {shipType} to {destination_label}"
                                        f" ({queue_remaining} left)",
                                  style=discord.ButtonStyle.green,
