@@ -18,3 +18,12 @@ def test_influence_refreshes_the_factions_colony_ship_allowance(
     press(channel, 1, "FCIDblue_refreshPopShips")
 
     assert reload(game).get_player(1)["colony_ships"] == refreshed
+
+
+def test_influence_keeps_two_activations_on_a_save_without_the_field(start_game, press):
+    game, channel = start_game()
+    game.get_player(1).pop("influence_apt")
+    game.update()
+
+    press(channel, 1, "FCIDblue_startInfluence")
+    assert any("remove up to 2 disks" in content for content, _ in channel.sent)

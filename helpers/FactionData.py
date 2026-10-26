@@ -47,9 +47,13 @@ def tech_track_vp(player):
     return of(player).get("tech_track_vp", TECH_TRACK_VP)
 
 
-def action_apt(player, action):
-    """The activations this action has, including a paid Midas Touch activation."""
-    return player[f"{action}_apt"] + (1 if player.get("midasBoost") == action else 0)
+def action_apt(player, action, default=None):
+    """The activations this action has, including a paid Midas Touch activation.
+
+    A default lets an old save that predates the field behave as it did before.
+    """
+    apt = player[f"{action}_apt"] if default is None else player.get(f"{action}_apt", default)
+    return apt + (1 if player.get("midasBoost") == action else 0)
 
 
 def artwork_name(full_name):
