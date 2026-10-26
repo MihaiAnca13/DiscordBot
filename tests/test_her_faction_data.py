@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from helpers.PlayerHelper import PlayerHelper
@@ -33,22 +31,6 @@ def test_heralds_faction_stats_match_printed_board():
     assert her["ship_stock"] == [8, 3, 2, 4]
 
 
-def test_heralds_starting_tech_is_neutron_bombs():
-    with open("data/techs.json", "r") as f:
-        techs = json.load(f)
-    assert techs["neb"]["name"] == "Neutron Bombs"
-    assert techs["neb"]["track"] == "military"
-
-
-def test_heralds_blueprint_parts_exist():
-    with open("data/parts.json", "r") as f:
-        parts = json.load(f)
-    her = FACTIONS["her"]
-    for ship in ("interceptor", "cruiser", "dread", "starbase"):
-        for part in her[f"{ship}_parts"]:
-            assert part == "empty" or part in parts, f"unknown {ship} part {part!r}"
-
-
 @pytest.mark.parametrize("ship,expected", [
     # hull, energy, range, computer, initiative (base + Nuclear Drive), cost
     ("interceptor", (1, 1, 1, 0, 2, 4)),
@@ -60,14 +42,6 @@ def test_heralds_ship_stats(ship, expected):
     model = PlayerShip(player_stats("her"), ship)
     actual = (model.hull, model.energy, model.range, model.computer, model.speed, model.cost)
     assert actual == expected
-
-
-def test_standard_ship_baselines():
-    standard = PlayerShip(player_stats("hyd"), "interceptor")
-    assert (standard.hull, standard.speed, standard.cost) == (0, 3, 3)
-
-    standard = PlayerShip(player_stats("hyd"), "cruiser")
-    assert (standard.hull, standard.speed, standard.cost) == (1, 2, 5)
 
 
 def test_heralds_reputation_track_uses_three_relation_slots():
@@ -84,5 +58,5 @@ def test_heralds_reputation_track_uses_three_relation_slots():
 def test_heralds_blueprint_layout_has_one_cell_per_part():
     her = FACTIONS["her"]
     for ship in ("interceptor", "cruiser"):
-        assert len(her["blueprint_slots"][ship]) == len(her[f"{ship}_parts"]) == 5
+        assert len(her[f"{ship}_parts"]) == 5
     assert [1, 0] not in her["blueprint_slots"]["cruiser"]

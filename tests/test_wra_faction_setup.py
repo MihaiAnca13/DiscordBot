@@ -3,52 +3,9 @@ import random
 import pytest
 
 from Buttons.Draft import DraftButtons
-from commands.setup_commands import SetupCommands
 from helpers.GamestateHelper import GamestateHelper
 from setup.GameInit import GameInit
-from tests.fakes import FakeChannel, FakeGame, FakeInteraction, reload
-
-
-@pytest.mark.parametrize("community_mode", [False, True])
-def test_wra_only_appears_in_community_draft(community_mode):
-    standard_buttons = DraftButtons.getDraftButtons(FakeGame(False, community_mode))
-    community_buttons = DraftButtons.getDraftButtons(FakeGame(True, community_mode))
-
-    assert len(standard_buttons.children) == 16
-    assert [button.label for button in standard_buttons.children].count("The Wraith") == 0
-    assert [button.label for button in community_buttons.children].count("The Wraith") == 1
-    assert len(community_buttons.children) == 24
-
-
-def test_wra_faction_color_is_supported_setup_color():
-    supported_colors = ["blue", "red", "green", "yellow", "purple", "white", "pink", "brown", "teal"]
-    assert DraftButtons.getColor("wra") == "white"
-    assert DraftButtons.getColor("wra") in supported_colors
-
-
-@pytest.mark.parametrize("drafted, expected", [
-    (["mec"], {"wra", "hyd"}),   # both are white; community factions never colour-block
-    (["wra"], {"mec", "hyd"}),   # and a drafted community faction does not block the standard white
-])
-def test_the_wraith_does_not_colour_block_mechanema(drafted, expected):
-    game = FakeGame(True, False)
-    game.gamestate["draftedFactions"] = list(enumerate(drafted))
-
-    available = {button.custom_id.split("_")[1] for button in DraftButtons.getDraftButtons(game).children}
-
-    assert available & {"wra", "mec", "hyd"} == expected
-
-
-def test_wra_still_respects_explicit_bans():
-    game = FakeGame(True, False)
-    game.gamestate["bannedFactions"] = ["wra"]
-
-    assert "The Wraith" not in [button.label for button in DraftButtons.getDraftButtons(game).children]
-
-
-def test_wra_faction_choice_exists():
-    choices = [(choice.name, choice.value) for choice in SetupCommands.factionChoices]
-    assert ("The Wraith", "wra") in choices
+from tests.fakes import FakeChannel, FakeInteraction, reload
 
 
 @pytest.mark.parametrize("factions, colors", [

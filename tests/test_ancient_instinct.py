@@ -1,9 +1,7 @@
 import pytest
 
 from Buttons.Research import ResearchButtons
-from helpers.DrawHelper import DrawHelper
 from helpers.PlayerHelper import PlayerHelper
-from PIL import Image
 from tests.fakes import FakeInteraction, buttons, player_stats, reload
 
 SAVE_FOR_LATER = "Save For Future Upgrade Action"
@@ -31,8 +29,7 @@ class FakeGame:
     ("atl", "wog", False),  # researchable, but not a ship part
     ("hyd", "tad", False),
 ])
-def test_ancient_instinct_offers_upgrade_for_researched_part(run, monkeypatch, faction, tech, offered):
-    monkeypatch.setattr(DrawHelper, "show_tech_ref_image", lambda *args: None)
+def test_ancient_instinct_offers_upgrade_for_researched_part(run, faction, tech, offered):
     player = player_stats(faction, science=20)
     interaction = FakeInteraction()
 
@@ -43,11 +40,7 @@ def test_ancient_instinct_offers_upgrade_for_researched_part(run, monkeypatch, f
     assert set(buttons(interaction.channel)) == expected
 
 
-def test_ancient_instinct_installs_the_researched_part_for_free(start_game, press, monkeypatch):
-    monkeypatch.setattr(DrawHelper, "use_image", lambda self, filename: Image.new("RGBA", (1024, 890)))
-    monkeypatch.setattr(DrawHelper, "use_resized_image",
-                        lambda self, filename, size: self.use_image(filename).resize(size))
-    monkeypatch.setattr(DrawHelper, "show_tech_ref_image", lambda *args: None)
+def test_ancient_instinct_installs_the_researched_part_for_free(start_game, press):
     game, channel = start_game(factions=["atl", "eri"])
     game.gamestate["available_techs"] = ["phs"]
     game.get_player(1)["science"] = 40

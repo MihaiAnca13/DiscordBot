@@ -1,15 +1,10 @@
-"""All five wave-1 community factions through setup and one full round together.
+"""The first eight community factions through setup and one full round together.
 
-The per-faction first-round tests cover each faction alone; this one exists to catch
-setup hooks and action flows clashing when the whole wave is drafted into one game.
+Keep the setup hooks and action flows in one game to catch conflicts between factions.
 """
 import random
-from pathlib import Path
-
-from PIL import Image
 
 from Buttons.Draft import DraftButtons
-from helpers.DrawHelper import DrawHelper
 from helpers.GamestateHelper import GamestateHelper
 from setup.GameInit import GameInit
 from tests.fakes import FakeChannel, FakeInteraction, buttons, reload
@@ -24,16 +19,6 @@ def find_button(channel, prefix):
         for button in getattr(kwargs.get("view"), "children", [])
         if button.custom_id.startswith(prefix)
     )
-
-
-def stub_render(monkeypatch):
-    def load_thumbnail(self, filename):
-        assert Path(filename).is_file(), filename
-        return Image.new("RGBA", (1024, 890))
-
-    monkeypatch.setattr(DrawHelper, "use_image", load_thumbnail)
-    monkeypatch.setattr(DrawHelper, "use_resized_image",
-                        lambda self, filename, size: self.use_image(filename).resize(size))
 
 
 def setup_wave(games_dir, run, channel):
@@ -51,8 +36,7 @@ def setup_wave(games_dir, run, channel):
     return game
 
 
-def test_wave1_community_factions_setup_and_first_round(games_dir, run, press, monkeypatch):
-    stub_render(monkeypatch)
+def test_wave1_community_factions_setup_and_first_round(games_dir, run, press):
     channel = FakeChannel("aeb1-actions")
     game = setup_wave(games_dir, run, channel)
 

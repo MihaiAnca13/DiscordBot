@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -23,9 +24,25 @@ def test_every_faction_row_carries_its_artwork_and_colour():
     """factions.json drives the emoji, board and setup colour lookups."""
     for key, faction in FactionData.FACTIONS.items():
         artwork = faction["artwork"]
+        assert FactionData.artwork_name(faction["name"]) == artwork, key
         assert faction["setup_color"], key
         assert Path(f"images/resources/components/factions/{artwork}_board.png").exists(), key
         assert Path(f"images/resources/components/layouts/factionImages/{artwork}_image.png").exists(), key
+        if faction.get("community"):
+            assert Path(f"images/resources/components/factions/{artwork}_info.png").exists(), key
+
+
+def test_all_starting_technologies_and_blueprint_parts_exist():
+    with open("data/techs.json") as tech_file, open("data/parts.json") as part_file:
+        techs, parts = json.load(tech_file), json.load(part_file)
+    for key, faction in FactionData.FACTIONS.items():
+        for track in ("military", "grid", "nano"):
+            assert set(faction[f"{track}_tech"]) <= techs.keys(), key
+        for ship in ("interceptor", "cruiser", "dread", "starbase"):
+            if f"{ship}_parts" in faction:
+                assert set(faction[f"{ship}_parts"]) <= parts.keys(), (key, ship)
+        for ship, cells in faction.get("blueprint_slots", {}).items():
+            assert len(cells) == len(faction[f"{ship}_parts"]), (key, ship)
 
 
 def test_abilities_come_from_the_faction_data():

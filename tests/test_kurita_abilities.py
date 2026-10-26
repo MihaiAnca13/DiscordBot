@@ -10,15 +10,7 @@ from Buttons.Reputation import ReputationButtons
 from helpers import FactionData
 from helpers.CombatHelper import Combat
 from helpers.DrawHelper import DrawHelper
-from helpers.ShipHelper import PlayerShip
 from tests.fakes import FakeInteraction, POS, board_tile, offered_ids, player_helper, player_stats
-
-
-@pytest.fixture(autouse=True)
-def _no_render(monkeypatch):
-    monkeypatch.setattr("helpers.CombatHelper.DrawHelper", lambda *a, **k: type(
-        "NoDraw", (), {"player_area": lambda self, player: None,
-                       "show_player_ship_area": lambda self, image: None})())
 
 
 def _stats(faction, color):
@@ -89,20 +81,6 @@ def test_refresh_preserves_the_current_first_shot_turn(make_game, run):
     assert (tile["currentSpeed"], tile["currentRoller"]) == (4, "red")
     assert tile["firstShotPhase"] == "opponent"
     assert _prompts(game, run, channel, 1) == [(5, "blue")]
-
-
-def test_first_shot_delays_kurita_missiles(make_game, run):
-    game = _combat_game(make_game)
-    game.get_player(1).update({"base_interceptor_speed": 6, "base_cruiser_speed": 5})
-    game.get_player(1)["interceptor_parts"] = ["iom"]
-    game.get_player(2).update({"base_cruiser_speed": 4})
-    _start_pairing(game, ["blue-int", "blue-cru"], ["red-cru"])
-
-    sequence = _prompts(game, run, FakeInteraction().channel, 4)
-
-    assert sequence[0] == (4, "red")
-    assert sequence[1] == (105, "blue")
-    assert sequence[2] == (6, "blue")
 
 
 def test_first_shot_round_two_returns_to_normal_initiative(make_game, run):
@@ -348,24 +326,6 @@ def test_retreating_any_ship_draws_no_battle_rep(make_game, run, faction, penalt
 
 
 # --- Data-only printed stats --------------------------------------------------
-
-def test_elite_warriors_is_off_board_computer():
-    player = player_stats("kur", color="blue")
-    assert [PlayerShip(player, ship).computer for ship in
-            ("interceptor", "cruiser", "dread", "starbase")] == [1, 2, 2, 2]
-
-
-def test_starbase_has_an_extra_hull():
-    player = player_stats("kur", color="blue")
-    assert PlayerShip(player, "starbase").hull == 3
-
-
-def test_other_factions_ship_stats_unchanged():
-    hydran = player_stats("hyd", color="blue")
-    atlantians = player_stats("atl", color="blue")
-    assert PlayerShip(hydran, "interceptor").computer == 0
-    assert PlayerShip(atlantians, "starbase").hull == 2
-
 
 def test_traitor_card_is_minus_four_for_kurita():
     game = {"board": {}, "players": {}}

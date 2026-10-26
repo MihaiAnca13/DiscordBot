@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from PIL import Image
 
@@ -40,7 +39,6 @@ def test_kurita_home_population_squares():
 
 def test_kurita_home_sector_tile_art():
     path = "images/resources/hexes/251.png"
-    assert Path(path).is_file(), path
     with Image.open(path) as tile:
         assert tile.size == (1024, 890)
         assert tile.mode == "RGBA"
@@ -50,7 +48,6 @@ def test_kurita_home_sector_tile_art():
 
 def test_kurita_home_sector_numberless_variant():
     path = "images/resources/hexes/numberless/251.png"
-    assert Path(path).is_file(), path
     with Image.open(path) as tile:
         assert tile.size == (1024, 890)
         assert tile.mode == "RGBA"

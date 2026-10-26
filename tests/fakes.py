@@ -19,6 +19,19 @@ FACTIONS = json.load(open("data/factions.json"))
 POS = "101"  # the sector board_tile() builds by default
 
 
+class FakeImage:
+    """Let exploration build real rotation choices without composing or encoding pixels."""
+
+    def paste(self, *args, **kwargs):
+        return None
+
+    def crop(self, *args, **kwargs):
+        return self
+
+    def save(self, *args, **kwargs):
+        return None
+
+
 class FakeMessage:
     _ids = itertools.count(1)
 

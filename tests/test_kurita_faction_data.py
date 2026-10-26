@@ -2,21 +2,13 @@
 import json
 
 from helpers.PlayerHelper import PlayerHelper
+from helpers.ShipHelper import PlayerShip
+from tests.fakes import player_stats
 
 
 def faction():
     with open("data/factions.json", "r") as f:
         return json.load(f)["kur"]
-
-
-def parts():
-    with open("data/parts.json", "r") as f:
-        return json.load(f)
-
-
-def techs():
-    with open("data/techs.json", "r") as f:
-        return json.load(f)
 
 
 def test_kurita_identity_and_draft_data():
@@ -42,10 +34,6 @@ def test_kurita_starts_with_phase_shields_only():
     kur = faction()
     assert kur["military_tech"] == ["phs"]
     assert kur["grid_tech"] == [] and kur["nano_tech"] == [] and kur["ancient_parts"] == []
-    phase_shield = techs()["phs"]
-    assert phase_shield["name"] == "Phase Shield"
-    assert phase_shield["track"] == "military"
-    assert (phase_shield["base_cost"], phase_shield["min_cost"]) == (8, 5)
 
 
 def test_kurita_reputation_and_traitor_values():
@@ -69,9 +57,6 @@ def test_kurita_blueprints_match_the_board():
     assert kur["cruiser_parts"] == ["elc", "ioc", "empty", "nus", "hul", "nud"]
     assert kur["dread_parts"] == ["elc", "ioc", "ioc", "empty", "nus", "hul", "hul", "nud"]
     assert kur["starbase_parts"] == ["elc", "ioc", "hul", "empty", "hul"]
-    known_parts = set(parts())
-    for ship in ("interceptor", "cruiser", "dread", "starbase"):
-        assert all(part == "empty" or part in known_parts for part in kur[f"{ship}_parts"])
 
 
 def test_kurita_printed_off_board_stats():
@@ -83,6 +68,12 @@ def test_kurita_printed_off_board_stats():
     assert (kur["cost_orbital"], kur["cost_monolith"]) == (4, 10)
     assert [kur[f"cost_{ship}"] for ship in ("interceptor", "cruiser", "dread", "starbase")] == [3, 5, 8, 3]
     assert kur["ship_stock"] == [7, 4, 2, 4]
+    player = player_stats("kur")
+    assert [PlayerShip(player, ship).computer
+            for ship in ("interceptor", "cruiser", "dread", "starbase")] == [1, 2, 2, 2]
+    assert PlayerShip(player, "starbase").hull == 3
+    assert PlayerShip(player_stats("hyd"), "interceptor").computer == 0
+    assert PlayerShip(player_stats("atl"), "starbase").hull == 2
 
 
 def test_kurita_has_only_the_two_abilities_needing_code():

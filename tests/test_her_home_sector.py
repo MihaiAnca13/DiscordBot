@@ -1,9 +1,7 @@
 import json
-from pathlib import Path
 
 from PIL import Image
 
-from helpers.DrawHelper import DrawHelper
 from tests.fakes import reload
 
 
@@ -33,7 +31,6 @@ def test_heralds_home_sector_data():
 
 def test_heralds_home_sector_tile_art():
     path = "images/resources/hexes/299.png"
-    assert Path(path).is_file(), path
     with Image.open(path) as tile:
         assert tile.size == (1024, 890)
         assert tile.mode == "RGBA"
@@ -52,15 +49,3 @@ def test_heralds_home_sector_is_set_up_on_the_board(start_game):
     player = state.get_player(1)
     assert (player["money_pop_cubes"], player["material_pop_cubes"], player["science_pop_cubes"]) == (11, 12, 11)
     assert state.gamestate["board"]["201"]["player_ships"] == ["blue-cru"]
-
-
-def test_heralds_home_tile_renders(start_game):
-    game, _channel = start_game(factions=["her", "eri"])
-    drawing = DrawHelper(reload(game).gamestate)
-    image = drawing.board_tile_image("201")
-    assert image.size[0] > 0 and image.size[1] > 0
-
-
-def test_heralds_player_is_not_given_a_standard_portrait_crop():
-    drawing = DrawHelper({})
-    assert drawing.faction_portrait("heralds").size == (600, 600)

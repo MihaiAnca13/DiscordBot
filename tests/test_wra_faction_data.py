@@ -33,15 +33,6 @@ def test_wra_faction_stats_match_printed_card_and_board():
     assert wra["wraithSouls"] == 0
 
 
-def test_wra_blueprint_parts_exist():
-    with open("data/parts.json", "r") as f:
-        parts = json.load(f)
-    wra = FACTIONS["wra"]
-    for ship in ("interceptor", "cruiser", "dread", "starbase"):
-        for part in wra[f"{ship}_parts"]:
-            assert part == "empty" or part in parts, f"unknown {ship} part {part!r}"
-
-
 def test_the_mixed_reputation_slot_allows_one_relation_and_the_other_three_do_not():
     wraith = player_stats("wra")
     assert [PlayerHelper.is_reputation_only_slot(wraith, i) for i in range(4)] == [False, True, True, True]

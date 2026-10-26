@@ -1,5 +1,3 @@
-import json
-
 from helpers import FactionData
 from helpers.PlayerHelper import PlayerHelper
 from helpers.ShipHelper import PlayerShip
@@ -13,7 +11,6 @@ def wulfen():
 def test_faction_identity_and_setup_facts():
     faction = wulfen()
     assert faction["name"] == "The Wulfen"
-    assert FactionData.artwork_name("The Wulfen") == "wulfen"
     assert faction["setup_color"] == "brown"
     assert faction["community"] is True
     assert faction["abilities"] == ["spine_cannons", "wolf_pack"]
@@ -28,7 +25,6 @@ def test_action_and_influence_tracks():
     faction = wulfen()
     assert [faction[f"{action}_apt"] for action in
             ("explore", "research", "upgrade", "build", "move", "influence")] == [1, 1, 2, 2, 3, 2]
-    assert faction["move_apt"] == 3
     assert faction["influence_discs"] == 12
     assert faction["influence_track"] == [30, 25, 21, 17, 13, 10, 7, 5, 3, 2, 1, 0, 0]
 
@@ -57,11 +53,7 @@ def test_technologies_and_costs():
 
 
 def test_blueprints_are_valid_and_only_the_cannon_spine_slot_fires_dice():
-    with open("data/parts.json") as f:
-        part_stats = json.load(f)
     faction = wulfen()
-    for parts in (faction["cruiser_parts"], faction["dread_parts"], faction["starbase_parts"]):
-        assert all(part in part_stats for part in parts)
     assert faction["spine_cannon_slots"] == {"cruiser": [3, 4], "dread": [6, 7], "starbase": [3, 4]}
 
     player = player_stats("wul", color="blue")
