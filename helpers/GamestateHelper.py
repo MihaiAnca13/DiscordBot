@@ -440,30 +440,16 @@ class GamestateHelper:
         self.update()
 
     def add_damage(self, ship, position, damage):
-        if "damage_tracker" in self.gamestate["board"][position]:
-            if ship in self.gamestate["board"][position]["damage_tracker"]:
-                damage = self.gamestate["board"][position]["damage_tracker"][ship] + damage
-            else:
-                self.gamestate["board"][position]["damage_tracker"][ship] = [0]
-        else:
-            self.gamestate["board"][position]["damage_tracker"] = {}
-            self.gamestate["board"][position]["damage_tracker"][ship] = [0]
-        self.gamestate["board"][position]["damage_tracker"][ship] = damage
+        tracker = self.gamestate["board"][position].setdefault("damage_tracker", {})
+        damage = tracker.get(ship, 0) + damage
+        tracker[ship] = damage
         self.update()
         return damage
 
     def repair_damage(self, ship, position):
-        damage = 0
-        if "damage_tracker" in self.gamestate["board"][position]:
-            if all([ship in self.gamestate["board"][position]["damage_tracker"],
-                    self.gamestate["board"][position]["damage_tracker"][ship] > 0]):
-                damage = self.gamestate["board"][position]["damage_tracker"][ship] - 1
-            else:
-                self.gamestate["board"][position]["damage_tracker"][ship] = [0]
-        else:
-            self.gamestate["board"][position]["damage_tracker"] = {}
-            self.gamestate["board"][position]["damage_tracker"][ship] = [0]
-        self.gamestate["board"][position]["damage_tracker"][ship] = damage
+        tracker = self.gamestate["board"][position].setdefault("damage_tracker", {})
+        damage = max(tracker.get(ship, 0) - 1, 0)
+        tracker[ship] = damage
         self.update()
         return damage
 
