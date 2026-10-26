@@ -43,7 +43,7 @@ ANSWER_BUTTONS = ("selectDiscTile", "exploreDiscoveryTile", "keepDiscForPoints",
                   "offerRelationsTo", "acceptRelationsWith", "declineRelationsWith", "formMinorRelations",
                   "reducePopFor", "addCubeToTrack", "drawReputation", "dontDrawReputation",
                   "ancientsCube", "setupTech", "reservedTile", "carapaceDone", "carapaceMissile",
-                  "wolfPack", "phaseModuleDone", "phaseModuleNone", "phaseBombing",
+                  "wolfPack", "phaseModuleDone", "phaseModuleNone", "phaseBombing", "nineLives",
                   "preGameOrbital", "declineSetupTech", "saveDiscoveryPart", "gain3resource",
                   "finishSetupResources")
 
@@ -504,6 +504,8 @@ class ButtonListener(commands.Cog):
             await Combat.wolfPackChoice(game, customID, interaction)
         elif customID.startswith("rerollDie"):
             await Combat.rerollDie(game, customID, interaction, player, player_helper)
+        elif customID.startswith("nineLives_"):
+            await Combat.resolveNineLives(game, player_helper, interaction, customID)
         elif customID.startswith("removeUnits"):
             await Combat.removeUnits(game, customID, player, interaction)
         elif customID.startswith("assignHitTo"):

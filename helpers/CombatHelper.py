@@ -241,6 +241,9 @@ class Combat:
         tile = game.gamestate["board"][pos]
         tile["firstShotSide"] = Combat.firstShotSideOf(game, tile["attacker"], tile["defender"])
         tile["firstShotPhase"] = "opponent" if tile["firstShotSide"] else None
+        tile["engagementRound"] = 1
+        tile.pop("pounceRound", None)
+        tile.pop("nineLivesPending", None)
         game.setCurrentRoller(None, pos)
         for side in sides:
             for player in side:
@@ -427,7 +430,8 @@ class Combat:
                     player = game.get_player_from_color(colorOrAI)
                     ship = PlayerShip(game.gamestate["players"][player], unitType)
                     ships.append((ship.speed + Combat.phase_mode(
-                        game, colorOrAI, pos, Combat.translateShipAbrToName(unitType)).get("speed", 0),
+                        game, colorOrAI, pos, Combat.translateShipAbrToName(unitType)).get("speed", 0)
+                        + Combat.solitary_hunter_bonus(game, pos, colorOrAI),
                         unitType))
         sorted_ships = sorted(ships, key=lambda x: x[0], reverse=True)
         sorted_ships_grouped = []
@@ -480,6 +484,62 @@ class Combat:
         return None
 
     @staticmethod
+    def battle_ship_count(game: GamestateHelper, pos: str, color: str):
+        """Ships of this colour in the battle; orbitals and monoliths are not ships."""
+        return sum(1 for ship in game.gamestate["board"][pos].get("player_ships", [])
+                   if ship.split("-")[0] == color and ship.split("-")[-1] not in ("orb", "mon"))
+
+    @staticmethod
+    def solitary_hunter_bonus(game: GamestateHelper, pos: str, colorOrAI: str):
+        """Hegemony: +1 Initiative and +1 to Hit while exactly one of its ships is in the battle."""
+        if colorOrAI == "ai":
+            return 0
+        if not FactionData.has(game.getPlayerObjectFromColor(colorOrAI), "solitary_hunter"):
+            return 0
+        return 1 if Combat.battle_ship_count(game, pos, colorOrAI) == 1 else 0
+
+    @staticmethod
+    def shooting_first(game: GamestateHelper, pos: str):
+        """The side that fires first this round: a first-shot faction's opponents, else higher initiative."""
+        tile = game.gamestate["board"][pos]
+        attacker = Combat.sideOf(tile.get("attacker"))
+        defender = Combat.sideOf(tile.get("defender"))
+        second = tile.get("firstShotSide") or []
+        if second:
+            for side in (attacker, defender):
+                if not any(color in second for color in side):
+                    return side
+            return []
+        best = {"attacker": -1, "defender": -1}
+        for speed, owner in Combat.getBothCombatantShipsBySpeed(
+                game, defender, attacker, tile.get("player_ships", []), pos):
+            if speed >= 90:
+                continue
+            side = "attacker" if owner in attacker else "defender"
+            best[side] = max(best[side], speed)
+        if max(best.values()) < 0:
+            return []
+        # at equal initiative the defender fires first (the speed list sorts defenders ahead)
+        return defender if best["defender"] >= best["attacker"] else attacker
+
+    @staticmethod
+    def pounce_hit(game: GamestateHelper, pos: str, colorOrAI: str, speed: int):
+        """Hegemony: +1 to Hit in the first engagement round when their side shoots first."""
+        if colorOrAI == "ai" or speed >= 90:
+            return 0
+        if not FactionData.has(game.getPlayerObjectFromColor(colorOrAI), "pounce"):
+            return 0
+        tile = game.gamestate["board"][pos]
+        engagement = tile.get("engagementRound", 1)
+        if engagement != 1:
+            return 0
+        if tile.get("pounceRound") != engagement:
+            tile["pounceRound"] = engagement
+            tile["pounceSide"] = Combat.shooting_first(game, pos)
+            game.update()
+        return 1 if colorOrAI in tile["pounceSide"] else 0
+
+    @staticmethod
     def getBothCombatantShipsBySpeed(game: GamestateHelper, defender, attacker, playerShipsList, pos):
         """defender and attacker are sides: lists of colours."""
         ships = []
@@ -512,6 +572,7 @@ class Combat:
                         continue
                     speed = ship.speed + Combat.phase_mode(
                         game, owner, pos, Combat.translateShipAbrToName(unitType)).get("speed", 0)
+                    speed += Combat.solitary_hunter_bonus(game, pos, owner)
                     if (speed, owner) not in ships:
                         ships.append((speed, owner))
                     if len(ship.missile) > 0:
@@ -948,42 +1009,25 @@ class Combat:
                         message = (f"The computer bonus for a die that rolled a {dieNum}"
                                    " was cancelled by the shields on each of the opponents ships.")
                         reports.append(message)
+                    nineLives = Combat.nine_lives_target(game, pos, colorOrAI, hittableShips)
+                    if nineLives and oldNumPeeps == len(Combat.findPlayersInTile(game, pos)):
+                        await Combat.sendCombatReports(interaction.channel, reports)
+                        await Combat.offerNineLives(game, interaction, pos, colorOrAI, nineLives,
+                                                    shipModel.computer, speed, dieNum, dieDam,
+                                                    die[2], None, False)
+                        continue
                     if len(hittableShips) > 0:
                         update = True
-                        if len(hittableShips) > 1:
-                            ship = hittableShips[0]
-                            oldShipVal = 0
-                            ableToKillSomething = False
-                            for option in hittableShips:
-                                damageOnShip = game.gamestate["board"][pos].get("damage_tracker", {}).get(option, 0)
-                                shipType = option.split("-")[1]
-                                shipOwner = option.split("-")[0]
-                                player = game.get_player_from_color(shipOwner)
-                                shipModel2 = PlayerShip(game.gamestate["players"][player], shipType)
-                                if ableToKillSomething:
-                                    if dieDam + damageOnShip > shipModel2.hull and shipModel2.cost > oldShipVal:
-                                        oldShipVal = shipModel2.cost
-                                        ship = option
-                                else:
-                                    if dieDam + damageOnShip > shipModel2.hull:
-                                        oldShipVal = shipModel2.cost
-                                        ship = option
-                                        ableToKillSomething = True
-                                    else:
-                                        if shipModel2.cost > oldShipVal:
-                                            oldShipVal = shipModel2.cost
-                                            ship = option
-                            buttonID = f"assignHitTo_{pos}_{colorOrAI}_{ship}_{dieNum}_{dieDam}"
-                            await Combat.assignHitTo(game, buttonID, interaction, False, reports=reports)
-                        else:
-                            ship = hittableShips[0]
-                            buttonID = f"assignHitTo_{pos}_{colorOrAI}_{ship}_{dieNum}_{dieDam}"
-                            await Combat.assignHitTo(game, buttonID, interaction, False, reports=reports)
+                        ship = hittableShips[0] if len(hittableShips) == 1 else Combat.ai_target(
+                            game, pos, hittableShips, dieDam)
+                        buttonID = f"assignHitTo_{pos}_{colorOrAI}_{ship}_{dieNum}_{dieDam}"
+                        await Combat.assignHitTo(game, buttonID, interaction, False, reports=reports)
         await Combat.sendCombatReports(interaction.channel, reports)
         hitsToAssign = 0
         if "unresolvedHits" in game.gamestate["board"][pos]:
             hitsToAssign = game.gamestate["board"][pos]["unresolvedHits"]
-        if hitsToAssign == 0 and oldLength == len(Combat.findPlayersInTile(game, pos)):
+        if (hitsToAssign == 0 and oldLength == len(Combat.findPlayersInTile(game, pos))
+                and not Combat.has_pending_nine_lives(game, pos)):
             await Combat.promptNextSpeed(game, pos, interaction.channel, update)
 
 
@@ -1118,7 +1162,9 @@ class Combat:
                 rollerType = ship[1]
                 shipModel = PlayerShip(game.gamestate["players"][player], rollerType)
                 phase = Combat.phase_mode(game, colorOrAI, pos, Combat.translateShipAbrToName(rollerType))
-                computerVal = shipModel.computer + phase.get("comp", 0)
+                computerVal = (shipModel.computer + phase.get("comp", 0)
+                               + Combat.solitary_hunter_bonus(game, pos, colorOrAI)
+                               + Combat.pounce_hit(game, pos, colorOrAI, speed))
                 ignoreShields = bool(phase.get("ignore"))
                 dice = shipModel.dice
                 sources = shipModel.dice_sources
@@ -1232,6 +1278,12 @@ class Combat:
                             hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
                                                                                 dieNum, computer_val, pos, speed,
                                                                                 ignoreShields)
+                            nineLives = Combat.nine_lives_target(game, pos, colorOrAI, hittableShips)
+                            if nineLives and oldNumPeeps == len(Combat.findPlayersInTile(game, pos)):
+                                await Combat.offerNineLives(game, interaction, pos, colorOrAI, nineLives,
+                                                            computer_val, speed, dieNum, dieDam,
+                                                            dieColor, counter, ignoreShields)
+                                continue
                             if all([dieNum + computer_val > 5,
                                     len(hittableShips) == 0,
                                     oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
@@ -1333,7 +1385,8 @@ class Combat:
         if deferredEnd and not is_wolf:
             await Combat.checkCombatEnd(game, interaction, pos, oldLength)
         hitsToAssign = 0
-        if speed != 1000 and not Carapace.has_pending_missiles(game, pos):
+        if (speed != 1000 and not Carapace.has_pending_missiles(game, pos)
+                and not Combat.has_pending_nine_lives(game, pos)):
             if "unresolvedHits" in game.gamestate["board"][pos]:
                 hitsToAssign = game.gamestate["board"][pos]["unresolvedHits"]
             if hitsToAssign == 0:
@@ -1690,6 +1743,130 @@ class Combat:
         await interaction.message.delete()
 
     @staticmethod
+    def ai_target(game: GamestateHelper, pos: str, hittableShips, dieDam: int):
+        """The Ancients' pick among the ships a die can hit: kill something if possible, else the costliest."""
+        ship = hittableShips[0]
+        oldShipVal = 0
+        ableToKillSomething = False
+        for option in hittableShips:
+            damageOnShip = game.gamestate["board"][pos].get("damage_tracker", {}).get(option, 0)
+            shipType = option.split("-")[1]
+            shipOwner = option.split("-")[0]
+            player = game.get_player_from_color(shipOwner)
+            shipModel = PlayerShip(game.gamestate["players"][player], shipType)
+            if ableToKillSomething:
+                if dieDam + damageOnShip > shipModel.hull and shipModel.cost > oldShipVal:
+                    oldShipVal = shipModel.cost
+                    ship = option
+            elif dieDam + damageOnShip > shipModel.hull:
+                oldShipVal = shipModel.cost
+                ship = option
+                ableToKillSomething = True
+            elif shipModel.cost > oldShipVal:
+                oldShipVal = shipModel.cost
+                ship = option
+        return ship
+
+    @staticmethod
+    def nine_lives_target(game: GamestateHelper, pos: str, colorOrAI: str, hittableShips):
+        """The Hegemony defender whose ship this attacking die could hit, or None."""
+        tile = game.gamestate["board"][pos]
+        attacker = Combat.sideOf(tile.get("attacker"))
+        defender = Combat.sideOf(tile.get("defender"))
+        if colorOrAI not in attacker:
+            return None
+        for ship in hittableShips:
+            owner = ship.split("-")[0]
+            if owner == "ai" or owner not in defender:
+                continue
+            player = game.getPlayerObjectFromColor(owner)
+            if FactionData.has(player, "nine_lives") and player["colony_ships"] > 0:
+                return owner
+        return None
+
+    @staticmethod
+    def has_pending_nine_lives(game: GamestateHelper, pos: str):
+        return bool(game.gamestate["board"].get(pos, {}).get("nineLivesPending"))
+
+    @staticmethod
+    async def offerNineLives(game: GamestateHelper, interaction: discord.Interaction, pos: str,
+                             colorOrAI: str, defender: str, computer: int, speed: int,
+                             dieNum: int, dieDam: int, dieColor: str, counter, ignoreShields: bool):
+        """Hegemony: let their defender flip a colony ship before this die's hit is assigned."""
+        tile = game.gamestate["board"][pos]
+        token = tile.get("nineLivesToken", 0) + 1
+        tile["nineLivesToken"] = token
+        tile.setdefault("nineLivesPending", []).append({
+            "token": token, "roller": colorOrAI, "computer": computer, "speed": speed,
+            "dieNum": dieNum, "dieDam": dieDam, "dieColor": dieColor, "counter": counter,
+            "ignore": ignoreShields})
+        tile.setdefault("nineLivesOldLength", len(Combat.findPlayersInTile(game, pos)))
+        game.update()
+        player = game.getPlayerObjectFromColor(defender)
+        view = View()
+        view.add_item(Button(label="Nine Lives: reroll that die", style=discord.ButtonStyle.green,
+                             custom_id=f"FCID{defender}_nineLives_{pos}_reroll_{token}"))
+        view.add_item(Button(label="Let it hit", style=discord.ButtonStyle.red,
+                             custom_id=f"FCID{defender}_nineLives_{pos}_pass_{token}"))
+        await interaction.channel.send(
+            f"{player['player_name']}, Nine Lives: flip a Colony Ship to make the attacker reroll the"
+            f" {dieColor} die that rolled a {dieNum}?", view=view)
+
+    @staticmethod
+    async def resolveNineLives(game: GamestateHelper, player_helper: PlayerHelper,
+                               interaction: discord.Interaction, customID: str):
+        pos, mode, token = customID.split("_")[1:4]
+        if mode not in ("reroll", "pass"):
+            return
+        tile = game.gamestate["board"].get(pos, {})
+        pending = tile.get("nineLivesPending", [])
+        entry = next((item for item in pending if str(item["token"]) == token), None)
+        if entry is None:
+            await interaction.followup.send("This Nine Lives choice was already resolved.", ephemeral=True)
+            return
+        pending.remove(entry)
+        dieNum, dieDam = entry["dieNum"], entry["dieDam"]
+        if mode == "reroll":
+            # shortcut: only a colony-ship flip is charged; a rerolled die re-derives its damage from
+            # its colour, so an attacker's damage modifiers (Built for War, Spine) do not carry over.
+            # It also never offers on rift dice. Upgrade if a physical card reading needs either.
+            if player_helper is None or player_helper.adjust_colony_ships(1) is False:
+                await interaction.followup.send(
+                    f"{interaction.user.mention}, you have no colony ships left to reroll with.",
+                    ephemeral=True)
+                mode = "pass"
+            else:
+                game.update_player(player_helper)
+                dieNum = random.randint(1, 6)
+                dieDam = Combat.translateColorToDamage(entry["dieColor"], dieNum)
+                await interaction.channel.send(
+                    f"{interaction.user.mention} flipped a Colony Ship for Nine Lives: the die is"
+                    f" rerolled into a {dieNum}.")
+        hittable = Combat.getOpponentUnitsThatCanBeHit(
+            game, entry["roller"], tile["player_ships"][:], dieNum, entry["computer"],
+            pos, entry["speed"], entry["ignore"])
+        game.update()
+        if hittable:
+            if entry["roller"] == "ai":
+                ship = hittable[0] if len(hittable) == 1 else Combat.ai_target(game, pos, hittable, dieDam)
+                await Combat.assignHitTo(game, f"assignHitTo_{pos}_ai_{ship}_{dieNum}_{dieDam}",
+                                         interaction, False, deferEnd=True)
+            else:
+                await Combat.offerHitPrompt(game, interaction, pos, entry["roller"], hittable,
+                                            dieNum, dieDam, entry["counter"], deferEnd=True)
+        elif mode == "reroll":
+            await interaction.channel.send("The rerolled die misses.")
+        game.update()
+        if not pending:
+            old_length = tile.pop("nineLivesOldLength", len(Combat.findPlayersInTile(game, pos)))
+            if len(Combat.findPlayersInTile(game, pos)) != old_length:
+                await Combat.checkCombatEnd(game, interaction, pos, old_length)
+            elif not tile.get("unresolvedHits", 0):
+                await Combat.promptNextSpeed(game, pos, interaction.channel, True)
+            game.update()
+        await interaction.message.edit(view=None)
+
+    @staticmethod
     async def killPop(game: GamestateHelper, buttonID: str, interaction: discord.Interaction, player):
         pos = buttonID.split("_")[1]
         cube = buttonID.split("_")[2]
@@ -1772,7 +1949,7 @@ class Combat:
 
     @staticmethod
     async def promptNextSpeed(game: GamestateHelper, pos: str, channel, update: bool, repeat: bool = False):
-        if Carapace.has_pending_missiles(game, pos):
+        if Carapace.has_pending_missiles(game, pos) or Combat.has_pending_nine_lives(game, pos):
             return
         currentSpeed = None
         if "currentSpeed" in game.gamestate["board"][pos]:
@@ -1801,6 +1978,12 @@ class Combat:
                 currentSpeed = currentRoller = None
                 if game.gamestate["board"][pos]["firstShotPhase"] == "kurita":
                     nextPair = next((pair for pair in sortedSpeeds if pair[1] in firstShotSide), None)
+        if (nextPair is None and not repeat
+                and game.gamestate["board"][pos].get("firstShotPhase") is None):
+            # a fresh engagement round: Pounce only applies in the first one
+            game.gamestate["board"][pos]["engagementRound"] = (
+                game.gamestate["board"][pos].get("engagementRound", 1) + 1)
+            game.gamestate["board"][pos].pop("pounceRound", None)
         nextSpeed = -20
         nextOwner = ""
         if repeat and currentSpeed is not None and currentRoller is not None:
@@ -1924,6 +2107,7 @@ class Combat:
                 shipM = PlayerShip(game.gamestate["players"][player], shiptype)
                 if (shipM.speed + Combat.phase_mode(
                         game, colorOrAI, pos, Combat.translateShipAbrToName(shiptype)).get("speed", 0)
+                        + Combat.solitary_hunter_bonus(game, pos, colorOrAI)
                         == int(speed)):
                     game.remove_units([ship], pos)
                     game.add_units([ship], destination)

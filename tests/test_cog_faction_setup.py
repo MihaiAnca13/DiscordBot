@@ -9,7 +9,8 @@ def test_cog_only_appears_in_the_community_draft():
     assert len(community.children) == 25
     more = DraftButtons.getDraftButtons(FakeGame(True, False), 24)
     assert [button.label for button in more.children] == ["Children of Cog", "Legion of Midas",
-                                                          "The Horde", "Vorlons"]
+                                                          "The Horde", "Vorlons",
+                                                          "Hegemony of the Highest Cushion"]
 
 
 def test_cog_colour_and_bans():

@@ -1,4 +1,4 @@
-"""Children of Cog, Legion of Midas, The Horde and Vorlons through setup and one round."""
+"""Children of Cog, Legion of Midas, The Horde, Vorlons and the Hegemony through setup and a round."""
 import random
 from pathlib import Path
 
@@ -10,10 +10,11 @@ from helpers.GamestateHelper import GamestateHelper
 from setup.GameInit import GameInit
 from tests.fakes import FakeChannel, FakeInteraction, buttons, reload
 
-FACTIONS = ["cog", "mid", "hor", "vor"]
-NAMES = {"cog": "Children of Cog", "mid": "Legion of Midas", "hor": "The Horde", "vor": "Vorlons"}
-HOMES = {"cog": "256", "mid": "277", "hor": "288", "vor": "235"}
-ART = {"cog": "cog", "mid": "midas", "hor": "horde", "vor": "vorlons"}
+FACTIONS = ["cog", "mid", "hor", "vor", "heg"]
+NAMES = {"cog": "Children of Cog", "mid": "Legion of Midas", "hor": "The Horde",
+         "vor": "Vorlons", "heg": "Hegemony of the Highest Cushion"}
+HOMES = {"cog": "256", "mid": "277", "hor": "288", "vor": "235", "heg": "276"}
+ART = {"cog": "cog", "mid": "midas", "hor": "horde", "vor": "vorlons", "heg": "hegemony"}
 
 
 def find_button(channel, prefix):
@@ -25,7 +26,7 @@ def find_button(channel, prefix):
     )
 
 
-def test_community4_factions_setup_and_first_round(games_dir, run, press, monkeypatch):
+def test_community5_factions_setup_and_first_round(games_dir, run, press, monkeypatch):
     random.seed(0)
     loaded_images = []
 
@@ -39,19 +40,19 @@ def test_community4_factions_setup_and_first_round(games_dir, run, press, monkey
                         lambda self, filename, size: self.use_image(filename).resize(size))
     monkeypatch.setattr(DrawHelper, "show_disc_tile", lambda self, name: None)
 
-    GameInit("Wave 4 first round", [[i, f"<@{i}>"] for i in range(1, 5)],
+    GameInit("Wave 5 first round", [[i, f"<@{i}>"] for i in range(1, 6)],
              "def", True, True, False, False, community_factions=True).create_game()
     game = GamestateHelper(None, "aeb1")
-    game.setup_techs_and_outer_rim(4, False, False)
+    game.setup_techs_and_outer_rim(5, False, False)
     game.gamestate["discTiles"] = ["mog", "sci", "mat", "cru"]
-    game.gamestate["tile_deck_100"] = ["101", "102", "103", "104"]
+    game.gamestate["tile_deck_100"] = ["101", "102", "103", "104", "105", "106"]
     game.update()
     channel = FakeChannel("aeb1-actions")
     interaction = FakeInteraction(channel, role_names=["aeb1"])
-    run(DraftButtons.generalSetup(interaction, game, [1, 2, 3, 4], FACTIONS))
+    run(DraftButtons.generalSetup(interaction, game, [1, 2, 3, 4, 5], FACTIONS))
 
     state = reload(game).gamestate
-    colors = {pid: state["players"][str(pid)]["color"] for pid in range(1, 5)}
+    colors = {pid: state["players"][str(pid)]["color"] for pid in range(1, 6)}
     for pid, key in enumerate(FACTIONS, 1):
         player = state["players"][str(pid)]
         assert player["name"].startswith(NAMES[key])
@@ -92,14 +93,14 @@ def test_community4_factions_setup_and_first_round(games_dir, run, press, monkey
         assert state["board"][position]["owner"] in (color, 0)
         explored.append(position)
 
-    assert len(set(explored)) == 4
-    for pid in range(1, 5):
+    assert len(set(explored)) == 5
+    for pid in range(1, 6):
         player = reload(game).get_player(pid)
         assert player["explore_action_counters"] == 1
         assert len(player["owned_tiles"]) >= 1
     assert reload(game).gamestate["activePlayerColor"] == [colors[1]]
 
-    for pid in range(1, 5):
+    for pid in range(1, 6):
         press(channel, pid, f"FCID{colors[pid]}_passForRound")
     press(channel, 1, "runUpkeep")
     final = reload(game)

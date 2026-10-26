@@ -62,7 +62,8 @@ class SetupCommands(commands.GroupCog, name="setup"):
                       app_commands.Choice(name="Children of Cog", value="cog"),
                       app_commands.Choice(name="Legion of Midas", value="mid"),
                       app_commands.Choice(name="The Horde", value="hor"),
-                      app_commands.Choice(name="Vorlons", value="vor")]
+                      app_commands.Choice(name="Vorlons", value="vor"),
+                      app_commands.Choice(name="Hegemony of the Highest Cushion", value="heg")]
     
     @app_commands.choices(ai_ship_type=ai_choices2)
     @app_commands.choices(ai_ship=ai_ship_choices)
@@ -658,6 +659,19 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- **Centre Bonus:** 2 VP if you or an Ally control the Centre.",
                              "- Trade 4:1. Four reputation slots."])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "vorlons_board.png"))
+
+        message = "\n".join(["# Hegemony of the Highest Cushion",
+                             FactionData.starting_sector_line("heg", sectors),
+                             "- Start with Fusion Drive in the Nano Tech track.",
+                             "- **Nine Lives:** You may flip a Colony Ship to make an attacker reroll a Damage dice.",
+                             "- **Pounce:** +1 to Hit in the first engagement round (not the Missile round) if you shoot first.",
+                             "- **Solitary Hunter:** +1 Initiative and +1 to Hit if there is only 1 Hegemony ship in the battle"
+                             " (attacking or defending).",
+                             "- **Pride:** +2 Bonus VPs if you control the Centre at the end of the game.",
+                             "- Start with 2 Materials / 3 Science / 3 Money, 3 Colony Ships,"
+                             " standard ships and standard trade (3:1). Four reputation slots.",
+                             "- Home system The Cattery (#276)."])
+        await sendCommunitySheet(message, "hegemony_board.png")
 
         message = "\n".join(["Rift Reference"])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "Rift_Reference.png"))

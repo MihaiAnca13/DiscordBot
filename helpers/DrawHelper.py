@@ -1796,7 +1796,7 @@ class DrawHelper:
                 if owner_player:
                     from helpers.GamestateHelper import areAlliedByPlayer
                     allied = areAlliedByPlayer(player, owner_player)
-            if allied:
+            if allied and (owner == color or vp.get("vp_per_centre_allies", True)):
                 points += vp.get("vp_per_centre", 0)
         if "disc_tiles_for_points" in player:
             points += player["disc_tiles_for_points"] * 2

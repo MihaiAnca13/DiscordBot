@@ -7,7 +7,8 @@ def test_vorlons_only_appears_in_the_community_draft():
     assert len(DraftButtons.getDraftButtons(FakeGame(False, False)).children) == 16
     more = DraftButtons.getDraftButtons(FakeGame(True, False), 24)
     assert [button.label for button in more.children] == ["Children of Cog", "Legion of Midas",
-                                                          "The Horde", "Vorlons"]
+                                                          "The Horde", "Vorlons",
+                                                          "Hegemony of the Highest Cushion"]
 
 
 def test_vorlons_colour_and_bans():
