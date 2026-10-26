@@ -29,6 +29,7 @@ import logging
 import traceback
 
 from helpers.PlayerHelper import PlayerHelper
+from webui import runtime
 
 
 # Same button pressed again within this many seconds of the last press is treated as an accidental double click.
@@ -54,6 +55,8 @@ class ButtonListener(commands.Cog):
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type == discord.InteractionType.component:
+            # One feed for both surfaces: a Discord press records the prompts it posts.
+            interaction = runtime.record(interaction)
             start = datetime.now()
             start_time = time.perf_counter()
             logging.basicConfig(level=logging.INFO)

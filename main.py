@@ -15,6 +15,7 @@ from helpers.EmojiHelper import Emoji
 from helpers.GameIds import list_active_game_ids
 from helpers.GamestateHelper import GamestateHelper
 from listeners.ButtonListener import ButtonListener
+from webui import runtime
 from discord.ext import commands
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -53,6 +54,8 @@ class DiscordBot(commands.Bot):
         elapsed_time = end_time - start_time
         print(f"Total elapsed time for image load: {elapsed_time:.2f} seconds")
         print("Bot is now ready.")
+        # The web ui rides this event loop: the game lock and save writer are here.
+        await runtime.start_webui(self)
 
     async def start_timer(self):
         while True:
@@ -91,6 +94,7 @@ class DiscordBot(commands.Bot):
             asyncio.create_task(button_log_channel.send(f"Took {elapsed_time:.2f} seconds to run the auto-ping"))
 
     async def shutdown(self) -> None:
+        await runtime.stop_webui()
         await self.close()
 
 

@@ -53,3 +53,10 @@ Run rules alone with `python -m pytest tests -m 'not render'`, or rendering alon
   is a one-line fix in `fakes.py`, not a reason to skip the test.
 - A fake only records calls; it can't catch real Discord problems (permissions,
   rate limits, message limits, the 3-second timeout).
+
+## Web UI
+
+`test_webui_store.py` covers the feed, `test_webui_press.py` drives real handlers
+through `WebInteraction` (the same seam Discord uses), and `test_webui_recording.py`
+checks that a Discord prompt is recorded with one canonical message id. See
+`webui/README.md`. None of these need a bot token.

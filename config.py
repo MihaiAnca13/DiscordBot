@@ -18,6 +18,8 @@ if not isinstance(tester_ids, list):
     tester_ids = [tester_ids]
 tester_ids = {str(tester_id) for tester_id in tester_ids}
 guild_id = data.get("guild_id", 0)
+webui_port = data.get("webui_port", 0)
+webui_host = data.get("webui_host", "127.0.0.1")
 if data.get("dev_seed") is not None:
     random.seed(data["dev_seed"])
 
