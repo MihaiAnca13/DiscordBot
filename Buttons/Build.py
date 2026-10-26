@@ -28,6 +28,8 @@ class BuildButtons:
         resume_build = "herRegroupResume" in buttonID
         if not nested_raid and not resume_build:
             await interaction.channel.send(f"{player['player_name']} is using their turn to build")
+        if buttonID == "startBuild":
+            player_helper.stats.pop("infinitePossibilitiesUsed", None)
         if "2" not in buttonID:
             player_helper.spend_influence_on_action("build")
             if FactionData.has(player, "phase_technology"):
@@ -35,11 +37,10 @@ class BuildButtons:
                 player_helper.stats["phaseSwappedThisAction"] = False
             game.update_player(player_helper)
             await interaction.message.delete()
-        if buttonID == "startBuild":
-            player_helper.stats.pop("infinitePossibilitiesUsed", None)
-            if FactionData.has(player, "raid") or FactionData.has(player, "regroup"):
-                player_helper.stats["herCrossUsed"] = False
-                player_helper.stats["herRaidCharged"] = False
+        if buttonID == "startBuild" and (FactionData.has(player, "raid")
+                                         or FactionData.has(player, "regroup")):
+            player_helper.stats["herCrossUsed"] = False
+            player_helper.stats["herRaidCharged"] = False
             game.update_player(player_helper)
         if nested_raid:
             await interaction.message.delete()

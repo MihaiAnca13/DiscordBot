@@ -206,11 +206,13 @@ class MoveButtons:
         if "_" in buttonID:
             moveCount = buttonID.split("_")[1]
         if buttonID == "startMove":
-            player.pop("infinitePossibilitiesUsed", None)
+            reset = player.pop("infinitePossibilitiesUsed", None) is not None
             if FactionData.has(player, "raid") or FactionData.has(player, "regroup"):
                 player["herCrossUsed"] = False
                 player["herRaidCharged"] = False
-            game.update()
+                reset = True
+            if reset:
+                game.update()
         if not nested and len(buttonID.split("_")) > 2 and not raid_resume:
             ship_filter = buttonID.split("_")[2]
         view = View()
