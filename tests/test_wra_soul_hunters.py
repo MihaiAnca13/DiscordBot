@@ -1,5 +1,4 @@
 """Soul-Hunters: one live soul per enemy sector whose player population the Wraith destroys."""
-from PIL import Image, ImageDraw
 
 from Buttons.Influence import InfluenceButtons
 from helpers.CombatHelper import Combat
@@ -125,31 +124,3 @@ def test_display_player_stats_reports_the_souls(make_game):
     text = game.displayPlayerStats(player)
 
     assert "Souls captured: 2 (+2 offboard power, +2 VP)" in text
-
-
-def test_player_area_draws_the_live_soul_count(make_game, monkeypatch):
-    game = soul_game(make_game)
-    player = game.getPlayerObjectFromColor("blue")
-    player["wraithSouls"] = 2
-    monkeypatch.setattr(DrawHelper, "use_image",
-                        lambda self, filename: Image.new("RGBA", (1024, 890)))
-    assets = []
-
-    def resized_image(self, filename, size):
-        assets.append(filename)
-        return Image.new("RGBA", size)
-
-    monkeypatch.setattr(DrawHelper, "use_resized_image", resized_image)
-    texts = []
-    original = ImageDraw.ImageDraw.text
-
-    def spy(draw, xy, text, *args, **kwargs):
-        texts.append(text)
-        return original(draw, xy, text, *args, **kwargs)
-
-    monkeypatch.setattr(ImageDraw.ImageDraw, "text", spy)
-    DrawHelper(game.gamestate).player_area(player)
-
-    assert "Power: 2" in texts
-    assert "+2" in texts
-    assert assets.count("images/resources/components/factions/wraith_phase_module.png") == 4

@@ -1,11 +1,7 @@
 """Children of Cog, Legion of Midas, The Horde, Vorlons and the Hegemony through setup and a round."""
 import random
-from pathlib import Path
-
-from PIL import Image
 
 from Buttons.Draft import DraftButtons
-from helpers.DrawHelper import DrawHelper
 from helpers.GamestateHelper import GamestateHelper
 from setup.GameInit import GameInit
 from tests.fakes import FakeChannel, FakeInteraction, buttons, reload
@@ -14,7 +10,6 @@ FACTIONS = ["cog", "mid", "hor", "vor", "heg"]
 NAMES = {"cog": "Children of Cog", "mid": "Legion of Midas", "hor": "The Horde",
          "vor": "Vorlons", "heg": "Hegemony of the Highest Cushion"}
 HOMES = {"cog": "256", "mid": "277", "hor": "288", "vor": "235", "heg": "276"}
-ART = {"cog": "cog", "mid": "midas", "hor": "horde", "vor": "vorlons", "heg": "hegemony"}
 
 
 def find_button(channel, prefix):
@@ -26,20 +21,8 @@ def find_button(channel, prefix):
     )
 
 
-def test_community5_factions_setup_and_first_round(games_dir, run, press, monkeypatch):
+def test_community5_factions_setup_and_first_round(games_dir, run, press):
     random.seed(0)
-    loaded_images = []
-
-    def load_thumbnail(self, filename):
-        assert Path(filename).is_file(), filename
-        loaded_images.append(filename)
-        return Image.new("RGBA", (1024, 890))
-
-    monkeypatch.setattr(DrawHelper, "use_image", load_thumbnail)
-    monkeypatch.setattr(DrawHelper, "use_resized_image",
-                        lambda self, filename, size: self.use_image(filename).resize(size))
-    monkeypatch.setattr(DrawHelper, "show_disc_tile", lambda self, name: None)
-
     GameInit("Wave 5 first round", [[i, f"<@{i}>"] for i in range(1, 6)],
              "def", True, True, False, False, community_factions=True).create_game()
     game = GamestateHelper(None, "aeb1")
@@ -105,17 +88,3 @@ def test_community5_factions_setup_and_first_round(games_dir, run, press, monkey
     press(channel, 1, "runUpkeep")
     final = reload(game)
     assert final.gamestate["roundNum"] == 2
-
-    for player in final.gamestate["players"].values():
-        assert DrawHelper(final.gamestate).player_area(player).size == (5000, 800)
-    DrawHelper(final.gamestate).display_turn_order()
-    for key in FACTIONS:
-        art = ART[key]
-        assert f"images/resources/components/layouts/factionImages/{art}_image.png" in loaded_images
-        assert f"images/resources/components/layouts/faction_titles/name_trade_{art}.png" in loaded_images
-        for ship in ("interceptor", "cruiser", "dreadnought", "starbase"):
-            assert (f"images/resources/components/layouts/blueprints/classes/"
-                    f"{art}_{ship}_class.png") in loaded_images
-        with Image.open(f"images/resources/components/factions/{art}_ambassador.png") as ambassador:
-            assert ambassador.size == (512, 512)
-            assert ambassador.convert("RGBA").getpixel((0, 0))[3] == 0

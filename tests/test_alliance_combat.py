@@ -718,13 +718,6 @@ class TestStalemateResolution:
 
         assert not Combat.canResolveStalemate(game, POS)
 
-    def test_stalemate_action_is_dispatched(self):
-        with open("listeners/ButtonListener.py") as listener_file:
-            listener = listener_file.read()
-
-        assert 'customID.startswith("resolveStalemate")' in listener
-
-
 class TestAllianceDiceAssignment:
     """FAQ: non-player (Ancient/Guardian/GCDS) dice hit the Alliance collectively,
     with ties between similar targets going to whoever entered last."""

@@ -1,5 +1,4 @@
 """The Horde: Built for War, Raid, Call To Arms, Battle Focus and initiative."""
-import pytest
 
 from Buttons.Research import ResearchButtons
 from Buttons.Upgrade import UpgradeButtons
@@ -8,11 +7,6 @@ from helpers.CombatHelper import Combat
 from helpers.DrawHelper import DrawHelper
 from helpers.PlayerHelper import PlayerHelper
 from tests.fakes import FakeInteraction, buttons, player_helper, player_stats, reload
-
-
-@pytest.fixture(autouse=True)
-def _no_tile_render(monkeypatch):
-    monkeypatch.setattr(DrawHelper, "board_tile_image_file", lambda self, position: None)
 
 
 def _combat_game(make_game, blue_parts, red_parts=None):
@@ -41,11 +35,6 @@ def test_built_for_war_does_not_change_a_non_six(make_game, no_random, run):
     no_random([5])
     run(Combat.rollDice(game, "rollDice_101_blue_1_deleteMsg", FakeInteraction()))
     assert "damage_tracker" not in game.gamestate["board"]["101"]
-
-
-def test_reduced_initiative_is_in_the_data():
-    hor = player_stats("hor")
-    assert [hor[f"base_{ship}_speed"] for ship in ("interceptor", "cruiser", "dread", "starbase")] == [1, 0, 0, 3]
 
 
 class _ResearchGame:

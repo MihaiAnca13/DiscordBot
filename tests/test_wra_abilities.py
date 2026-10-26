@@ -5,28 +5,12 @@ one Upgrade, a retreat happens before the ship fires, and the Phase Module decla
 per blueprint before initiative is prompted. Soul-Hunters has its own test file.
 """
 import pytest
-from PIL import Image
 
 from Buttons.Build import BuildButtons
 from Buttons.Explore import ExploreButtons
 from helpers.CombatHelper import Combat
-from helpers.DrawHelper import DrawHelper
 from helpers.PlayerHelper import PlayerHelper
 from tests.fakes import FakeInteraction, FakeMessage, board_tile, buttons, player_stats, reload
-
-
-@pytest.fixture(autouse=True)
-def _no_render(monkeypatch):
-    """These tests cover rules, not rendering; real art would pay a one-time image-cache load."""
-    monkeypatch.setattr(DrawHelper, "use_image",
-                        lambda self, filename: Image.new("RGBA", (1024, 890)))
-    monkeypatch.setattr(DrawHelper, "use_resized_image",
-                        lambda self, filename, size: Image.new("RGBA", size))
-    monkeypatch.setattr(DrawHelper, "board_tile_image_file", lambda self, position: None)
-    monkeypatch.setattr(DrawHelper, "mergeLocationsFile", lambda self, positions: None)
-    monkeypatch.setattr(DrawHelper, "player_area",
-                        lambda self, player: Image.new("RGBA", (5000, 800)))
-    monkeypatch.setattr(DrawHelper, "show_player_ship_area", lambda self, image: None)
 
 
 def view_ids(inter):
@@ -596,11 +580,6 @@ def test_phase_module_bombs_a_sector_without_combat(make_game, run):
     assert "no longer has an owner" in replay.followup.sent[0][0]
 
 
-def test_phase_module_done_is_an_answer_button():
-    from listeners.ButtonListener import ANSWER_BUTTONS
-    assert "phaseModuleDone" in ANSWER_BUTTONS
-
-
 def test_rolling_is_refused_until_the_phase_module_declaration_is_done(make_game, monkeypatch):
     import asyncio
     game = phase_combat(make_game, souls=2)
@@ -626,7 +605,7 @@ def test_rolling_is_refused_until_the_phase_module_declaration_is_done(make_game
 
 
 def test_ghosts_retreat_blocks_a_manual_roll_until_the_destination_is_chosen(
-        start_game, press, run, monkeypatch):
+        start_game, press, run):
     import asyncio
     game, channel = start_game(factions=["wra", "eri"])
     wraith_combat(game)

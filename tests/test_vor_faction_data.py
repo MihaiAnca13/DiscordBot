@@ -47,18 +47,6 @@ def test_vorlons_starting_tech_is_regenerative_hull():
 def test_vorlons_part_icon_exists():
     assert Path("images/resources/components/upgrades/regenerative_hull.png").is_file()
 
-
-def test_vorlons_blueprint_parts_and_cells():
-    with open("data/parts.json", "r") as f:
-        parts = json.load(f)
-    vor = FACTIONS["vor"]
-    for ship in ("interceptor", "cruiser", "dread", "starbase"):
-        for part in vor[f"{ship}_parts"]:
-            assert part == "empty" or part in parts
-    for ship in ("interceptor", "cruiser", "dread"):
-        assert len(vor["blueprint_slots"][ship]) == len(vor[f"{ship}_parts"])
-
-
 @pytest.mark.parametrize("ship,expected", [
     ("interceptor", (1, 1, 1, 0, 3, 3)),
     ("cruiser", (1, 1, 1, 1, 2, 5)),

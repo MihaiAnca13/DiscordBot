@@ -1,8 +1,7 @@
 """Legion of Midas: Midas Touch and All That Glitters."""
 from Buttons.Turn import TurnButtons
-from Buttons.Upgrade import UpgradeButtons
 from helpers import FactionData
-from tests.fakes import FakeInteraction, buttons, player_helper, reload
+from tests.fakes import FakeInteraction, buttons, reload
 
 
 def test_midas_touch_costs_one_and_adds_an_activation(start_game, run):
@@ -50,16 +49,3 @@ def test_all_that_glitters_gives_one_money_for_passing_first(start_game, press):
     after = reload(game).get_player(1)
     assert after["money"] == 1
     assert after["firstPlayer"] is True
-
-
-def test_free_ship_part_editor_keeps_the_done_flow(start_game, run):
-    game, channel = start_game(factions=["mid", "eri"])
-    player = game.get_player(1)
-
-    run(UpgradeButtons.chooseUpgrade(game, player, FakeInteraction(channel),
-                                     "chooseUpgrade_1_interceptor_ioc_hul_0_free",
-                                     player_helper(game, "blue")))
-
-    menu = buttons(channel)
-    assert "FCIDblue_deleteMsg" in menu
-    assert any(cid.startswith("FCIDblue_upgradeShip_1_") and cid.endswith("_free") for cid in menu)

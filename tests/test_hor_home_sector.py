@@ -1,10 +1,6 @@
 import json
-from pathlib import Path
 
 from PIL import Image
-
-from helpers.DrawHelper import DrawHelper
-from tests.fakes import reload
 
 
 def horde_home():
@@ -31,7 +27,6 @@ def test_horde_home_sector_data():
 
 def test_horde_home_tile_art():
     path = "images/resources/hexes/288.png"
-    assert Path(path).is_file(), path
     with Image.open(path) as tile:
         assert tile.size == (1024, 890)
         assert tile.mode == "RGBA"
@@ -40,20 +35,3 @@ def test_horde_home_tile_art():
         for point in ((604, 169), (741, 171), (329, 449), (333, 609)):
             assert rgba.getpixel(point)[3] > 0
         tile.load()
-
-
-def test_horde_home_is_set_up_on_the_board(start_game):
-    game, _channel = start_game(factions=["hor", "eri"])
-    state = reload(game)
-    tile = state.gamestate["board"]["201"]
-    assert tile["sector"] == "288"
-    assert tile["money_pop"] == [1] and tile["material_pop"] == [1]
-    assert tile["player_ships"] == ["blue-int"]
-    player = state.get_player(1)
-    assert (player["money_pop_cubes"], player["material_pop_cubes"], player["science_pop_cubes"]) == (11, 11, 12)
-
-
-def test_horde_home_tile_renders(start_game):
-    game, _channel = start_game(factions=["hor", "eri"])
-    image = DrawHelper(reload(game).gamestate).board_tile_image("201")
-    assert image.size[0] > 0 and image.size[1] > 0

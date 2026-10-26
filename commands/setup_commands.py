@@ -614,7 +614,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              " must be in the same sector.",
                              "- The board prints home sector 254; the bot uses the free sector 256"
                              " (254 is the Wraith home)."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "cog_board.png"))
+        await sendCommunitySheet(message, "cog_board.png")
 
         message = "\n".join(["# Legion of Midas",
                              FactionData.starting_sector_line("mid", sectors),
@@ -626,7 +626,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- **Money is Power:** During game setup, place a Population Cube in the Advanced"
                              " Money Population Square on your Starting Sector.",
                              "- **All That Glitters:** Midas earn 1 Money instead of 2 when passing first."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "midas_board.png"))
+        await sendCommunitySheet(message, "midas_board.png")
 
         message = "\n".join(["# The Horde",
                              FactionData.starting_sector_line("hor", sectors),
@@ -642,7 +642,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- **Alternative Tech Board:** 4 slots per track, with discounts -1, -3, -5.",
                              "- The board prints home sector 255; the bot uses the free sector 288"
                              " (255 is the Remnants of Ra home)."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "horde_board.png"))
+        await sendCommunitySheet(message, "horde_board.png")
 
         message = "\n".join(["# Vorlons",
                              FactionData.starting_sector_line("vor", sectors),
@@ -658,7 +658,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "- **Research Discounts are all 1 more.**",
                              "- **Centre Bonus:** 2 VP if you or an Ally control the Centre.",
                              "- Trade 4:1. Four reputation slots."])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "vorlons_board.png"))
+        await sendCommunitySheet(message, "vorlons_board.png")
 
         message = "\n".join(["# Hegemony of the Highest Cushion",
                              FactionData.starting_sector_line("heg", sectors),

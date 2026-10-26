@@ -611,7 +611,7 @@ class TurnButtons:
             try:
                 await interaction.message.delete()
             except discord.NotFound:
-                pass
+                print(f"Message {interaction.message.id} was already deleted.")
         player_helper.stats["allianceLeaveClosed"] = True
         player_helper.stats.pop("influenceActionActive", None)
         player_helper.stats.pop("influenceActionUsed", None)
@@ -655,4 +655,3 @@ class TurnButtons:
                                        "Do any end of turn abilities and then end your turn.", view=view)
         game.initilizeKey("20MinReminder")
         game.addToKey("20MinReminder",player["color"])
-        await interaction.message.delete()

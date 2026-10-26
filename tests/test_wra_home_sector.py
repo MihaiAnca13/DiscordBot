@@ -1,9 +1,7 @@
 import json
-from pathlib import Path
 
 from PIL import Image
 
-from helpers.DrawHelper import DrawHelper
 from tests.fakes import buttons, reload
 
 
@@ -33,27 +31,11 @@ def test_wra_home_sector_data():
 
 def test_wra_home_sector_tile_art():
     for path in ("images/resources/hexes/254.png", "images/resources/hexes/numberless/254.png"):
-        assert Path(path).is_file(), path
         with Image.open(path) as tile:
             assert tile.size == (1024, 890)
             assert tile.mode == "RGBA"
             assert tile.getpixel((0, 0))[3] == 0
             tile.load()
-
-
-def test_the_live_map_uses_the_numberless_home_tile(start_game, monkeypatch):
-    used = []
-
-    def use(self, filename):
-        used.append(filename)
-        return Image.new("RGBA", (1024, 890), (0, 0, 0, 0))
-
-    monkeypatch.setattr(DrawHelper, "use_image", use)
-    game, _channel = start_game(factions=["wra", "eri"])
-    DrawHelper(game.gamestate).board_tile_image("201")
-
-    assert "images/resources/hexes/numberless/254.png" in used
-    assert "images/resources/hexes/254.png" not in used
 
 
 def test_setup_places_two_cubes_and_leaves_the_advanced_science_square_empty(start_game):

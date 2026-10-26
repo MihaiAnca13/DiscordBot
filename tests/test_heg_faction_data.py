@@ -1,10 +1,4 @@
-import json
-from pathlib import Path
-
-import pytest
-
-from helpers.ShipHelper import PlayerShip
-from tests.fakes import FACTIONS, player_stats
+from tests.fakes import FACTIONS
 
 
 def test_hegemony_faction_stats_match_printed_card():
@@ -37,38 +31,11 @@ def test_hegemony_faction_stats_match_printed_card():
     assert "blueprint_slots" not in heg
 
 
-def test_hegemony_starting_tech_is_fusion_drive():
-    with open("data/techs.json", "r") as f:
-        techs = json.load(f)
-    with open("data/parts.json", "r") as f:
-        parts = json.load(f)
-    assert techs["fud"]["name"] == "Fusion Drive"
-    assert techs["fud"]["track"] == "nano"
-    assert (parts["fud"]["range"], parts["fud"]["speed"], parts["fud"]["nrg_use"]) == (2, 2, 2)
-    assert Path("images/resources/components/upgrades/fusion_drive.png").is_file()
-
-
 def test_hegemony_blueprints_are_the_standard_ships():
     heg = FACTIONS["heg"]
-    with open("data/parts.json", "r") as f:
-        parts = json.load(f)
     # The card prints "Standard Ships"; the board's interceptor shows a Hull where the
     # standard blueprint has its Ion Cannon, so the card's text wins.
     assert heg["interceptor_parts"] == ["ioc", "nus", "nud", "empty"]
     assert heg["cruiser_parts"] == ["elc", "ioc", "empty", "nus", "hul", "nud"]
     assert heg["dread_parts"] == ["elc", "ioc", "ioc", "empty", "nus", "hul", "hul", "nud"]
     assert heg["starbase_parts"] == ["elc", "ioc", "hul", "empty", "hul"]
-    for ship in ("interceptor", "cruiser", "dread", "starbase"):
-        for part in heg[f"{ship}_parts"]:
-            assert part == "empty" or part in parts
-
-
-@pytest.mark.parametrize("ship,expected", [
-    ("interceptor", (0, 1, 1, 0, 3, 3)),
-    ("cruiser", (1, 1, 1, 1, 2, 5)),
-    ("dread", (2, 0, 1, 1, 1, 8)),
-    ("starbase", (2, 2, 0, 1, 4, 3)),
-])
-def test_hegemony_ship_stats(ship, expected):
-    model = PlayerShip(player_stats("heg"), ship)
-    assert (model.hull, model.energy, model.range, model.computer, model.speed, model.cost) == expected

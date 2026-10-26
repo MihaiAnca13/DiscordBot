@@ -5,22 +5,9 @@ Raid reuses the existing Build flow from a Move action; Regroup reuses the exist
 Move flow from a Build action. Both are one extra activation of the other type, once
 per action, and never a second influence disc.
 """
-from PIL import Image
-import pytest
-
 from helpers.DrawHelper import DrawHelper
 from helpers.ShipHelper import PlayerShip
 from tests.fakes import buttons, player_stats, reload
-
-
-@pytest.fixture(autouse=True)
-def _no_tile_render(monkeypatch):
-    """These tests cover action bookkeeping, not rendering; real art loads the image cache."""
-    monkeypatch.setattr(DrawHelper, "board_tile_image_file", lambda self, position: None)
-    monkeypatch.setattr(DrawHelper, "mergeLocationsFile", lambda self, positions: None)
-    monkeypatch.setattr(DrawHelper, "use_image", lambda self, filename: Image.new("RGBA", (1024, 890)))
-    monkeypatch.setattr(DrawHelper, "use_resized_image",
-                        lambda self, filename, size: self.use_image(filename).resize(size))
 
 
 def setup_game(start_game):
@@ -200,6 +187,7 @@ def test_regroup_move_before_building_spends_one_disc_and_returns_to_build(start
     assert "FCIDblue_moveFrom_201_1_herRegroup_before" in menu
     assert not [cid for cid in menu if "herRaidBuild" in cid]
     assert "FCIDblue_herBackToBuild" in menu
+    assert not any("startMove" in cid or "additional" in cid for cid in menu)
 
     move_cruiser(press, channel, suffix="_herRegroup_before")
     state = reload(game)
@@ -244,18 +232,6 @@ def test_regroup_move_after_building_ends_the_build_phase(start_game, press):
     assert "FCIDblue_endTurn" in menu
     assert not [cid for cid in menu if "buildIn" in cid]
     assert not [cid for cid in menu if "herRegroupMove" in cid]
-
-
-def test_regroup_move_is_exactly_one_activation(start_game, press):
-    game, channel = setup_game(start_game)
-    press(channel, 1, "FCIDblue_startBuild")
-    press(channel, 1, "FCIDblue_herRegroupMove_before")
-    # No "Move an additional ship" inside the nested move.
-    assert not [cid for cid in buttons(channel) if "startMove" in cid or "additional" in str(cid)]
-    move_cruiser(press, channel, suffix="_herRegroup_before")
-    state = reload(game)
-    assert state.gamestate["board"]["301"]["player_ships"].count("blue-cru") == 1
-    assert "blue-cru" not in state.gamestate["board"]["201"]["player_ships"]
 
 
 def test_back_to_build_does_not_use_the_regroup_activation(start_game, press):
@@ -340,16 +316,6 @@ def test_the_extra_interceptor_hull_is_a_replaceable_slot(start_game, press):
     assert player["interceptor_parts"] == ["ioc", "nus", "nud", "elc", "empty"]
     model = PlayerShip(player, "interceptor")
     assert model.hull == 0 and model.computer == 1 and model.check_valid_ship()
-
-
-def test_cruiser_has_no_hull_slot_and_costs_four(start_game):
-    game, _channel = setup_game(start_game)
-    player = game.get_player(1)
-    model = PlayerShip(player, "cruiser")
-    assert model.hull == 0
-    assert model.cost == 4
-    assert len(player["cruiser_parts"]) == 5
-    assert "hul" not in player["cruiser_parts"]
 
 
 def test_only_three_more_cruisers_are_buildable_after_the_starting_one(start_game, press):

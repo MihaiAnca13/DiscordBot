@@ -518,8 +518,8 @@ class UpgradeButtons:
             await interaction.followup.send("There is no Adaptive Transformation to undo.", ephemeral=True)
             return
         tile = game.gamestate["board"][undo["pos"]]
-        if not all(ship in tile["player_ships"] for ship in undo["added"]) \
-                or any(ship in tile["player_ships"] for ship in undo["removed"]):
+        if any(tile["player_ships"].count(ship) < undo["added"].count(ship)
+               for ship in undo["added"]):
             await interaction.followup.send("Those ships have moved; the transformation can no longer be undone.",
                                             ephemeral=True)
             return

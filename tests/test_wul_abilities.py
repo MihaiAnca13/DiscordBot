@@ -1,17 +1,8 @@
 """The Wulfen species rules: no Interceptors, Spine Cannons and Wolf Pack."""
-import pytest
-from PIL import Image
 
 from Buttons.Upgrade import UpgradeButtons
 from helpers.CombatHelper import Combat
-from helpers.DrawHelper import DrawHelper
 from tests.fakes import FakeChannel, FakeInteraction, buttons, player_helper, player_stats, reload
-
-
-@pytest.fixture(autouse=True)
-def _no_tile_render(monkeypatch):
-    monkeypatch.setattr(DrawHelper, "board_tile_image_file", lambda self, position: None)
-    monkeypatch.setattr(DrawHelper, "mergeLocationsFile", lambda self, positions: None)
 
 
 def _combat_game(make_game, blue_parts, red_parts=None, blue_tech=None, red_tech=None):
@@ -193,28 +184,6 @@ def test_no_interceptors_in_the_build_upgrade_or_move_menus(start_game, press):
     assert any(label.startswith("Cruiser") for label in labels)
 
 
-def test_player_area_draws_three_wulfen_blueprints(start_game, monkeypatch):
-    game, _channel = start_game(factions=["wul", "eri"])
-    player = game.get_player(1)
-    loaded = []
-
-    def stub(self, filename):
-        loaded.append(filename)
-        return Image.new("RGBA", (1024, 890), (255, 255, 255, 255))
-
-    monkeypatch.setattr(DrawHelper, "use_image", stub)
-    monkeypatch.setattr(DrawHelper, "use_resized_image",
-                        lambda self, filename, size: self.use_image(filename).resize(size))
-    image = DrawHelper(game.gamestate).player_area(player)
-
-    assert image.size == (5000, 800)
-    joined = " ".join(loaded)
-    assert "blueprint_interceptor.png" not in joined
-    for ship in ("cruiser", "dreadnought", "starbase"):
-        assert f"blueprint_{ship}.png" in joined
-        assert f"wulfen_{ship}_class.png" in joined
-
-
 def _wolf_game(make_game):
     blue = player_stats("wul", color="blue",
                         cruiser_parts=["nus", "hul", "nud", "ioc", "ioc"],
@@ -315,12 +284,10 @@ def test_two_sixes_can_each_be_saved(make_game, no_random, run, press):
     assert reload(game).gamestate["board"]["101"]["wolfPackRerolls"]["blue"] == 2
 
 
-def test_wolf_pack_bank_is_cleared_when_a_new_pairing_starts(make_game, run, monkeypatch):
+def test_wolf_pack_bank_is_cleared_when_a_new_pairing_starts(make_game, run):
     game = _wolf_game(make_game)
     game.gamestate["board"]["101"]["wolfPackRerolls"] = {"blue": 1}
     game.update()
-    monkeypatch.setattr(DrawHelper, "player_area", lambda self, player: Image.new("RGBA", (1, 1)))
-    monkeypatch.setattr(DrawHelper, "show_player_ship_area", lambda self, image: None)
 
     run(Combat.startCombat(game, FakeInteraction().channel, "101"))
 

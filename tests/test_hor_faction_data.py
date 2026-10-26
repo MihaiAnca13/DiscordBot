@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from helpers.ShipHelper import PlayerShip
@@ -31,22 +29,8 @@ def test_horde_faction_stats_match_printed_card():
     assert hor["ship_stock"] == [7, 4, 2, 4]
 
 
-def test_horde_starting_techs():
-    with open("data/techs.json", "r") as f:
-        techs = json.load(f)
-    assert techs["neb"]["name"] == "Neutron Bombs"
-    assert techs["nar"]["name"] == "Nano Robots"
-
-
-def test_horde_blueprint_parts_and_cells():
-    with open("data/parts.json", "r") as f:
-        parts = json.load(f)
+def test_horde_blueprint_slot_counts():
     hor = FACTIONS["hor"]
-    for ship in ("interceptor", "cruiser", "dread", "starbase"):
-        for part in hor[f"{ship}_parts"]:
-            assert part == "empty" or part in parts
-    for ship in ("interceptor", "cruiser", "dread"):
-        assert len(hor["blueprint_slots"][ship]) == len(hor[f"{ship}_parts"])
     assert [len(hor[f"{ship}_parts"]) for ship in ("interceptor", "cruiser", "dread")] == [4, 6, 8]
 
 

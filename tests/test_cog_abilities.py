@@ -6,12 +6,6 @@ from helpers.DrawHelper import DrawHelper
 from tests.fakes import FakeInteraction, buttons, player_helper, reload
 
 
-@pytest.fixture(autouse=True)
-def _no_tile_render(monkeypatch):
-    monkeypatch.setattr(DrawHelper, "board_tile_image_file", lambda self, position: None)
-    monkeypatch.setattr(DrawHelper, "mergeLocationsFile", lambda self, positions: None)
-
-
 def test_infinite_possibilities_is_printed_under_build_and_move():
     from tests.fakes import player_stats
     cog = player_stats("cog")
@@ -57,7 +51,7 @@ def test_infinite_possibilities_offers_one_free_upgrade(start_game, press):
 
 
 def test_adaptive_swaps_need_two_ships_in_one_sector():
-    from tests.fakes import board_tile, player_stats
+    from tests.fakes import player_stats
     from helpers.GamestateHelper import GamestateHelper
 
     player = player_stats("cog", color="blue")
@@ -74,10 +68,11 @@ def test_adaptive_swaps_need_two_ships_in_one_sector():
     assert ("drd", "cru", -2) in UpgradeButtons.adaptiveSwaps(game, player, "103")
 
 
-def test_adaptive_transformation_applies_and_undoes(start_game, run):
+@pytest.mark.parametrize("source_count", [2, 3])
+def test_adaptive_transformation_applies_and_undoes(start_game, run, source_count):
     game, channel = start_game(factions=["cog", "eri"])
     state = reload(game)
-    state.gamestate["board"]["201"]["player_ships"] = ["blue-int", "blue-int"]
+    state.gamestate["board"]["201"]["player_ships"] = ["blue-int"] * source_count
     state.update()
     player = state.get_player(1)
     player["materials"] = 0
@@ -89,7 +84,8 @@ def test_adaptive_transformation_applies_and_undoes(start_game, run):
                                     "adaptiveSwap_int_cru_201_3_dummy", player_helper(state, "blue")))
 
     after = reload(state)
-    assert after.gamestate["board"]["201"]["player_ships"] == ["blue-cru"]
+    assert sorted(after.gamestate["board"]["201"]["player_ships"]) == (
+        ["blue-cru"] + ["blue-int"] * (source_count - 2))
     assert after.get_player(1)["materials"] == 1
     assert after.get_player(1)["influence_discs"] == before - 1
     assert after.get_player(1)["adaptiveUndo"]["removed"] == ["blue-int", "blue-int"]
@@ -98,32 +94,33 @@ def test_adaptive_transformation_applies_and_undoes(start_game, run):
     run(UpgradeButtons.undoAdaptive(state, after.get_player(1), FakeInteraction(channel),
                                     player_helper(state, "blue")))
     restored = reload(state)
-    assert restored.gamestate["board"]["201"]["player_ships"] == ["blue-int", "blue-int"]
+    assert restored.gamestate["board"]["201"]["player_ships"] == ["blue-int"] * source_count
     assert restored.get_player(1)["materials"] == 0
     assert any(cid.startswith("FCIDblue_upgradeShip_3_") for cid in buttons(channel))
 
 
-def test_adaptive_undo_refuses_after_the_ship_moved(start_game, run):
+@pytest.mark.parametrize("source, target, source_count", [("int", "cru", 2), ("cru", "int", 1)])
+def test_adaptive_undo_refuses_after_the_ship_moved(start_game, run, source, target, source_count):
     game, channel = start_game(factions=["cog", "eri"])
     state = reload(game)
-    state.gamestate["board"]["201"]["player_ships"] = ["blue-int", "blue-int"]
+    state.gamestate["board"]["201"]["player_ships"] = [f"blue-{source}"] * source_count
     state.update()
     player = state.get_player(1)
-    player["materials"] = 0
+    player["materials"] = 1
     state.update_player(player_helper(state, "blue"))
 
     run(UpgradeButtons.adaptiveSwap(state, player, FakeInteraction(channel),
-                                    "adaptiveSwap_int_cru_201_3_dummy", player_helper(state, "blue")))
+                                    f"adaptiveSwap_{source}_{target}_201_3_dummy", player_helper(state, "blue")))
     state = reload(state)
-    state.gamestate["board"]["201"]["player_ships"].remove("blue-cru")
-    state.gamestate["board"]["202"].setdefault("player_ships", []).append("blue-cru")
+    state.gamestate["board"]["201"]["player_ships"].remove(f"blue-{target}")
+    state.gamestate["board"]["202"].setdefault("player_ships", []).append(f"blue-{target}")
     state.update()
 
     interaction = FakeInteraction(channel)
     run(UpgradeButtons.undoAdaptive(state, state.get_player(1), interaction,
                                     player_helper(state, "blue")))
     assert "moved" in interaction.followup.sent[-1][0]
-    assert "blue-int" not in state.gamestate["board"]["201"]["player_ships"]
+    assert f"blue-{source}" not in state.gamestate["board"]["201"]["player_ships"]
 
 
 def test_cog_ship_part_editor_still_works(start_game, run):

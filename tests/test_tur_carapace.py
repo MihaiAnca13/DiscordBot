@@ -1,15 +1,6 @@
-import pytest
-
 from helpers.CombatHelper import Combat
-from helpers.DrawHelper import DrawHelper
 from helpers.Turtugan import Carapace
 from tests.fakes import (FakeChannel, FakeInteraction, buttons, offered_ids, player_stats, reload)
-
-
-@pytest.fixture(autouse=True)
-def no_render(monkeypatch):
-    for name in ("board_tile_image_file", "player_area", "show_player_ship_area", "show_AI_stats"):
-        monkeypatch.setattr(DrawHelper, name, lambda *a, **k: None)
 
 
 def combat_game(make_game, tur_parts=None, tur_ships=("teal-int",), red_ships=("red-cru",)):

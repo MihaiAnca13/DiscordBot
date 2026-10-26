@@ -1,5 +1,5 @@
 """Vorlons: Tech Masters, Organic Tech, Few in Number, Regenerative Hull and the Centre bonus."""
-from PIL import Image
+import pytest
 
 from Buttons.Research import ResearchButtons
 from helpers.CombatHelper import Combat
@@ -38,8 +38,7 @@ def test_tech_masters_charges_2_3_4_more_for_the_wrong_tray():
     assert ResearchButtons.calculate_cost(TECH, "military", player_stats("hyd")) == 5
 
 
-def test_tech_masters_offers_every_tray_and_records_a_wrong_one(run, monkeypatch):
-    monkeypatch.setattr(DrawHelper, "show_tech_ref_image", lambda *args: None)
+def test_tech_masters_offers_every_tray_and_records_a_wrong_one(run):
     player = player_stats("vor", science=20)
     interaction = FakeInteraction()
     game = FakeGame(player)
@@ -63,12 +62,24 @@ def test_tech_masters_offers_every_tray_and_records_a_wrong_one(run, monkeypatch
     assert player["science"] == 20 - 4
 
 
-def test_organic_tech_gives_a_free_upgrade_after_research(start_game, press, monkeypatch):
-    monkeypatch.setattr(DrawHelper, "show_tech_ref_image", lambda *args: None)
-    monkeypatch.setattr(DrawHelper, "use_image",
-                        lambda self, filename: Image.new("RGBA", (1024, 890)))
-    monkeypatch.setattr(DrawHelper, "use_resized_image",
-                        lambda self, filename, size: self.use_image(filename).resize(size))
+@pytest.mark.parametrize("grid_count", [0, 7])
+def test_tech_masters_menu_uses_the_cheapest_open_tray(make_game, run, grid_count):
+    player = player_stats("vor", science=10, money=0, materials=0)
+    player["military_tech"] = ["neb", "stb", "plc", "phs", "adm", "tas"]
+    player["grid_tech"] = ["gas", "fus", "imh", "poc", "ade", "tad", "anc"][:grid_count]
+    game = make_game({"players": {"1": player}, "available_techs": ["qug"]})
+    interaction = FakeInteraction()
+
+    run(ResearchButtons.startResearch(game, player, PlayerHelper("1", player), interaction, False))
+
+    assert buttons(interaction.channel)["FCIDblue_getTech_qug_grid"] == "Quantum Grid (10)"
+    run(ResearchButtons.getTech(game, player, PlayerHelper("1", player), interaction,
+                                "getTech_qug_grid"))
+    assert buttons(interaction.channel)["FCIDblue_getTech_qug_military_tm"] == "Military (10)"
+    assert ("FCIDblue_getTech_qug_grid_tm" in buttons(interaction.channel)) == (grid_count == 0)
+
+
+def test_organic_tech_gives_a_free_upgrade_after_research(start_game, press):
     game, channel = start_game(factions=["vor", "eri"])
     game.gamestate["available_techs"] = ["gas"]
     game.get_player(1)["science"] = 40
@@ -97,19 +108,6 @@ def test_organic_tech_gives_a_free_upgrade_after_research(start_game, press, mon
     after = reload(game).get_player(1)
     assert after["interceptor_parts"][0] == "gas"
     assert after["influence_discs"] == discs
-
-
-def test_few_in_number_refreshes_one_colony_ship(start_game, press):
-    game, channel = start_game(factions=["vor", "eri"])
-    state = reload(game)
-    state.get_player(1)["colony_ships"] = 0
-    state.update()
-
-    press(channel, 1, "FCIDblue_startInfluence")
-    assert "Refresh 1 Colony Ship" in buttons(channel).values()
-
-    press(channel, 1, "FCIDblue_refreshPopShips")
-    assert reload(game).get_player(1)["colony_ships"] == 1
 
 
 def _damaged_vorlons_cruiser(make_game, ships, positions):

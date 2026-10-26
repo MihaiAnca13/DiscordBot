@@ -236,14 +236,18 @@ class ResearchButtons:
             tech_details = tech_data.get(tech)
             if tech_details:
                 tech_type = tech_details["track"]
-                if tech_type != "any":
-                    max_techs = FactionData.tech_track_max(player)
-                    if len(player[f"{tech_type}_tech"]) >= max_techs and not (
-                            FactionData.has(player, "tech_masters")
-                            and any(len(player[f"{track}_tech"]) < max_techs
-                                    for track in ("military", "grid", "nano"))):
+                if not setup and FactionData.has(player, "tech_masters") and tech_type != "any":
+                    costs = [ResearchButtons.calculate_cost(tech_details, track, player)
+                             for track in ("military", "grid", "nano")
+                             if len(player[f"{track}_tech"]) < FactionData.tech_track_max(player)]
+                    if not costs:
                         continue
-                cost = ResearchButtons.calculate_cost(tech_details, tech_type, player)
+                    cost = min(costs)
+                else:
+                    max_techs = FactionData.tech_track_max(player)
+                    if tech_type != "any" and len(player[f"{tech_type}_tech"]) >= max_techs:
+                        continue
+                    cost = ResearchButtons.calculate_cost(tech_details, tech_type, player)
                 tech_groups[tech_type].append((tech, tech_details["name"], cost))
         displayedTechs = []
         researchedTech = player_helper.getTechs()

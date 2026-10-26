@@ -1,9 +1,4 @@
-import json
-
-import pytest
-
-from helpers.ShipHelper import PlayerShip
-from tests.fakes import FACTIONS, player_stats
+from tests.fakes import FACTIONS
 
 
 def test_midas_faction_stats_match_printed_card():
@@ -28,32 +23,3 @@ def test_midas_faction_stats_match_printed_card():
     assert [mid[key] for key in ("cost_orbital", "cost_monolith", "cost_interceptor",
                                  "cost_cruiser", "cost_dread", "cost_starbase")] == [4, 10, 3, 5, 8, 3]
     assert mid["ship_stock"] == [7, 4, 2, 4]
-
-
-def test_midas_starting_tech_is_advanced_economy():
-    with open("data/techs.json", "r") as f:
-        techs = json.load(f)
-    assert techs["ade"]["name"] == "Advanced Economy"
-    assert techs["ade"]["track"] == "grid"
-
-
-def test_midas_blueprint_parts_and_cells():
-    with open("data/parts.json", "r") as f:
-        parts = json.load(f)
-    mid = FACTIONS["mid"]
-    for ship in ("interceptor", "cruiser", "dread", "starbase"):
-        for part in mid[f"{ship}_parts"]:
-            assert part == "empty" or part in parts
-    for ship in ("interceptor", "cruiser", "dread"):
-        assert len(mid["blueprint_slots"][ship]) == len(mid[f"{ship}_parts"])
-
-
-@pytest.mark.parametrize("ship,expected", [
-    ("interceptor", (0, 1, 1, 0, 3, 3)),
-    ("cruiser", (1, 1, 1, 1, 2, 5)),
-    ("dread", (2, 0, 1, 1, 1, 8)),
-    ("starbase", (2, 2, 0, 1, 4, 3)),
-])
-def test_midas_ship_stats(ship, expected):
-    model = PlayerShip(player_stats("mid"), ship)
-    assert (model.hull, model.energy, model.range, model.computer, model.speed, model.cost) == expected

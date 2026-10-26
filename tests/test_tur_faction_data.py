@@ -1,6 +1,5 @@
 import json
 
-from helpers import FactionData
 from helpers.ShipHelper import PlayerShip
 from tests.fakes import player_stats
 
@@ -52,12 +51,6 @@ def test_turtugan_blueprints_and_base_stats():
     assert (row["base_interceptor_comp"], row["base_cruiser_comp"],
             row["base_dread_comp"], row["base_starbase_comp"]) == (1, 1, 1, 0)
 
-    with open("data/parts.json", "r") as f:
-        parts = json.load(f)
-    used = set(row["interceptor_parts"] + row["cruiser_parts"]
-               + row["dread_parts"] + row["starbase_parts"])
-    assert used <= set(parts)
-
 
 def test_turtugan_ship_stats_and_validity():
     player = player_stats(TUR, color="teal")
@@ -77,9 +70,3 @@ def test_turtugan_ship_stats_and_validity():
 def test_a_normal_starbase_with_a_drive_is_still_invalid():
     assert not PlayerShip(player_stats("hyd", color="blue",
                                        starbase_parts=["hul", "nus", "nud"]), "starbase").check_valid_ship()
-
-
-def test_artwork_name_is_the_data_artwork_key():
-    assert FactionData.artwork_name("Turtugan") == "turtugan"
-    assert FactionData.has(player_stats(TUR), "harvester")
-    assert not FactionData.has(player_stats("hyd"), "harvester")

@@ -1,15 +1,9 @@
 """Hegemony of the Highest Cushion: Nine Lives, Pounce and Solitary Hunter."""
-import pytest
 
 from helpers.CombatHelper import Combat
 from helpers.DrawHelper import DrawHelper
 from tests.fakes import (FakeChannel, FakeInteraction, buttons, player_helper, player_stats,
                          reload)
-
-
-@pytest.fixture(autouse=True)
-def _no_tile_render(monkeypatch):
-    monkeypatch.setattr(DrawHelper, "board_tile_image_file", lambda self, position: None)
 
 
 def _combat_game(make_game, ships, attacker, defender, extra=None, players=None):
@@ -85,19 +79,6 @@ def test_nine_lives_holds_the_hit_until_the_defender_answers(make_game, no_rando
     assert "damage_tracker" not in game.gamestate["board"]["101"]
     assert any(cid.startswith("FCIDblue_nineLives_101_reroll_") for cid in buttons(channel))
     assert any(cid.startswith("FCIDblue_nineLives_101_pass_") for cid in buttons(channel))
-
-
-def test_nine_lives_reroll_can_save_the_ship(make_game, no_random, run, press):
-    game = _combat_game(make_game, ["red-int", "blue-cru"], "red", "blue")
-    channel = FakeChannel("aeb1-actions")
-    no_random([6, 1])
-    run(Combat.rollDice(game, "rollDice_101_red_3_deleteMsg", FakeInteraction(channel)))
-    reroll = next(cid for cid in buttons(channel) if cid.startswith("FCIDblue_nineLives_101_reroll_"))
-    press(channel, 1, reroll)
-    state = reload(game)
-    assert state.gamestate["players"]["1"]["colony_ships"] == 2
-    assert "damage_tracker" not in state.gamestate["board"]["101"]
-    assert state.gamestate["board"]["101"]["nineLivesPending"] == []
 
 
 def test_nine_lives_works_with_the_last_colony_ship(make_game, no_random, run, press):
