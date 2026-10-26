@@ -136,8 +136,10 @@ def test_nine_lives_prompt_answers_once(make_game, no_random, run):
     game = _combat_game(make_game, ["red-int", "blue-cru"], "red", "blue")
     channel = FakeChannel("aeb1-actions")
     no_random([3])
-    run(Combat.offerNineLives(game, FakeInteraction(channel), "101", "red", "blue",
-                              0, 3, 6, 1, "yellow", 1, False))
+    run(Combat.offerNineLives(game, FakeInteraction(channel), "101", "blue", {
+        "roller": "red", "computer": 0, "speed": 3, "dieNum": 6, "hits": [1],
+        "dieColor": "yellow", "counter": 1, "ignore": False, "damageBonus": 0, "split": False,
+        "shielded": False, "shipType": None}))
     run(Combat.resolveNineLives(game, player_helper(game, "blue"),
                                 FakeInteraction(channel), "nineLives_101_pass_1"))
     second = FakeInteraction(channel)
@@ -201,3 +203,51 @@ def test_pounce_round_counter_survives_kurita_first_shot_phases(make_game, run):
     run(Combat.promptNextSpeed(game, "101", FakeChannel("aeb1-actions"), False))
     assert tile.get("firstShotPhase") is None
     assert tile["engagementRound"] == 2
+
+
+def _nine_lives_reroll(channel):
+    return next(cid for cid in buttons(channel) if cid.startswith("FCIDblue_nineLives_101_reroll_"))
+
+
+def test_nine_lives_reroll_keeps_built_for_war(make_game, no_random, run, press):
+    game = _combat_game(make_game, ["red-cru", "blue-cru"], "red", "blue",
+                        players={"1": player_stats("heg", color="blue",
+                                                   cruiser_parts=["ioc", "hul", "hul", "nus", "nud"]),
+                                 "2": player_stats("hor", color="red")})
+    channel = FakeChannel("aeb1-actions")
+    no_random([6])
+    run(Combat.rollDice(game, "rollDice_101_red_1_deleteMsg", FakeInteraction(channel)))
+    no_random([6])
+    press(channel, 1, _nine_lives_reroll(channel))
+    # a yellow die deals 1, and Built for War adds 1 on the rerolled six too
+    assert reload(game).gamestate["board"]["101"]["damage_tracker"]["blue-cru"] == 2
+
+
+def test_nine_lives_reroll_keeps_spine_damage(make_game, no_random, run, press):
+    game = _combat_game(make_game, ["red-cru", "blue-cru"], "red", "blue",
+                        players={"1": player_stats("heg", color="blue",
+                                                   cruiser_parts=["ioc", "hul", "hul", "nus", "nud"]),
+                                 "2": player_stats("wul", color="red",
+                                                   cruiser_parts=["nus", "hul", "nud", "ioc", "ioc"])})
+    channel = FakeChannel("aeb1-actions")
+    no_random([6])
+    run(Combat.rollDice(game, "rollDice_101_red_2_deleteMsg_spinedmg", FakeInteraction(channel)))
+    no_random([6])
+    press(channel, 1, _nine_lives_reroll(channel))
+    assert reload(game).gamestate["board"]["101"]["damage_tracker"]["blue-cru"] == 2
+
+
+def test_nine_lives_offers_once_for_a_split_die(make_game, no_random, run, press):
+    game = _combat_game(make_game, ["red-cru", "blue-cru"], "red", "blue",
+                        players={"1": player_stats("heg", color="blue"),
+                                 "2": player_stats("hor", color="red",
+                                                   cruiser_parts=["anc", "nus", "nus", "nud", "hul"],
+                                                   military_tech=["ans"])})
+    channel = FakeChannel("aeb1-actions")
+    no_random([6])
+    run(Combat.rollDice(game, "rollDice_101_red_1_deleteMsg", FakeInteraction(channel)))
+    # one physical die, so one reroll question; its five one-damage hits wait for the answer
+    assert len([cid for cid in buttons(channel) if "nineLives_101_" in cid]) == 2
+    press(channel, 1, next(cid for cid in buttons(channel)
+                           if cid.startswith("FCIDblue_nineLives_101_pass_")))
+    assert "blue-cru" not in reload(game).gamestate["board"]["101"]["player_ships"]

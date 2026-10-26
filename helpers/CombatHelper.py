@@ -1012,9 +1012,11 @@ class Combat:
                     nineLives = Combat.nine_lives_target(game, pos, colorOrAI, hittableShips)
                     if nineLives and oldNumPeeps == len(Combat.findPlayersInTile(game, pos)):
                         await Combat.sendCombatReports(interaction.channel, reports)
-                        await Combat.offerNineLives(game, interaction, pos, colorOrAI, nineLives,
-                                                    shipModel.computer, speed, dieNum, dieDam,
-                                                    die[2], None, False)
+                        await Combat.offerNineLives(game, interaction, pos, nineLives, {
+                            "roller": colorOrAI, "computer": shipModel.computer, "speed": speed,
+                            "dieNum": dieNum, "hits": [dieDam], "dieColor": die[2],
+                            "counter": None, "ignore": False, "damageBonus": 0, "split": False,
+                            "shielded": False, "shipType": None})
                         continue
                     if len(hittableShips) > 0:
                         update = True
@@ -1106,6 +1108,19 @@ class Combat:
             if salvoDone and oldLength == len(Combat.findPlayersInTile(game, pos)):
                 await Combat.promptNextSpeed(game, pos, interaction.channel, update)
         await interaction.message.delete()
+
+
+    @staticmethod
+    def die_damage(game: GamestateHelper, colorOrAI: str, dieColor: str, face: int,
+                   damage_bonus: int = 0, split: bool = False):
+        """The hits one physical die deals: its colour's damage, Spine's bonus and Built for War's
+        extra damage on a six. A split die deals the same total as separate one-damage hits."""
+        total = Combat.translateColorToDamage(dieColor, face) + damage_bonus
+        if (face == 6 and dieColor != "pink" and colorOrAI != "ai"
+                and FactionData.has(game.getPlayerObjectFromColor(colorOrAI), "built_for_war")):
+            total += 1
+        return [1] * total if split else [total]
+
     @staticmethod
     async def rollDice(game: GamestateHelper, buttonID: str, interaction: discord.Interaction):
         pos = buttonID.split("_")[1]
@@ -1155,6 +1170,7 @@ class Combat:
         wolf_miss_ids = set()
         roll_id = 0
         counter = 0
+        deferred_nine_lives = set()
         for ship in ships:
             if ship[0] == speed or speed == (ship[0]+99) or speed == 1000:
                 name = interaction.user.mention
@@ -1218,8 +1234,8 @@ class Combat:
                         # dieFiles.append(drawing.use_image("images/resources/components/dice_faces/dice_" +
                         #                                   Combat.translateColorToName(die) +
                         #                                   "_" + str(random_number) + ".png"))
-                        if all([missiles == "",
-                                Combat.translateColorToDamage(die, random_number) == 4]):
+                        base_damage = Combat.translateColorToDamage(die, random_number)
+                        if all([missiles == "", base_damage == 4]):
                             player = game.get_player_from_color(colorOrAI)
                             playerObj = game.getPlayerObjectFromColor(colorOrAI)
                             player_helper = PlayerHelper(player, playerObj)
@@ -1228,17 +1244,11 @@ class Combat:
                                 split = True
                         if speed == 1000:
                             split = True
-                        base_damage = Combat.translateColorToDamage(die, random_number)
-                        total_damage = base_damage + damage_bonus
-                        if (random_number == 6 and die != "pink" and colorOrAI != "ai"
-                                and FactionData.has(game.getPlayerObjectFromColor(colorOrAI),
-                                                    "built_for_war")):
-                            total_damage += 1
-                        if not split:
-                            dieNums.append([random_number, total_damage, die, source, roll_id, total_damage])
-                        else:
-                            for i in range(total_damage):
-                                dieNums.append([random_number, 1, die, source, roll_id, total_damage])
+                        hits = Combat.die_damage(game, colorOrAI, die, random_number,
+                                                 damage_bonus, split)
+                        die_total = sum(hits)
+                        for hit in hits:
+                            dieNums.append([random_number, hit, die, source, roll_id, die_total])
                 if computerVal > 0:
                     msg += f"\nThis ship type has a +{computerVal} computer."
 
@@ -1253,6 +1263,8 @@ class Combat:
                     await interaction.channel.send(msg + msg2)
                     oldNumPeeps = len(Combat.findPlayersInTile(game, pos))
                     for die in dieNums:
+                        if die[4] in deferred_nine_lives:
+                            continue
                         counter = counter + 1
                         tile_map = game.gamestate["board"]
                         player_ships = tile_map[pos]["player_ships"][:]
@@ -1280,9 +1292,14 @@ class Combat:
                                                                                 ignoreShields)
                             nineLives = Combat.nine_lives_target(game, pos, colorOrAI, hittableShips)
                             if nineLives and oldNumPeeps == len(Combat.findPlayersInTile(game, pos)):
-                                await Combat.offerNineLives(game, interaction, pos, colorOrAI, nineLives,
-                                                            computer_val, speed, dieNum, dieDam,
-                                                            dieColor, counter, ignoreShields)
+                                die_hits = [entry[1] for entry in dieNums if entry[4] == die_roll_id]
+                                deferred_nine_lives.add(die_roll_id)
+                                await Combat.offerNineLives(game, interaction, pos, nineLives, {
+                                    "roller": colorOrAI, "computer": computer_val, "speed": speed,
+                                    "dieNum": dieNum, "hits": die_hits, "dieColor": dieColor,
+                                    "counter": counter, "ignore": ignoreShields,
+                                    "damageBonus": die_damage_bonus, "split": len(die_hits) > 1,
+                                    "shielded": shielded, "shipType": shipModel.ship_type})
                                 continue
                             if all([dieNum + computer_val > 5,
                                     len(hittableShips) == 0,
@@ -1790,16 +1807,12 @@ class Combat:
 
     @staticmethod
     async def offerNineLives(game: GamestateHelper, interaction: discord.Interaction, pos: str,
-                             colorOrAI: str, defender: str, computer: int, speed: int,
-                             dieNum: int, dieDam: int, dieColor: str, counter, ignoreShields: bool):
+                             defender: str, entry: dict):
         """Hegemony: let their defender flip a colony ship before this die's hit is assigned."""
         tile = game.gamestate["board"][pos]
         token = tile.get("nineLivesToken", 0) + 1
         tile["nineLivesToken"] = token
-        tile.setdefault("nineLivesPending", []).append({
-            "token": token, "roller": colorOrAI, "computer": computer, "speed": speed,
-            "dieNum": dieNum, "dieDam": dieDam, "dieColor": dieColor, "counter": counter,
-            "ignore": ignoreShields})
+        tile.setdefault("nineLivesPending", []).append({"token": token, **entry})
         tile.setdefault("nineLivesOldLength", len(Combat.findPlayersInTile(game, pos)))
         game.update()
         player = game.getPlayerObjectFromColor(defender)
@@ -1810,7 +1823,7 @@ class Combat:
                              custom_id=f"FCID{defender}_nineLives_{pos}_pass_{token}"))
         await interaction.channel.send(
             f"{player['player_name']}, Nine Lives: flip a Colony Ship to make the attacker reroll the"
-            f" {dieColor} die that rolled a {dieNum}?", view=view)
+            f" {entry['dieColor']} die that rolled a {entry['dieNum']}?", view=view)
 
     @staticmethod
     async def resolveNineLives(game: GamestateHelper, player_helper: PlayerHelper,
@@ -1825,11 +1838,8 @@ class Combat:
             await interaction.followup.send("This Nine Lives choice was already resolved.", ephemeral=True)
             return
         pending.remove(entry)
-        dieNum, dieDam = entry["dieNum"], entry["dieDam"]
+        dieNum, hits = entry["dieNum"], list(entry["hits"])
         if mode == "reroll":
-            # shortcut: only a colony-ship flip is charged; a rerolled die re-derives its damage from
-            # its colour, so an attacker's damage modifiers (Built for War, Spine) do not carry over.
-            # It also never offers on rift dice. Upgrade if a physical card reading needs either.
             if player_helper is None or player_helper.adjust_colony_ships(1) is False:
                 await interaction.followup.send(
                     f"{interaction.user.mention}, you have no colony ships left to reroll with.",
@@ -1838,7 +1848,11 @@ class Combat:
             else:
                 game.update_player(player_helper)
                 dieNum = random.randint(1, 6)
-                dieDam = Combat.translateColorToDamage(entry["dieColor"], dieNum)
+                hits = Combat.die_damage(game, entry["roller"], entry["dieColor"], dieNum,
+                                         entry["damageBonus"], entry["split"])
+                if entry["shielded"]:
+                    hits = [Carapace.weapon_damage(game, pos, entry["roller"], entry["shipType"],
+                                                   damage) for damage in hits]
                 await interaction.channel.send(
                     f"{interaction.user.mention} flipped a Colony Ship for Nine Lives: the die is"
                     f" rerolled into a {dieNum}.")
@@ -1848,12 +1862,20 @@ class Combat:
         game.update()
         if hittable:
             if entry["roller"] == "ai":
-                ship = hittable[0] if len(hittable) == 1 else Combat.ai_target(game, pos, hittable, dieDam)
-                await Combat.assignHitTo(game, f"assignHitTo_{pos}_ai_{ship}_{dieNum}_{dieDam}",
+                ship = hittable[0] if len(hittable) == 1 else Combat.ai_target(game, pos, hittable, hits[0])
+                await Combat.assignHitTo(game, f"assignHitTo_{pos}_ai_{ship}_{dieNum}_{hits[0]}",
                                          interaction, False, deferEnd=True)
             else:
-                await Combat.offerHitPrompt(game, interaction, pos, entry["roller"], hittable,
-                                            dieNum, dieDam, entry["counter"], deferEnd=True)
+                for index, damage in enumerate(hits):
+                    ships = game.gamestate["board"][pos]["player_ships"][:]
+                    targets = Combat.getOpponentUnitsThatCanBeHit(
+                        game, entry["roller"], ships, dieNum, entry["computer"],
+                        pos, entry["speed"], entry["ignore"])
+                    if not targets:
+                        break
+                    await Combat.offerHitPrompt(game, interaction, pos, entry["roller"], targets,
+                                                dieNum, damage, entry["counter"] + index,
+                                                deferEnd=True)
         elif mode == "reroll":
             await interaction.channel.send("The rerolled die misses.")
         game.update()
