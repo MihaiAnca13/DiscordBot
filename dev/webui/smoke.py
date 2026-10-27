@@ -23,6 +23,8 @@ def main():
         page.screenshot(path=str(artifacts / "table.png"), full_page=True)
         page.get_by_role("button", name=re.compile(r"^Build \(")).click()
         page.get_by_text("choose which tile", exact=False).wait_for()
+        page.wait_for_function("document.querySelector('#board-note').textContent === ''", timeout=120000)
+        page.wait_for_timeout(400)
         page.screenshot(path=str(artifacts / "build.png"), full_page=True)
         view = page.request.get("http://127.0.0.1:8099/api/games/aeb1/view?seat=1").json()
         assert any("choose which tile" in (message["content"] or "")

@@ -416,7 +416,7 @@ function renderBoard(view) {
     el.board.height = view.board_meta.height;
     el.board.style.width = `${view.board_meta.width}px`;
     el.board.style.height = `${view.board_meta.height}px`;
-    el.boardEmpty.classList.remove('hidden');
+    el.boardEmpty.classList.toggle('hidden', !!el.board.naturalWidth);
     el.boardNote.textContent = 'rendering…';
     el.board.onload = () => {
       el.boardEmpty.classList.add('hidden');
@@ -1031,7 +1031,7 @@ async function press(messageId, customId, node) {
   try {
     const view = await api.press(state.gameId, state.seat, customId, messageId);
     if (view.error) showToast(view.error, true);
-    else if (view.messages) showToast('Done');
+    else el.toast.classList.remove('on');
     render(view, true);
     if (el.historyDialog.open) await loadHistory(true);
   } catch (error) {
