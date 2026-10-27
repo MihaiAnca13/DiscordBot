@@ -18,6 +18,16 @@ class HarvesterButtons:
                                  custom_id=f"FCID{player['color']}_startPlaceHarvester"))
 
     @staticmethod
+    async def offerPreGamePlacement(game: GamestateHelper, player, interaction: discord.Interaction):
+        view = View()
+        HarvesterButtons.addButton(view, game, player)
+        if not view.children:
+            return False
+        await interaction.channel.send(f"{player['player_name']}, before the game starts, assign your Harvester"
+                                       " to an unsettled planet.", view=view)
+        return True
+
+    @staticmethod
     async def startPlace(game: GamestateHelper, player, interaction: discord.Interaction):
         if not FactionData.has(player, "harvester"):
             return
@@ -75,13 +85,13 @@ class HarvesterButtons:
             await interaction.channel.send(f"{player['player_name']}, a grey planet may produce any resource."
                                            " Choose one for this Harvester.", view=view)
             return
-        await HarvesterButtons.finishPlace(game, player, interaction, position, square, index, resource)
+        return await HarvesterButtons.finishPlace(game, player, interaction, position, square, index, resource)
 
     @staticmethod
     async def placeResource(game: GamestateHelper, player, interaction: discord.Interaction, customID: str):
         parts = customID.split("_")
         position, square, index, resource = parts[1], parts[2], parts[3], parts[4]
-        await HarvesterButtons.finishPlace(game, player, interaction, position, square, index, resource)
+        return await HarvesterButtons.finishPlace(game, player, interaction, position, square, index, resource)
 
     @staticmethod
     async def finishPlace(game: GamestateHelper, player, interaction: discord.Interaction,
@@ -89,7 +99,8 @@ class HarvesterButtons:
         if not Harvester.record(game, player, position, square, index, resource):
             await interaction.followup.send("That planet is no longer available for this Harvester.",
                                             ephemeral=True)
-            return
+            return False
         await interaction.message.delete()
         await interaction.channel.send(f"{player['player_name']} placed a Harvester over the {square} planet"
                                        f" in {position}, producing 1 {resource} each Upkeep.")
+        return True

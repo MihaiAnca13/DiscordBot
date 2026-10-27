@@ -442,9 +442,9 @@ class ButtonListener(commands.Cog):
         elif customID.startswith("harvesterSector"):
             await HarvesterButtons.showSquares(game, player, interaction, customID)
         elif customID.startswith("placeHarvester"):
-            await HarvesterButtons.place(game, player, interaction, customID)
+            task_result = await HarvesterButtons.place(game, player, interaction, customID)
         elif customID.startswith("harvesterResource"):
-            await HarvesterButtons.placeResource(game, player, interaction, customID)
+            task_result = await HarvesterButtons.placeResource(game, player, interaction, customID)
         elif customID.startswith("carapaceToggle"):
             await Carapace.toggle(game, player, interaction, customID)
         elif customID.startswith("carapaceDone"):
