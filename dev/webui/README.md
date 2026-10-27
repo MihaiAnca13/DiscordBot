@@ -56,8 +56,11 @@ docker compose -f compose.webui.yaml exec -T webui python -m dev.webui.playthrou
 ```
 
 `combat`, `movement`, `upkeep`, `scoring`, `bankrupt` and `recovery` are available.
-`python -m dev.webui.shot <url> <name>` saves desktop and narrow screenshots plus a
-JSON error report; `python -m dev.webui.smoke` is the minimal build-menu check.
+`python -m dev.webui.playthrough round|movement|full|combat` drives the prepared game
+through the live HTTP surface; `full` plays a pass-only game from round 1 to the final
+score screen. `python -m dev.webui.shot <url> <name>` saves desktop and narrow
+screenshots plus a JSON error report; `python -m dev.webui.smoke` is the minimal
+build-menu check.
 
 ## Inspecting references
 
