@@ -3174,7 +3174,8 @@
                         "nus",
                         "hul",
                         "hul",
-                        "nud"
+                        "nud",
+                        "empty"
                 ],
                 "starbase_parts": [
                         "hul",
@@ -3238,6 +3239,10 @@
                                 [
                                         3,
                                         5
+                                ],
+                                [
+                                        3,
+                                        1
                                 ]
                         ],
                         "starbase": [
