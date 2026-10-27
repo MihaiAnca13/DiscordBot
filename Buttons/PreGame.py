@@ -1,7 +1,6 @@
 import asyncio
 import discord
 from Buttons.DiscoveryTile import DiscoveryTileButtons
-from Buttons.Harvester import HarvesterButtons
 from Buttons.Population import PopulationButtons
 from Buttons.Research import ResearchButtons
 from Buttons.Turn import TurnButtons
@@ -30,7 +29,6 @@ class PreGameButtons:
         "setup_tech": ("setupTech", "getTech", "declineSetupTech"),
         "setup_warp": ("placeWarpPortal",),
         "setup_resources": ("gain5resource", "finishSetupResources"),
-        "harvester": ("startPlaceHarvester", "harvesterSector", "placeHarvester", "harvesterResource"),
     }
 
     @staticmethod
@@ -44,8 +42,6 @@ class PreGameButtons:
             tasks.append("artifact_cube")
         if FactionData.has(player, "setup_tech"):
             tasks.append("setup_tech")
-        if FactionData.has(player, "harvester"):
-            tasks.append("harvester")
         return tasks
 
     @staticmethod
@@ -89,8 +85,6 @@ class PreGameButtons:
                 offered = await DiscoveryTileButtons.exploreDiscoveryTile(game, home, interaction, player)
             elif task == "artifact_cube":
                 offered = await PopulationButtons.offerAncientsCube(game, player, interaction, home)
-            elif task == "harvester":
-                offered = await HarvesterButtons.offerPreGamePlacement(game, player, interaction)
             else:
                 offered = await ResearchButtons.offerSetupTech(game, player, interaction)
             if not offered:

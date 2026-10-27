@@ -10,43 +10,43 @@ class HarvesterButtons:
     RESOURCE_LABELS = {"money": "Money", "science": "Science", "material": "Material"}
 
     @staticmethod
-    def addButton(view: View, game: GamestateHelper, player):
-        if len(view.children) >= 25:
-            return
-        if Harvester.has_placement_button(game, player):
-            view.add_item(Button(label="Place Harvester", style=discord.ButtonStyle.gray,
-                                 custom_id=f"FCID{player['color']}_startPlaceHarvester"))
-
-    @staticmethod
-    async def offerPreGamePlacement(game: GamestateHelper, player, interaction: discord.Interaction):
-        view = View()
-        HarvesterButtons.addButton(view, game, player)
-        if not view.children:
-            return False
-        await interaction.channel.send(f"{player['player_name']}, before the game starts, assign your Harvester"
-                                       " to an unsettled planet.", view=view)
-        return True
-
-    @staticmethod
     async def startPlace(game: GamestateHelper, player, interaction: discord.Interaction):
         if not FactionData.has(player, "harvester"):
             return
+        round_num = game.gamestate.get("roundNum", 0)
+        if player.get("harvester_upkeep_started_round") != round_num:
+            await interaction.followup.send("Harvester allocations are only available at the beginning of Upkeep.",
+                                            ephemeral=True)
+            return
         view = View()
         for position in Harvester.sectors_with_harvester(game, player):
-            if not Harvester.unsettled_squares(game.gamestate["board"][position]):
+            placements = [item for item in player.get("harvester_placements", [])
+                          if item["position"] == position]
+            if len(placements) >= Harvester.starbases(game, player, position):
+                continue
+            available = [(square, index) for square, index
+                         in Harvester.unsettled_squares(game.gamestate["board"][position])
+                         if not Harvester.occupied(game, position, square, index)]
+            if not available:
                 continue
             count = Harvester.starbases(game, player, position)
             view.add_item(Button(label=f"{position} ({count} Harvester{'' if count == 1 else 's'})",
                                  style=discord.ButtonStyle.blurple,
                                  custom_id=f"FCID{player['color']}_harvesterSector_{position}"))
         if not view.children:
-            await interaction.followup.send("No Harvester is over a sector with an unsettled planet.", ephemeral=True)
+            player["harvester_upkeep_allocated_round"] = game.gamestate.get("roundNum", 0)
+            game.update()
+            await interaction.channel.send(f"{player['player_name']} has finished Harvester allocations. "
+                                           "Press Run Upkeep again to continue.")
             return
-        await interaction.channel.send(f"{player['player_name']}, choose the sector with the Harvester you"
-                                       " want to place over an unsettled planet.", view=view)
+        await interaction.channel.send(f"{player['player_name']}, allocate a Harvester to a planet in its sector."
+                                       " You can choose a different planet during the next Upkeep.", view=view)
 
     @staticmethod
     async def showSquares(game: GamestateHelper, player, interaction: discord.Interaction, customID: str):
+        if player.get("harvester_upkeep_started_round") != game.gamestate.get("roundNum", 0):
+            await interaction.followup.send("This Harvester allocation is no longer current.", ephemeral=True)
+            return
         position = customID.split("_")[1]
         if f"{player['color']}-sb" not in game.gamestate["board"].get(position, {}).get("player_ships", []):
             await interaction.followup.send("That sector no longer has one of your Harvesters.", ephemeral=True)
@@ -96,11 +96,15 @@ class HarvesterButtons:
     @staticmethod
     async def finishPlace(game: GamestateHelper, player, interaction: discord.Interaction,
                           position: str, square: str, index: str, resource: str):
+        if player.get("harvester_upkeep_started_round") != game.gamestate.get("roundNum", 0):
+            await interaction.followup.send("This Harvester allocation is no longer current.", ephemeral=True)
+            return
         if not Harvester.record(game, player, position, square, index, resource):
             await interaction.followup.send("That planet is no longer available for this Harvester.",
                                             ephemeral=True)
             return False
         await interaction.message.delete()
         await interaction.channel.send(f"{player['player_name']} placed a Harvester over the {square} planet"
-                                       f" in {position}, producing 1 {resource} each Upkeep.")
+                                       f" in {position}, producing 1 {resource} this Upkeep.")
+        await HarvesterButtons.startPlace(game, player, interaction)
         return True

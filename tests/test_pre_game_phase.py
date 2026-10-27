@@ -8,11 +8,12 @@ from types import SimpleNamespace
 import pytest
 
 from Buttons.Draft import DraftButtons
+from Buttons.PreGame import PreGameButtons
 from commands.game_commands import GameCommands
 from commands.player_commands import PlayerCommands
 from helpers.GamestateHelper import GamestateHelper
 from setup.GameInit import GameInit
-from tests.fakes import FakeChannel, FakeInteraction, buttons, reload
+from tests.fakes import FakeChannel, FakeInteraction, buttons, player_stats, reload
 
 
 def find_button(channel, prefix):
@@ -22,6 +23,10 @@ def find_button(channel, prefix):
         for button in getattr(kwargs.get("view"), "children", [])
         if button.custom_id.startswith(prefix)
     )
+
+
+def test_turtugan_harvester_is_not_a_pre_game_task():
+    assert "harvester" not in PreGameButtons.tasksForPlayer(player_stats("tur"))
 
 
 def start_pre_game(games_dir, run, discovery_tiles=None):

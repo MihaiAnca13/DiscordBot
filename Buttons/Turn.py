@@ -278,6 +278,29 @@ class TurnButtons:
                 msg += p2["player_name"]+"\n"
             await interaction.channel.send(msg)
             return
+        round_num = game.gamestate.get("roundNum", 0)
+        if any(FactionData.has(player, "harvester")
+               for player in game.gamestate["players"].values()
+               if not player.get("eliminated")):
+            if game.gamestate.get("harvester_upkeep_started_round") != round_num:
+                game.gamestate["harvester_upkeep_started_round"] = round_num
+                for player in game.gamestate["players"].values():
+                    if FactionData.has(player, "harvester") and not player.get("eliminated"):
+                        player["harvester_placements"] = []
+                        player["harvester_upkeep_started_round"] = round_num
+                        player.pop("harvester_upkeep_allocated_round", None)
+                game.update()
+                for player in game.gamestate["players"].values():
+                    if FactionData.has(player, "harvester") and not player.get("eliminated"):
+                        await HarvesterButtons.startPlace(game, player, interaction)
+                return
+            pending = [player for player in game.gamestate["players"].values()
+                       if FactionData.has(player, "harvester") and not player.get("eliminated")
+                       and player.get("harvester_upkeep_allocated_round") != round_num]
+            if pending:
+                await interaction.channel.send("Waiting for Harvester allocations from: "
+                                               + ", ".join(player["player_name"] for player in pending) + ".")
+                return
         for player in game.gamestate["players"]:
             if game.gamestate["players"][player].get("eliminated"):
                 continue
@@ -446,8 +469,6 @@ class TurnButtons:
         if len(PopulationButtons.findEmptyPopulation(game, p1)) > 0 and p1["colony_ships"] > 0:
             view.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                                  custom_id=f"FCID{p1['color']}_startPopDrop"))
-        if not p1.get("passed"):
-            HarvesterButtons.addButton(view, game, p1)
         blackView = BlackHoleButtons.getBlackHoleShips(game, player)
         for child in blackView.children:
             view.add_item(child)
@@ -573,7 +594,6 @@ class TurnButtons:
                 view.add_item(Button(label="Minor Species Relations", style=discord.ButtonStyle.green,
                                      custom_id=f"FCID{player['color']}_startMinorRelations"))
         AllianceButtons.addAllianceButtons(view, game, player)
-        HarvesterButtons.addButton(view, game, player)
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
         await interaction.channel.send(f"Colony ships available: {player['colony_ships']}\n"
