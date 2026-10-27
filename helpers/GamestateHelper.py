@@ -465,7 +465,7 @@ class GamestateHelper:
         if owner != "ai" and tile.get("owner") != owner:
             player = self.getPlayerObjectFromColor(owner)
             if FactionData.has(player, "call_to_arms"):
-                gained = {"int": 1, "cru": 2, "drd": 3}.get(
+                gained = FactionData.call_to_arms_materials(player).get(
                     ship.split("-")[1].replace("adv", ""), 0)
                 player["materials"] += gained
 
@@ -1024,7 +1024,7 @@ class GamestateHelper:
                                                                          False)
                         units = self.gamestate["board"][position]["player_ships"][:]
                         for unit in units:
-                            self.remove_units([unit], position)
+                            self.destroy_ship(unit, position, "supernova")
                         del self.gamestate["board"][position]
                         self.add_tile(position, 0, "supernovaExploded")
                     else:

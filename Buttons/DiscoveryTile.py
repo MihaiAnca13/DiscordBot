@@ -11,6 +11,13 @@ from discord.ui import View, Button
 
 class DiscoveryTileButtons:
     @staticmethod
+    def can_gain_tech(player, tech_details):
+        tracks = (("military", "grid", "nano") if tech_details["track"] == "any"
+                  else (tech_details["track"],))
+        return any(len(player[f"{track}_tech"]) < FactionData.tech_track_max(player)
+                   for track in tracks)
+
+    @staticmethod
     def drawDiscoveryChoices(game: GamestateHelper, tile: str):
         """Draw two choices, removing Material Gain and Ancient Cruiser from the deck."""
         choices = []
@@ -138,10 +145,11 @@ class DiscoveryTileButtons:
                 if tech in ownedTechs:
                     continue
                 tech_details = tech_data.get(tech)
-                if minCost == tech_details["base_cost"] and tech not in cheapestTechs:
+                if (minCost == tech_details["base_cost"] and tech not in cheapestTechs
+                        and DiscoveryTileButtons.can_gain_tech(player, tech_details)):
                     cheapestTechs.append(tech)
             if not cheapestTechs:
-                await interaction.channel.send("No unowned technology remains to gain.")
+                await interaction.channel.send("No unowned technology remains that fits this faction's trays.")
             elif len(cheapestTechs) > 1:
                 view = View()
                 for tech in cheapestTechs:
@@ -199,15 +207,22 @@ class DiscoveryTileButtons:
                 tech_type = buttonID.split("_")[2]
             else:
                 view = View()
-                view.add_item(Button(label="Military (Pink)", style=discord.ButtonStyle.red,
-                                         custom_id=f"FCID{player['color']}_getFreeTech_{tech}_military"))
-                view.add_item(Button(label="Grid (Green)", style=discord.ButtonStyle.green,
-                                         custom_id=f"FCID{player['color']}_getFreeTech_{tech}_grid"))
-                view.add_item(Button(label="Nano (Yellow)", style=discord.ButtonStyle.gray,
-                                         custom_id=f"FCID{player['color']}_getFreeTech_{tech}_nano"))
+                for track, label, style in (("military", "Military (Pink)", discord.ButtonStyle.red),
+                                            ("grid", "Grid (Green)", discord.ButtonStyle.green),
+                                            ("nano", "Nano (Yellow)", discord.ButtonStyle.gray)):
+                    if len(player[f"{track}_tech"]) >= FactionData.tech_track_max(player):
+                        continue
+                    view.add_item(Button(label=label, style=style,
+                                         custom_id=f"FCID{player['color']}_getFreeTech_{tech}_{track}"))
+                if not view.children:
+                    await interaction.channel.send("Every technology tray is full.")
+                    return True
                 await interaction.channel.send(f"{player['player_name']} please choose the track this ancient tech should go on.",
                                            view=view)
                 return "discovery_tech"
+        if len(player[f"{tech_type}_tech"]) >= FactionData.tech_track_max(player):
+            await interaction.channel.send("That technology tray is full.")
+            return True
         game.playerResearchTech(game.get_player_from_color(player["color"]), tech, tech_type)
         tech_details = tech_data.get(tech)
         image = DrawHelper.show_tech_ref_image(tech_details["name"], tech_details['track'])

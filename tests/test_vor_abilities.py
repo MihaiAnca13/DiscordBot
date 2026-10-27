@@ -110,6 +110,24 @@ def test_organic_tech_gives_a_free_upgrade_after_research(start_game, press):
     assert after["influence_discs"] == discs
 
 
+def test_organic_tech_offer_expires_when_the_research_action_ends(start_game, press):
+    game, channel = start_game(factions=["vor", "eri"])
+    game.gamestate["available_techs"] = ["gas"]
+    game.get_player(1)["science"] = 40
+    game.update()
+
+    press(channel, 1, "FCIDblue_startResearch")
+    press(channel, 1, "FCIDblue_getTech_gas_grid")
+    press(channel, 1, "FCIDblue_getTech_gas_grid_tm")
+    offer = next(cid for cid in buttons(channel)
+                 if cid.startswith("FCIDblue_ancientInstinctUpgrade_"))
+
+    press(channel, 1, "FCIDblue_finishAction")
+    press(channel, 1, offer)
+
+    assert not any(cid.startswith("FCIDblue_upgradeShip_") for cid in buttons(channel))
+
+
 def _damaged_vorlons_cruiser(make_game, ships, positions):
     return make_game({
         "advanced_ai": 0, "wa_ai": 0, "player_count": 2,

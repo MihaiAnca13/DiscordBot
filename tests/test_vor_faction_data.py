@@ -13,7 +13,8 @@ def test_vorlons_faction_stats_match_printed_card():
     assert vor["artwork"] == "vorlons"
     assert vor["setup_color"] == "purple"
     assert vor["community"] is True
-    assert vor["abilities"] == ["tech_masters", "organic_tech", "regenerative_hull", "centre_bonus_vp"]
+    assert vor["abilities"] == ["tech_masters", "organic_tech", "regenerative_hull"]
+    assert vor["tech_masters_extra"] == {"first": 2, "step": 1}
     assert (vor["materials"], vor["science"], vor["money"]) == (2, 3, 3)
     assert (vor["colony_ships"], vor["base_colony_ships"]) == (3, 3)
     assert vor["home_planet"] == "235"

@@ -1963,6 +1963,7 @@ class Combat:
             await channel.send("Resolve the pending hits and Rift Cannon effects before rolling again.")
             return
         if (tile.get("wolfPack") or tile.get("pendingWolfPack") or tile.get("ghostsRetreatPending")
+                or Combat.has_pending_nine_lives(game, pos)
                 or any(not tile.get("phaseModuleReady", {}).get(color)
                        for color in tile.get("phaseModuleColors", []))):
             await channel.send("Resolve the pending faction ability choices before rolling again.")
@@ -2711,6 +2712,8 @@ class Combat:
         for playerColor in players:
             game.gamestate["board"][pos].pop("retreatPenalty" + playerColor, None)
         game.gamestate["board"][pos].pop("ghostsRetreatPending", None)
+        game.gamestate["board"][pos]["nineLivesPending"] = []
+        game.gamestate["board"][pos].pop("nineLivesOldLength", None)
         game.gamestate["board"][pos].pop("firstShotPhase", None)
         game.gamestate["board"][pos].pop("firstShotSide", None)
         Combat.clear_phase_module(game, pos)
@@ -2718,8 +2721,9 @@ class Combat:
 
     @staticmethod
     async def checkCombatEnd(game: GamestateHelper, interaction: discord.Interaction, pos: str, oldLength: int):
-        if Carapace.has_pending_missiles(game, pos):
-            # let the fired missiles resolve before a pairing can end the battle
+        if (Carapace.has_pending_missiles(game, pos)
+                or Combat.has_pending_nine_lives(game, pos)):
+            # let the pending defender choice resolve before a pairing can end the battle
             return True
         players = Combat.findPlayersInTile(game, pos)
         if len(Combat.findSidesInTile(game, pos)) < 2 or Combat.isDracoAgainstAncients(game, pos):

@@ -137,7 +137,7 @@ class ResearchButtons:
                 game, game.getLocationFromID(player["home_planet"]), interaction, player)
             if offered:
                 pending_task = "discovery_tile"
-        await ResearchButtons.offerAncientInstinctUpgrade(player, interaction, tech, tech_details)
+        await ResearchButtons.offerAncientInstinctUpgrade(game, player, interaction, tech, tech_details)
         return pending_task
 
     @staticmethod
@@ -155,7 +155,8 @@ class ResearchButtons:
         return True
 
     @staticmethod
-    async def offerAncientInstinctUpgrade(player, interaction: discord.Interaction, tech: str, tech_details):
+    async def offerAncientInstinctUpgrade(game: GamestateHelper, player, interaction: discord.Interaction,
+                                         tech: str, tech_details):
         if not (FactionData.has(player, "upgrade_after_research")
                 or FactionData.has(player, "organic_tech")):
             return
@@ -163,6 +164,8 @@ class ResearchButtons:
             if tech not in json.load(f):
                 return
         ability = "Ancient Instinct" if FactionData.has(player, "upgrade_after_research") else "Organic Tech"
+        player["researchUpgrade"] = tech
+        game.update_player(PlayerHelper(game.get_player_from_color(player["color"]), player))
         view = View()
         view.add_item(Button(label="Perform Upgrade 1", style=discord.ButtonStyle.blurple,
                              custom_id=f"FCID{player['color']}_ancientInstinctUpgrade_{tech}"))
@@ -197,7 +200,8 @@ class ResearchButtons:
         if (FactionData.has(player, "tech_masters") and tech_details["track"] != "any"
                 and tech_type != tech_details["track"]):
             # Tech Masters: placing a Tech in the wrong tray costs extra, never discounted.
-            cost += 2 + player.get("techMasterUses", 0)
+            extra = FactionData.tech_masters_extra(player)
+            cost += extra["first"] + extra["step"] * player.get("techMasterUses", 0)
         return cost
 
     @staticmethod

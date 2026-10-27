@@ -1029,6 +1029,44 @@ class DrawHelper:
         
         return image  
 
+    def draw_tech_track(self, context, player, tech_data, x0):
+        """Draw a faction's printed track when it is not the shared seven-slot template."""
+        draw = ImageDraw.Draw(context)
+        draw.rectangle((x0 - 10, 0, x0 + 7 * 196 + 90, 700), fill=(0, 0, 0, 255))
+        display = FactionData.tech_track_display(player)
+        slot = 190
+        label_font = ImageFont.truetype("images/resources/arial.ttf", size=24)
+        value_font = ImageFont.truetype("images/resources/arial.ttf", size=32)
+        for tech_type, y, color in (("military", 10, (170, 50, 70)),
+                                    ("grid", 230, (80, 150, 70)),
+                                    ("nano", 445, (190, 160, 60))):
+            draw.text((x0, y), f"{tech_type.upper()} TECH", fill=(255, 255, 255), font=label_font)
+            for index, value in enumerate(display):
+                sx = x0 + index * 196
+                sy = y + 30
+                draw.rounded_rectangle((sx, sy, sx + slot, sy + slot), radius=18,
+                                       fill=(12, 12, 12, 255), outline=color, width=4)
+                techs = player[f"{tech_type}_tech"]
+                if index < len(techs):
+                    tech_details = tech_data.get(techs[index])
+                    tech_name = (tech_details["name"].lower().replace(" ", "_")
+                                 if tech_details else techs[index])
+                    path = f"images/resources/components/technology/{tech_type}/tech_{tech_name}.png"
+                    if not os.path.exists(path):
+                        path = f"images/resources/components/technology/rare/tech_{tech_name}.png"
+                    if os.path.exists(path):
+                        tile = self.use_resized_image(path, (slot - 50, slot - 50))
+                        context.paste(tile, (sx + 25, sy + 5), mask=tile)
+                draw.text((sx + slot // 2, sy + slot - 8), str(value), fill=(255, 255, 255),
+                          font=value_font, anchor="ms")
+            vp = FactionData.tech_track_vp(player)[FactionData.tech_track_max(player)]
+            badge_x = x0 + len(display) * 196 + 12
+            badge_y = y + 30 + slot // 2 - 30
+            draw.ellipse((badge_x, badge_y, badge_x + 60, badge_y + 60),
+                         fill=(200, 160, 40), outline=(0, 0, 0), width=3)
+            draw.text((badge_x + 30, badge_y + 30), str(vp), fill=(0, 0, 0),
+                      font=value_font, anchor="mm")
+
     def player_area(self, player):
         
         faction = FactionData.artwork_name(player["name"])
@@ -1163,19 +1201,23 @@ class DrawHelper:
         referenceX = 750
         with open("data/techs.json", "r") as f:
             tech_data = json.load(f)
-        def process_tech(tech_list, tech_type, start_y):
-            for counter, tech in enumerate(tech_list):
-                tech_details = tech_data.get(tech)
-                techName = tech_details["name"].lower().replace(" ", "_") if tech_details else tech
-                tech_path = f"images/resources/components/technology/{tech_type}/tech_{techName}.png"
-                if not os.path.exists(tech_path):
-                    tech_path = f"images/resources/components/technology/rare/tech_{techName}.png"
-                #tech_image = self.use_image(tech_path)
-                tech_image = self.use_image(tech_path)
-                context.paste(tech_image, (referenceX + 196 * counter+30, start_y+8), mask=tech_image)
-        process_tech(player["nano_tech"], "nano", sizeOfTech*2+35)
-        process_tech(player["grid_tech"], "grid", sizeOfTech+30)
-        process_tech(player["military_tech"], "military", 20)
+        if (FactionData.tech_track(player) != FactionData.TECH_TRACK
+                or FactionData.tech_track_max(player) != 7):
+            self.draw_tech_track(context, player, tech_data, referenceX)
+        else:
+            def process_tech(tech_list, tech_type, start_y):
+                for counter, tech in enumerate(tech_list):
+                    tech_details = tech_data.get(tech)
+                    techName = tech_details["name"].lower().replace(" ", "_") if tech_details else tech
+                    tech_path = f"images/resources/components/technology/{tech_type}/tech_{techName}.png"
+                    if not os.path.exists(tech_path):
+                        tech_path = f"images/resources/components/technology/rare/tech_{techName}.png"
+                    #tech_image = self.use_image(tech_path)
+                    tech_image = self.use_image(tech_path)
+                    context.paste(tech_image, (referenceX + 196 * counter+30, start_y+8), mask=tech_image)
+            process_tech(player["nano_tech"], "nano", sizeOfTech*2+35)
+            process_tech(player["grid_tech"], "grid", sizeOfTech+30)
+            process_tech(player["military_tech"], "military", 20)
         context3 = self.display_upkeep_track_reference(player)
         context.paste(context3, (2130, 643), mask=context3)
         context2 = self.display_cube_track_reference(player)

@@ -303,8 +303,12 @@ class ButtonListener(commands.Cog):
         elif customID.startswith("getTech"):
             task_result = await ResearchButtons.getTech(game, player, player_helper, interaction, customID)
         elif customID.startswith("ancientInstinctUpgrade"):
+            tech = customID.split("_")[1]
+            if player.get("researchUpgrade") != tech:
+                await interaction.followup.send("That free upgrade offer has expired.", ephemeral=True)
+                return
             await interaction.message.delete()
-            await UpgradeButtons.startUpgrade(game, player, interaction, False, customID.split("_")[1], "dum")
+            await UpgradeButtons.startUpgrade(game, player, interaction, False, tech, "dum")
         elif customID.startswith("setupTech"):
             # deleting the offer makes the pre-game purchase one technology
             await interaction.message.delete()
@@ -370,6 +374,8 @@ class ButtonListener(commands.Cog):
             await UpgradeButtons.undoAdaptive(game, player, interaction, player_helper)
         elif customID.startswith("midasTouch"):
             await TurnButtons.midasTouch(player, game, interaction)
+        elif customID.startswith("midasCancel"):
+            await TurnButtons.midasCancel(player, game, interaction)
         elif customID.startswith("midasAction"):
             await TurnButtons.midasAction(player, game, interaction, customID)
         elif customID.startswith("chooseDifferentShip"):

@@ -63,6 +63,13 @@ def test_abilities_come_from_the_faction_data():
     assert not FactionData.has({"name": "Homebrew", "color": "blue"}, "techno_magic")
 
 
+def test_tech_track_display_prints_the_shared_or_custom_cells_left_to_right():
+    assert FactionData.tech_track_display(player_stats("hyd")) == [0, -1, -2, -3, -4, -6, -8]
+    assert FactionData.tech_track_display(player_stats("cog")) == [0, -1, -2, -2, -2, -3, -3]
+    assert FactionData.tech_track_display(player_stats("hor")) == [0, -1, -3, -5]
+    assert FactionData.tech_track_display(player_stats("vor")) == [-1, -2, -3, -4, -5, -7, -9]
+
+
 def test_rho_trades_money_on_the_factions_own_ratio():
     player = player_stats("rho", science=0, money=6, materials=0)
     hyd = player_stats("hyd", science=0, money=6, materials=0)

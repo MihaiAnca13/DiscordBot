@@ -1,5 +1,6 @@
 """The Horde: Built for War, Raid, Call To Arms, Battle Focus and initiative."""
 
+from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Research import ResearchButtons
 from Buttons.Upgrade import UpgradeButtons
 from helpers import FactionData
@@ -52,6 +53,30 @@ def test_a_full_tech_tray_is_refused(run):
                                 "getTech_neb_military"))
     assert player["military_tech"] == ["neb", "a", "b", "c"]
     assert any("full" in str(content).lower() for content, _ in interaction.followup.sent)
+
+
+def test_a_free_tech_cannot_overflow_the_four_slot_track(make_game, run):
+    player = player_stats("hor", color="blue", military_tech=["neb", "plc", "stb", "phs"])
+    game = make_game({"players": {"1": player}})
+    interaction = FakeInteraction()
+    run(DiscoveryTileButtons.getFreeTech(game, interaction, "getFreeTech_plc_military", player))
+    assert player["military_tech"] == ["neb", "plc", "stb", "phs"]
+    assert any("full" in str(content).lower() for content, _ in interaction.channel.sent)
+
+
+def test_battle_focus_rejects_a_stale_same_class_upgrade(start_game, run):
+    game, channel = start_game(factions=["hor", "eri"])
+    player = game.get_player(1)
+    player["battleFocusUsed"] = ["interceptor"]
+    game.update()
+
+    interaction = FakeInteraction(channel)
+    run(UpgradeButtons.chooseUpgrade(game, player, interaction,
+                                     "chooseUpgrade_1_interceptor_ioc_hul_0_dummy",
+                                     player_helper(game, "blue")))
+
+    assert player["battleFocusUsed"] == ["interceptor"]
+    assert any("already used" in str(content).lower() for content, _ in interaction.followup.sent)
 
 
 def test_horde_ship_part_editor_ignores_battle_focus(start_game, run):

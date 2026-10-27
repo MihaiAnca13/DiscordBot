@@ -12,6 +12,16 @@ from discord.ui import View, Button
 from helpers.ShipHelper import PlayerShip
 
 
+# (source, target) -> (ships spent, ships gained, materials gained)
+ADAPTIVE_SWAPS = {
+    ("int", "cru"): (2, 1, 1),
+    ("cru", "drd"): (2, 1, 2),
+    ("cru", "int"): (1, 2, -1),
+    ("drd", "cru"): (1, 2, -2),
+}
+STOCK_INDEX = {"int": 0, "cru": 1, "drd": 2}
+
+
 class UpgradeButtons:
     @staticmethod
     def addInfinitePossibilitiesButton(view: View, game: GamestateHelper, player, return_to: str):
@@ -282,6 +292,10 @@ class UpgradeButtons:
         isFreeRemoval = newPart == "empty" and discTileUpgrade != "free"
         if isFreeRemoval:
             newPart = player[f"old_{ship}_parts"][index]
+        if (FactionData.has(player, "battle_focus") and discTileUpgrade == "dummy"
+                and PlayerHelper.blueprint_key(ship) in player.get("battleFocusUsed", [])):
+            await interaction.followup.send("That ship class already used this action's upgrade.", ephemeral=True)
+            return
         newParts = list(player[f"{ship}_parts"])
         if newPart == "mus":
             newParts.append("mus")
@@ -307,6 +321,8 @@ class UpgradeButtons:
             player_helper.stats["ancient_parts"].remove(newPart)
         oldName = "Nothing" if newPart == "mus" else part_stats[oldPart]['name']
         player_helper.stats[f"{ship}_parts"] = newParts
+        if player_helper.stats.get("researchUpgrade") == discTileUpgrade:
+            player_helper.stats.pop("researchUpgrade", None)
         if cog_free:
             player_helper.stats["infiniteUpgradeAvailable"] = False
         if discTileUpgrade.startswith("tm"):
@@ -384,14 +400,12 @@ class UpgradeButtons:
         counts = {ship: ships.count(f"{color}-{ship}") for ship in ("int", "cru", "drd")}
         stock = player["ship_stock"]
         swaps = []
-        if counts["int"] >= 2 and stock[1] > 0:
-            swaps.append(("int", "cru", 1))
-        if counts["cru"] >= 2 and stock[2] > 0:
-            swaps.append(("cru", "drd", 2))
-        if counts["cru"] >= 1 and stock[0] >= 2 and player["materials"] >= 1:
-            swaps.append(("cru", "int", -1))
-        if counts["drd"] >= 1 and stock[1] >= 2 and player["materials"] >= 2:
-            swaps.append(("drd", "cru", -2))
+        for (source, target), (source_count, target_count, materials) in ADAPTIVE_SWAPS.items():
+            if counts[source] < source_count or stock[STOCK_INDEX[target]] < target_count:
+                continue
+            if materials < 0 and player["materials"] < -materials:
+                continue
+            swaps.append((source, target, materials))
         return swaps
 
     @staticmethod
@@ -420,10 +434,13 @@ class UpgradeButtons:
         view = View()
         names = {"int": "Interceptor", "cru": "Cruiser", "drd": "Dreadnought"}
         for source, target, materials in UpgradeButtons.adaptiveSwaps(game, player, pos):
+            source_count, target_count, _materials = ADAPTIVE_SWAPS[(source, target)]
             if materials > 0:
-                label = f"2 {names[source]}s -> 1 {names[target]} (+{materials} Materials)"
+                label = (f"{source_count} {names[source]}s -> {target_count} {names[target]}"
+                         f" (+{materials} Materials)")
             else:
-                label = f"1 {names[source]} -> 2 {names[target]}s ({-materials} Materials)"
+                label = (f"{source_count} {names[source]} -> {target_count} {names[target]}s"
+                         f" ({-materials} Materials)")
             view.add_item(Button(label=label, style=discord.ButtonStyle.blurple,
                                  custom_id=(f"FCID{player['color']}_adaptiveSwap_{source}_{target}_{pos}"
                                             f"_{actions}_{mode}")))
@@ -446,17 +463,17 @@ class UpgradeButtons:
                            customID: str, player_helper: PlayerHelper):
         parts = customID.split("_")
         source, target, pos, actions, mode = parts[1], parts[2], parts[3], int(parts[4]), parts[5]
-        swap = (source, target, 1 if (source, target) in (("int", "cru"),) else
-                2 if (source, target) == ("cru", "drd") else
-                -1 if (source, target) == ("cru", "int") else -2)
+        if (source, target) not in ADAPTIVE_SWAPS:
+            await interaction.followup.send("That Adaptive Transformation is no longer legal.", ephemeral=True)
+            return
+        source_count, target_count, materials = ADAPTIVE_SWAPS[(source, target)]
+        swap = (source, target, materials)
         if swap not in UpgradeButtons.adaptiveSwaps(game, player, pos):
             await interaction.followup.send("That Adaptive Transformation is no longer legal.", ephemeral=True)
             return
         if actions < 1:
             await interaction.followup.send("This action has no Upgrade activation left.", ephemeral=True)
             return
-        source_count = 2 if source in ("int", "cru") and target in ("cru", "drd") else 1
-        target_count = 2 if target in ("int", "cru") and source in ("cru", "drd") else 1
         previous_actions = actions
         undo = copy.deepcopy({key: value for key, value in player_helper.stats.items()
                               if key != "adaptiveUndo"})

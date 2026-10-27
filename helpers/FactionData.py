@@ -30,6 +30,8 @@ def has(player, ability):
 
 TECH_TRACK = [-8, -6, -4, -3, -2, -1, 0, 0]
 TECH_TRACK_VP = [0, 0, 0, 0, 1, 2, 3, 5]
+CALL_TO_ARMS_MATERIALS = {"int": 1, "cru": 2, "drd": 3}
+TECH_MASTERS_EXTRA = {"first": 2, "step": 1}
 
 
 def tech_track(player):
@@ -45,6 +47,23 @@ def tech_track_max(player):
 def tech_track_vp(player):
     """End-game VP by number of Tech Tiles on one track."""
     return of(player).get("tech_track_vp", TECH_TRACK_VP)
+
+
+def tech_track_display(player):
+    """The printed discount cells, first printed cell first."""
+    track = tech_track(player)
+    return [track[tech_track_max(player) - 1 - index]
+            for index in range(tech_track_max(player))]
+
+
+def call_to_arms_materials(player):
+    """The printed materials gained per ship type destroyed while the sector is not yours."""
+    return of(player).get("call_to_arms_materials", CALL_TO_ARMS_MATERIALS)
+
+
+def tech_masters_extra(player):
+    """Tech Masters' extra science: the first wrong-tray cost and the step added per later use."""
+    return of(player).get("tech_masters_extra", TECH_MASTERS_EXTRA)
 
 
 def action_apt(player, action, default=None):

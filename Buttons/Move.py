@@ -453,7 +453,6 @@ class MoveButtons:
             bhtype = game.gamestate["board"][destination]["type"]
             random_number = random.randint(1, 6)
             roundNum = 1
-            game.remove_units([shipName], destination)
             shipModel = PlayerShip(player, shipName.split("-")[1])
             if "roundNum" in game.gamestate:
                 roundNum = game.gamestate["roundNum"]
@@ -461,15 +460,18 @@ class MoveButtons:
             if "border" in game.gamestate["board"][destination]["type"]:
                 location = " any tile with a wormhole facing an empty space."
             msg = f"This is a black hole tile, and the ship rolled a {random_number}. That means it will "
+            destroyed = False
             if random_number == 1 or random_number == 6:
                 msg += " take one damage and "
                 if shipModel.hull > 0:
                     msg += f"then teleport to {location}."
                 else:
                     msg += "thus die due to lack of hull."
+                    destroyed = True
             elif random_number == 2 or random_number == 3:
                 if roundNum == 8:
                     msg += "die as it would return after the game ends."
+                    destroyed = True
                 else:
                     msg += f"go away for now and return next round on one of your actions, teleporting to {location}."
                     if "blackHoleReturn" not in player_helper.stats:
@@ -479,12 +481,17 @@ class MoveButtons:
             else:
                 if roundNum > 6:
                     msg += "die as it would return after the game ends."
+                    destroyed = True
                 else:
                     msg += "go away for now and return in 2 rounds on one of your actions, teleporting to {location}."
                     if "blackHoleReturn" not in player_helper.stats:
                         player_helper.stats["blackHoleReturn"] = []
                     player_helper.stats["blackHoleReturn"].append(f"{bhtype}_{shipName}_{roundNum + 2}")
                     game.update_player(player_helper)
+            if destroyed:
+                game.destroy_ship(shipName, destination, "blackhole")
+            else:
+                game.remove_units([shipName], destination)
             await interaction.channel.send(msg)
 
             if random_number == 1 or random_number == 6:
@@ -540,8 +547,7 @@ class MoveButtons:
                 and not player.get("herCrossUsed") and moveCount <= FactionData.action_apt(player, "move")):
             view.add_item(Button(label="Build Activation (1)", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_herRaidBuild_{moveCount + 1}"))
-        if moveCount >= FactionData.action_apt(player, "move"):
-            UpgradeButtons.addInfinitePossibilitiesButton(view, game, player, "finish")
+        UpgradeButtons.addInfinitePossibilitiesButton(view, game, player, "finish")
         if moveCount > 0 and FactionData.action_apt(player, "move") > moveCount and not player.get("passed"):
             view.add_item(Button(label="Move an additional ship", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_startMove_{moveCount + 1}"))

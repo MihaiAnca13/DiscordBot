@@ -5,7 +5,7 @@ def test_hegemony_faction_stats_match_printed_card():
     heg = FACTIONS["heg"]
     assert heg["name"] == "Hegemony of the Highest Cushion"
     assert heg["artwork"] == "hegemony"
-    assert heg["setup_color"] == "orange"
+    assert heg["setup_color"] == "yellow"
     assert heg["community"] is True
     assert heg["abilities"] == ["nine_lives", "pounce", "solitary_hunter"]
     assert (heg["materials"], heg["science"], heg["money"]) == (2, 3, 3)

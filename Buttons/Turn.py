@@ -21,6 +21,10 @@ def _has_ship(color, sector_ships):
     return any(color in ship and "orb" not in ship and "mon" not in ship for ship in sector_ships)
 
 
+MIDAS_SURCHARGE_AT = 7
+MIDAS_SURCHARGE = 1
+
+
 class TurnButtons:
 
     @staticmethod
@@ -497,6 +501,12 @@ class TurnButtons:
         game.update_player(player_helper)
 
     @staticmethod
+    def midas_touch_cost(player, action):
+        costs = FactionData.of(player).get("midas_touch_costs", {})
+        surcharge = MIDAS_SURCHARGE if player["influence_discs"] <= MIDAS_SURCHARGE_AT else 0
+        return costs.get(action, 0) + surcharge
+
+    @staticmethod
     async def midasTouch(player, game: GamestateHelper, interaction: discord.Interaction):
         """Legion of Midas: pay gold before an action for one more activation of that action."""
         if not FactionData.has(player, "midas_touch") or player.get("passed"):
@@ -506,10 +516,11 @@ class TurnButtons:
             await interaction.followup.send("You already paid for an extra activation this action.", ephemeral=True)
             return
         costs = FactionData.of(player).get("midas_touch_costs", {})
-        surcharge = 1 if player["influence_discs"] <= 7 else 0
         view = View()
-        for action, base in costs.items():
-            cost = base + surcharge
+        for action in costs:
+            if action == "explore" and not ExploreButtons.getTilesToExplore(game, player):
+                continue
+            cost = TurnButtons.midas_touch_cost(player, action)
             if player["money"] >= cost:
                 view.add_item(Button(label=f"{action.capitalize()} (+1 activation, {cost} money)",
                                      style=discord.ButtonStyle.blurple,
@@ -517,9 +528,18 @@ class TurnButtons:
         if not view.children:
             await interaction.followup.send("You do not have enough money for Midas Touch.", ephemeral=True)
             return
+        view.add_item(Button(label="Not now", style=discord.ButtonStyle.gray,
+                             custom_id=f"FCID{player['color']}_midasCancel"))
         await interaction.message.delete()
         await interaction.channel.send(f"{player['player_name']}, choose the action to extend with Midas Touch."
                                        f" Each costs 1 more while you have 7 or fewer action disks.", view=view)
+
+    @staticmethod
+    async def midasCancel(player, game: GamestateHelper, interaction: discord.Interaction):
+        await interaction.message.delete()
+        view = TurnButtons.getStartTurnButtons(game, player, "dummy")
+        await interaction.channel.send(player["player_name"] + " use buttons to do your turn"
+                                       + game.displayPlayerStats(player), view=view)
 
     @staticmethod
     async def midasAction(player, game: GamestateHelper, interaction: discord.Interaction, buttonID: str):
@@ -530,17 +550,18 @@ class TurnButtons:
         from Buttons.Research import ResearchButtons
         from Buttons.Upgrade import UpgradeButtons
         action = buttonID.split("_")[1]
-        costs = FactionData.of(player).get("midas_touch_costs", {})
-        if action not in costs:
+        if action not in FactionData.of(player).get("midas_touch_costs", {}):
             await interaction.followup.send("Unknown action for Midas Touch.", ephemeral=True)
             return
         if player.get("midasBoost"):
             await interaction.followup.send("You already paid for an extra activation this action.", ephemeral=True)
             return
-        cost = costs[action] + (1 if player["influence_discs"] <= 7 else 0)
+        cost = TurnButtons.midas_touch_cost(player, action)
         if player["money"] < cost:
             await interaction.followup.send("You do not have enough money for Midas Touch.", ephemeral=True)
             return
+        # The paid action starts a turn like any other: undo must return to this point.
+        game.updateSaveFile()
         player_helper = PlayerHelper(game.get_player_from_color(player["color"]), player)
         player_helper.adjust_money(-cost)
         player_helper.stats["midasBoost"] = action
@@ -619,7 +640,8 @@ class TurnButtons:
             player_helper.stats.pop("phaseBuildsThisAction", None)
             player_helper.stats.pop("phaseSwappedThisAction", None)
         for key in ("midasBoost", "infinitePossibilitiesUsed", "battleFocusUsed",
-                    "adaptiveUndo", "upgradeUndo", "infiniteUpgradeReturn", "infiniteUpgradeAvailable"):
+                    "adaptiveUndo", "upgradeUndo", "infiniteUpgradeReturn", "infiniteUpgradeAvailable",
+                    "researchUpgrade"):
             player_helper.stats.pop(key, None)
         game.update_player(player_helper)
         await TurnButtons.checkTraitor(game, player, interaction, player_helper)

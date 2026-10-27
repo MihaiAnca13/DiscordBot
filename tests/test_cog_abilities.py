@@ -50,6 +50,32 @@ def test_infinite_possibilities_offers_one_free_upgrade(start_game, press):
     assert not any(cid.startswith("FCIDblue_infiniteUpgrade") for cid in resumed)
 
 
+def _edited_menu(interaction):
+    return {child.custom_id: child.label for child in interaction.message.edited["view"].children}
+
+
+def _press_edited(press, channel, interaction, prefix):
+    custom_id = next(cid for cid in _edited_menu(interaction) if cid.startswith(prefix))
+    return press(channel, 1, custom_id, interaction.message)
+
+
+def test_infinite_possibilities_can_be_the_last_activation_of_a_partial_build(start_game, press):
+    game, channel = start_game(factions=["cog", "eri"])
+    game.get_player(1)["materials"] = 8
+    game.update()
+
+    press(channel, 1, "FCIDblue_startBuild")
+    press(channel, 1, "FCIDblue_buildIn_201")
+    inter = press(channel, 1, next(cid for cid in buttons(channel)
+                                   if cid.startswith("FCIDblue_buildShip_") and "Interceptor" in cid))
+    inter = _press_edited(press, channel, inter, "FCIDblue_finishBuild_")
+    inter = press(channel, 1, next(cid for cid in buttons(channel)
+                                   if cid.startswith("FCIDblue_spendMaterial_")))
+    _press_edited(press, channel, inter, "FCIDblue_finishSpendForBuild_")
+
+    assert "FCIDblue_infiniteUpgrade_finish" in buttons(channel)
+
+
 def test_adaptive_swaps_need_two_ships_in_one_sector():
     from tests.fakes import player_stats
     from helpers.GamestateHelper import GamestateHelper

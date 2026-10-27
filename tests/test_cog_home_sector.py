@@ -17,8 +17,8 @@ def test_cog_home_sector_data():
     assert sector["artifact"] == 1
     assert sector["wormholes"] == [0, 1, 3, 4]
     assert sector["money_pop"] == [] and sector["moneyadv_pop"] == [0]
-    assert sector["science_pop"] == [1]
-    assert sector["material_pop"] == [1] and sector["materialadv_pop"] == [0]
+    assert sector["science_pop"] == [] and sector["scienceadv_pop"] == [0]
+    assert sector["material_pop"] == [1, 1] and sector["materialadv_pop"] == []
     for key, coords in sector.items():
         if key.endswith("_snap") and coords:
             assert len(coords) == 2, f"{key} {coords} is not a point"

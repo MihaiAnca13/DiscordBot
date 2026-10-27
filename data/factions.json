@@ -3706,8 +3706,8 @@
                 "move_action_counters": 0,
                 "influence_action_counters": 0,
                 "money_pop_cubes": 12,
-                "material_pop_cubes": 11,
-                "science_pop_cubes": 11,
+                "material_pop_cubes": 10,
+                "science_pop_cubes": 12,
                 "population_track": [
                         28,
                         24,
@@ -4128,6 +4128,11 @@
                         "call_to_arms",
                         "battle_focus"
                 ],
+                "call_to_arms_materials": {
+                        "int": 1,
+                        "cru": 2,
+                        "drd": 3
+                },
                 "materials": 3,
                 "science": 3,
                 "money": 2,
@@ -4358,9 +4363,12 @@
                 "abilities": [
                         "tech_masters",
                         "organic_tech",
-                        "regenerative_hull",
-                        "centre_bonus_vp"
+                        "regenerative_hull"
                 ],
+                "tech_masters_extra": {
+                        "first": 2,
+                        "step": 1
+                },
                 "materials": 2,
                 "science": 3,
                 "money": 3,
@@ -4574,7 +4582,7 @@
         "heg": {
                 "name": "Hegemony of the Highest Cushion",
                 "artwork": "hegemony",
-                "setup_color": "orange",
+                "setup_color": "yellow",
                 "community": true,
                 "abilities": [
                         "nine_lives",

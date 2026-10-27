@@ -18,7 +18,7 @@ def test_cog_faction_stats_match_printed_board():
     assert cog["influence_discs"] == 12
     assert cog["reputation_track"] == ["amb", "mixed", "mixed", "mixed", "mixed"]
     assert cog.get("reputation_only_slots", []) == []
-    assert (cog["money_pop_cubes"], cog["material_pop_cubes"], cog["science_pop_cubes"]) == (12, 11, 11)
+    assert (cog["money_pop_cubes"], cog["material_pop_cubes"], cog["science_pop_cubes"]) == (12, 10, 12)
     assert cog["population_track"] == [28, 24, 21, 18, 15, 12, 10, 8, 6, 4, 3, 2, 0]
     assert cog["tech_track"] == [-3, -3, -2, -2, -2, -1, 0, 0]
     assert cog["tech_track_vp"] == [0, 0, 0, 1, 2, 2, 2, 3]

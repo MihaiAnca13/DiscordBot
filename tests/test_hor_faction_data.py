@@ -11,6 +11,7 @@ def test_horde_faction_stats_match_printed_card():
     assert hor["setup_color"] == "red"
     assert hor["community"] is True
     assert hor["abilities"] == ["built_for_war", "raid", "call_to_arms", "battle_focus"]
+    assert hor["call_to_arms_materials"] == {"int": 1, "cru": 2, "drd": 3}
     assert (hor["materials"], hor["science"], hor["money"]) == (3, 3, 2)
     assert (hor["colony_ships"], hor["base_colony_ships"]) == (4, 4)
     assert hor["home_planet"] == "288"
