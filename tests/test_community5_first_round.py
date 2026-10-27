@@ -88,3 +88,11 @@ def test_community5_factions_setup_and_first_round(games_dir, run, press):
     press(channel, 1, "runUpkeep")
     final = reload(game)
     assert final.gamestate["roundNum"] == 2
+
+    # three more Nano techs each, so the round-1 render shows a filled tray
+    for pid in range(1, 6):
+        player = final.get_player(pid)
+        extra = [tech for tech in ["nar", "fud", "adr", "adl", "orb"] if tech not in player["nano_tech"]][:3]
+        player["nano_tech"] += extra
+    final.update()
+    assert all(len(reload(game).get_player(pid)["nano_tech"]) >= 3 for pid in range(1, 6))

@@ -1030,42 +1030,32 @@ class DrawHelper:
         return image  
 
     def draw_tech_track(self, context, player, tech_data, x0):
-        """Draw a faction's printed track when it is not the shared seven-slot template."""
+        """Paste the tray printed on the faction's board when it is not the shared seven-slot template."""
         draw = ImageDraw.Draw(context)
         draw.rectangle((x0 - 10, 0, x0 + 7 * 196 + 90, 700), fill=(0, 0, 0, 255))
-        display = FactionData.tech_track_display(player)
-        slot = 190
-        label_font = ImageFont.truetype("images/resources/arial.ttf", size=24)
-        value_font = ImageFont.truetype("images/resources/arial.ttf", size=32)
-        for tech_type, y, color in (("military", 10, (170, 50, 70)),
-                                    ("grid", 230, (80, 150, 70)),
-                                    ("nano", 445, (190, 160, 60))):
-            draw.text((x0, y), f"{tech_type.upper()} TECH", fill=(255, 255, 255), font=label_font)
-            for index, value in enumerate(display):
-                sx = x0 + index * 196
-                sy = y + 30
-                draw.rounded_rectangle((sx, sy, sx + slot, sy + slot), radius=18,
-                                       fill=(12, 12, 12, 255), outline=color, width=4)
-                techs = player[f"{tech_type}_tech"]
-                if index < len(techs):
-                    tech_details = tech_data.get(techs[index])
-                    tech_name = (tech_details["name"].lower().replace(" ", "_")
-                                 if tech_details else techs[index])
-                    path = f"images/resources/components/technology/{tech_type}/tech_{tech_name}.png"
-                    if not os.path.exists(path):
-                        path = f"images/resources/components/technology/rare/tech_{tech_name}.png"
-                    if os.path.exists(path):
-                        tile = self.use_resized_image(path, (slot - 50, slot - 50))
-                        context.paste(tile, (sx + 25, sy + 5), mask=tile)
-                draw.text((sx + slot // 2, sy + slot - 8), str(value), fill=(255, 255, 255),
-                          font=value_font, anchor="ms")
-            vp = FactionData.tech_track_vp(player)[FactionData.tech_track_max(player)]
-            badge_x = x0 + len(display) * 196 + 12
-            badge_y = y + 30 + slot // 2 - 30
-            draw.ellipse((badge_x, badge_y, badge_x + 60, badge_y + 60),
-                         fill=(200, 160, 40), outline=(0, 0, 0), width=3)
-            draw.text((badge_x + 30, badge_y + 30), str(vp), fill=(0, 0, 0),
-                      font=value_font, anchor="mm")
+        # the tray on every 4400px *_board.png: slots 348px apart, first slot's corner at (136, 30) in the crop
+        scale = 196 / 348
+        # the image cache holds boards at 895px, too small for the tray, so read the full art
+        tray = Image.open(f"images/resources/components/factions/{FactionData.artwork_name(player['name'])}_board.png")
+        tray = tray.convert("RGBA").crop((1340, 980, 4020, 2130))
+        tray = tray.resize((int(tray.width * scale), int(tray.height * scale)))
+        origin = (x0 + 30 - int(136 * scale), 20 - int(30 * scale))
+        context.paste(tray, origin)
+        # the Horde's four slots sit on every other printed position
+        step = 6 // (len(FactionData.tech_track_display(player)) - 1)
+        for row, tech_type in enumerate(("military", "grid", "nano")):
+            printed = FactionData.BY_NAME.get(player["name"], {}).get(f"{tech_type}_tech", [])
+            for index, tech in enumerate(player[f"{tech_type}_tech"]):
+                if index < len(printed) and printed[index] == tech:
+                    continue  # the board already prints its starting techs
+                tech_details = tech_data.get(tech)
+                tech_name = tech_details["name"].lower().replace(" ", "_") if tech_details else tech
+                path = f"images/resources/components/technology/{tech_type}/tech_{tech_name}.png"
+                if not os.path.exists(path):
+                    path = f"images/resources/components/technology/rare/tech_{tech_name}.png"
+                tile = self.use_image(path)
+                context.paste(tile, (origin[0] + int((136 + 348 * step * index) * scale) - 1,
+                                     origin[1] + int((30 + 386 * row) * scale) - 1), mask=tile)
 
     def player_area(self, player):
         
