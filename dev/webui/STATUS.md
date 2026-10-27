@@ -114,6 +114,7 @@ Cold board render takes a few seconds; wait for `#board.naturalWidth > 0`.
 - `7b98232` interactive table, board, choices, battle rooms and sandbox tools.
 - `fe4f5bf` table/deployment documentation.
 - `41daf51` current-phase prompt filtering, history room filter, per-seat faction panel.
-- `07c3113` + `54c0a94` population hotspot labels and smoother board rendering.
+- `07c3113` + `54c0a94` + `a0f5199` population labels, smoother board rendering and a
+  repeatable sandbox shuffle.
 - The preview after the final browser check sits mid-research for Blue. Reset before
   baseline checks: `seed` → `up` → `smoke`/`browser_checks`.
