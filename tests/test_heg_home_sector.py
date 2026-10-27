@@ -33,6 +33,6 @@ def test_hegemony_home_tile_art():
         assert tile.mode == "RGBA"
         rgba = tile.convert("RGBA")
         assert rgba.getpixel((0, 0))[3] == 0
-        for point in ((894, 431), (93, 423), (206, 423), (292, 83)):
+        for point in ((894, 431), (99, 439), (213, 440), (292, 83)):
             assert rgba.getpixel(point)[3] > 0
         tile.load()
