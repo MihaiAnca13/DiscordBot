@@ -188,6 +188,52 @@ def test_nine_lives_keeps_each_die_until_it_is_answered(make_game, no_random, ru
     assert reload(game).gamestate["board"]["101"]["nineLivesPending"] == []
 
 
+def _all_combat_ids(channel):
+    return {child.custom_id for _content, kwargs in channel.sent
+            for child in getattr(kwargs.get("view"), "children", [])}
+
+
+def test_lyra_reroll_and_nine_lives_can_be_pending_together(make_game, no_random, run, press):
+    blue = player_stats("lyr", color="blue", colony_ships=3,
+                        cruiser_parts=["ioc", "nus", "nud", "hul", "hul"])
+    red = player_stats("heg", color="red", colony_ships=3,
+                       cruiser_parts=["ioc", "nus", "nud", "hul", "hul"])
+    game = make_game({
+        "advanced_ai": 0, "wa_ai": 0, "player_count": 2,
+        "players": {"1": blue, "2": red},
+        "board": {"101": {"owner": 0, "sector": 101, "disctile": 0,
+                          "player_ships": ["blue-cru", "blue-cru", "red-cru"],
+                          "attacker": "blue", "defender": "red"}},
+    }, game_id="aeb1")
+    channel = FakeChannel("aeb1-actions")
+
+    # One blue die hits (Nine Lives prompt) and the next misses (Lyra reroll prompt).
+    no_random([6, 2])
+    run(Combat.rollDice(game, "rollDice_101_blue_2_deleteMsg", FakeInteraction(channel)))
+    ids = _all_combat_ids(channel)
+    assert any(cid.startswith("FCIDred_nineLives_101_") for cid in ids)
+    lyra_reroll = next(cid for cid in ids if cid.startswith("FCIDblue_rerollDie_101_blue_"))
+    assert reload(game).gamestate["board"]["101"]["nineLivesPending"]
+
+    # Lyra pays its own colony ship; the pending Nine Lives choice is untouched.
+    no_random([6])
+    press(channel, 1, lyra_reroll)
+    after = reload(game)
+    assert after.get_player(1)["colony_ships"] == 2
+    assert after.get_player(2)["colony_ships"] == 3
+    assert after.gamestate["board"]["101"]["nineLivesPending"]
+
+    # Hegemony's forced reroll spends the defender's colony ship, not Lyra's.
+    nine_lives_reroll = next(cid for cid in _all_combat_ids(channel)
+                             if cid.startswith("FCIDred_nineLives_101_reroll_"))
+    no_random([6])
+    press(channel, 2, nine_lives_reroll)
+    after = reload(game)
+    assert after.get_player(1)["colony_ships"] == 2
+    assert after.get_player(2)["colony_ships"] == 2
+    assert after.gamestate["board"]["101"]["nineLivesPending"] == []
+
+
 def test_pounce_round_counter_survives_kurita_first_shot_phases(make_game, run):
     game = _combat_game(make_game, ["blue-int", "red-int"], "red", "blue",
                         {"firstShotSide": ["blue"], "firstShotPhase": "opponent",
