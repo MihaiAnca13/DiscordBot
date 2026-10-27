@@ -1,4 +1,4 @@
-"""The setup command's faction list is too long for Discord's 25 choices."""
+"""The setup command's faction list is split across Discord messages."""
 from Buttons.Draft import DraftButtons
 from commands.setup_commands import SetupCommands, faction_autocomplete
 from helpers import FactionData
@@ -7,7 +7,7 @@ from tests.fakes import FakeGame, FakeInteraction
 
 def offered_factions(game):
     return [button.custom_id.split("_")[1]
-            for start in range(0, len(FactionData.FACTIONS), 24)
+            for start in range(0, len(FactionData.FACTIONS), 25)
             for button in DraftButtons.getDraftButtons(game, start).children
             if button.custom_id.startswith("draftFaction_")]
 
@@ -22,10 +22,10 @@ def test_draft_pages_include_each_enabled_faction_once():
         offered = offered_factions(game)
         assert set(offered) == set(FactionData.FACTIONS)
         assert len(offered) == len(set(offered))
-        first_page = DraftButtons.getDraftButtons(game).children
-        assert len(first_page) == 25
-        assert first_page[-1].custom_id == "draftMore_24"
-        assert len(DraftButtons.getDraftButtons(game, 24).children) == len(offered) - 24
+        first_message = DraftButtons.getDraftButtons(game).children
+        assert len(first_message) == 25
+        assert all(button.custom_id.startswith("draftFaction_") for button in first_message)
+        assert len(DraftButtons.getDraftButtons(game, 25).children) == len(offered) - 25
 
 
 def test_community_factions_respect_bans_and_do_not_colour_block():
