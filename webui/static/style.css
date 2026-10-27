@@ -156,6 +156,7 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
 .hotspot.build { border-color: #f0c96b88; background: #e0a93a22; }
 .hotspot.move { border-color: #82d8a588; background: #46b47a22; }
 .hotspot.influence { border-color: #c48ef0aa; background: #9b5fd022; }
+.hotspot.population { border-color: #71d6c0aa; background: #2fb39a22; }
 .hotspot.explore { border-color: #7db7ffaa; background: #4e88dd22; }
 .hotspot.empty {
   border-style: dashed; border-width: 2px; border-color: #5d7ea066;

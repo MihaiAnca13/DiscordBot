@@ -202,10 +202,10 @@ function tileAction(customId) {
   }
   if ((match = customId.match(/_placeTile_(\d{3})/))) return { position: match[1], kind: 'explore' };
   if ((match = customId.match(/_fillPopulation_(\d{3})/))) {
-    return { position: match[1], kind: 'influence' };
+    return { position: match[1], kind: 'population' };
   }
   if ((match = customId.match(/_ancientsCube_[a-z]+_(\d{3})/))) {
-    return { position: match[1], kind: 'influence' };
+    return { position: match[1], kind: 'population' };
   }
   return null;
 }
@@ -1160,6 +1160,7 @@ function bind() {
     state.seat = localStorage.getItem(`eclipse-seat-${state.gameId}`) || '';
     state.history = [];
     state.historyLoaded = false;
+    state.factionPlayer = null;
     await loadView();
   });
 
@@ -1169,6 +1170,7 @@ function bind() {
     state.lastKey = null;
     state.history = [];
     state.historyLoaded = false;
+    state.factionPlayer = null;
     await loadView();
   });
 
