@@ -142,11 +142,7 @@ class Harvester:
         pops = game.gamestate.get("board", {}).get(position, {}).get(f"{square}_pop", [])
         if index >= len(pops) or pops[index] != 0:
             return False
-        if any(other.get("color") != player.get("color")
-               and any(placement["position"] == position and placement["square"] == square
-                       and int(placement["index"]) == index
-                       for placement in other.get("harvester_placements", []))
-               for other in game.gamestate.get("players", {}).values()):
+        if Harvester.occupied(game, position, square, index):
             return False
         placements = player.setdefault("harvester_placements", [])
         placements[:] = [placement for placement in placements
@@ -203,14 +199,6 @@ class Harvester:
         player["harvester_produced_round"] = round_num
         game.update()
         return produced
-
-    @staticmethod
-    def has_placement_button(game, player):
-        if not FactionData.has(player, "harvester"):
-            return False
-        return any(Harvester.unsettled_squares(game.gamestate["board"][position])
-                   for position in Harvester.sectors_with_harvester(game, player))
-
 
 class Carapace:
     CLASSES = ("interceptor", "cruiser", "dread", "starbase")
