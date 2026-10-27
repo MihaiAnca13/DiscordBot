@@ -1,6 +1,7 @@
 """Reset only the Docker sandbox, using the same setup as the rule tests."""
 import asyncio
 from pathlib import Path
+import random
 import shutil
 
 import config
@@ -28,6 +29,7 @@ async def reset():
             else:
                 path.unlink()
     # The container has a disposable config; no real token or save folder is available.
+    random.seed(0)
     config.game_number = 1
     GameInit("Web UI demo", [[1, "Blue"], [2, "Red"]], "def", True, True, False, False).create_game()
     game = GamestateHelper(None, "aeb1")
