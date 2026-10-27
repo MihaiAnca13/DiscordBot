@@ -32,6 +32,9 @@ pressed, and the "already used" and double-press guards keep working across surf
 
 ## Run it
 
+For an isolated Docker sandbox, browser checks and the OpenCode build brief, see
+[dev/webui/README.md](../dev/webui/README.md).
+
 In the bot (needs `webui_port` in `config.json`, port 0 disables it):
 
 ```json
@@ -54,44 +57,80 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
 | Route | Purpose |
 |---|---|
 | `GET /api/games` | active games with players and round |
-| `GET /api/games/{id}/view?seat=` | one seat's whole UI state: board, players, feed |
+| `GET /api/games/{id}/view?seat=` | one seat's table state: board geometry, players, market, pending choices, first history page |
+| `GET /api/games/{id}/history?seat=&before=` | paged feed, including used prompts and their canonical ids |
 | `POST /api/games/{id}/press` | `{seat, custom_id, message_id}` — the Discord press |
 | `POST /api/games/{id}/turn-menu?seat=` | recovery: re-post the start-of-turn buttons |
 | `POST /api/games/{id}/mirror` | web-only (`false`) vs cross-play (`true`); default true |
-| `GET /api/games/{id}/board.webp` | rendered board, cached by save-file version |
+| `GET /api/games/{id}/board.webp` | rendered map, cached by save-file version |
+| `GET /api/catalog` | tech and part facts/artwork for visual choices |
 | `GET /api/media/{message_id}/{name}` | images the engine sent privately |
+| `/art/...` | read-only game artwork under `images/resources` |
 
-## Verified today
+## What the table does
 
-- Real game copy served, board rendered and cached (2.8 s cold, 10 ms cached).
-- Turn menu → build → tile → ship chain pressed entirely over HTTP, gamestate saved.
-- Private prompts (ephemeral) visible only to their seat; public prompts to everyone.
-- In-place prompt edits (`Total cost so far of 3`) keep the same message id.
-- Used prompts disappear; pressing one again answers "these buttons were already used".
-- Another seat's `FCID<colour>_` buttons are refused.
-- 612 existing tests still pass; 14 new ones cover store, press and recording.
+- **Board.** Map-only render with zoom, pan and fit. Placed sectors carry ship and
+  owner art; unexplored ring slots are drawn as dark hexes. Build, explore,
+  influence and movement targets become clickable hotspots. Movement also accepts
+  a drag of the ship token onto a destination, with the same hotspot click as the
+  touch/keyboard-safe alternative.
+- **Player panels.** Resources, activations, income/upkeep, tech tracks, blueprint
+  slots with installed parts and public victory points, for every seat.
+- **Tech market and faction reference.** Market cards use the engine's artwork and
+  the seat's discounted cost. The faction dialog shows the engine's faction board
+  (rules reference) plus starting setup and ability names.
+- **Choices.** Pending prompts are fetched separately from history, so the 80-record
+  history cap can never hide an unresolved choice. Research and upgrade buttons are
+  drawn as tech/part cards; build, tile, population and movement choices get tile
+  chips and board hotspots. Finish/navigation buttons sit below the real choices.
+- **Combat rooms.** Every battle keeps its own room name, orders and a collapsible
+  battle log. An old combat overview stops offering a colour's roll once that
+  colour has rolled.
+- **History.** Used prompts, private replies and resolved actions stay readable in
+  a paged dialog; hiding history never deletes the feed records.
+- **Cross-play guards.** A press binds its canonical feed id, the room it came from
+  and the shared game lock. Two browser seats pressing the same menu produce one
+  action; a stale replay awards nothing. A second research menu drops techs already
+  owned or no longer affordable.
+
+## Verified in the Docker sandbox
+
+- 625 non-rendering tests and 24 rendering tests pass; the web-ui view/store tests
+  cover pending-vs-history, seat filtering, private prompts and combat roll cleanup.
+- `dev.webui.browser_checks`: 18 real-Chromium checks (layout, zoom/pan, faction,
+  history, two-seat race, stale replay, refresh, narrow viewport).
+- `dev.webui.playthrough round`: build, explore, discovery, influence, passing and
+  upkeep through live HTTP, ending in round 2.
+- `dev.webui.playthrough combat`: two-sided combat to destruction, reputation draw
+  and battle-room logs.
+- Screenshots in `dev/webui/artifacts/` were inspected for desktop and narrow views.
 
 ## Not done (deliberately)
 
 - **Login.** `seat` is a query parameter or local storage. Moving into OBG replaces
   this with the Django session + `Profile.discord_id`; a seat token is the fallback.
+  Until then, bind the API to loopback or the WireGuard address, never a public
+  interface: anyone who can reach it can choose a seat.
 - **Discord mirror is written but never sent live** (no bot token here). The recording
   side is tested with fakes; `DiscordMirror.send/edit/delete` needs one real session.
-  It only mirrors public prompts and only when `mirror_to_discord` is on.
-- **Threads are flattened.** Combat prompts become feed messages instead of Discord
-  threads; a web-only game never creates threads. Cross-play combat needs rooms.
-- **Drag to move.** It is a chain of existing presses (pick ship → engine returns legal
-  destinations → pick one), so it is a UI feature, not an engine change.
+  It only mirrors public prompts and only when `mirror_to_discord` is on. Feed-side
+  roll cleanup is not verified against a live Discord message.
 - **Notifications.** Turn pings are still Discord role mentions; OBG's email/DM
   machinery is the web-only answer.
-- **Feed history** is capped at 80 messages in the view; older prompts stay in SQLite.
-- **Every poll reads the save file** (small, cached by mtime+size); a busy instance
-  would want the snapshot pushed instead of polled.
+- **Remote host.** The page only uses relative API/media URLs, so a reverse proxy can
+  serve it beside the bot API. Still required: TLS, an auth layer, a proxy route for
+  `/api`, `/static` and `/art`, and a WireGuard binding between the frontend host and
+  the bot host. The bot process stays the only writer of `gamestates/`.
+- **Polling.** Each browser polls the seat view every 1.5 s; the server caches by save
+  version and feed revision. A busy instance should push snapshots instead.
+- **Combat starter.** The demo sandbox has no starting combat; use
+  `python -m dev.webui.scenarios combat` while the service is stopped.
 
 ## Next, in order
 
 1. The Vue port when it moves into OBG (`<GAME>/vue<GAME>/src`, API client already
    isolated in `static/app.js`).
-2. Discord login + `discord_id` seats.
-3. Rooms for combat, then web-only games with the mirror flag off.
-4. WireGuard between the OBG host and the bot host, bot API bound to the tunnel address.
+2. Discord login + `discord_id` seats, then a reverse proxy with TLS and WireGuard.
+3. One live Discord session to verify mirror send/edit/delete and cross-surface
+   prompt consumption, including combat rooms.
+4. Push snapshots instead of polling for larger games.
