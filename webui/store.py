@@ -215,9 +215,3 @@ class FeedStore:
                 (game_id, messages[-1]["id"], seat)).fetchone() is not None
         return messages, has_more
 
-    def new_since(self, game_id, seat, after):
-        rows = self.conn.execute(
-            "SELECT * FROM messages WHERE game_id = ? AND id > ?"
-            " AND (ephemeral_to IS NULL OR ephemeral_to = ?)"
-            " ORDER BY id ASC", (game_id, after, seat)).fetchall()
-        return [self._as_message(row) for row in rows]

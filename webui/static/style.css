@@ -351,7 +351,8 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
 }
 .player.you { border-color: #2f7d96; box-shadow: 0 0 0 1px #2f7d9644; }
 .player.passed { opacity: .68; }
-.player-head { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.player-head { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.player-head:hover { background: #132133; }
 .portrait {
   width: 38px; height: 38px; border-radius: 8px; object-fit: cover;
   background: #0b1220; border: 1px solid var(--line2); flex: none;
@@ -457,6 +458,8 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
   background: #0b111bee; z-index: 2; border-radius: 14px 14px 0 0;
 }
 .sheet-head h2 { font-size: 16px; }
+.history-tools { display: flex; align-items: center; gap: 8px; }
+.history-tools select { max-width: 260px; }
 .history-list { padding: 8px 16px 4px; overflow: auto; max-height: 66vh; }
 .history-item { border-bottom: 1px solid #19233433; padding: 8px 0; }
 .history-item:last-child { border-bottom: 0; }

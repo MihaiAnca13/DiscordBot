@@ -75,7 +75,10 @@
   <dialog id="history-dialog" class="sheet">
     <div class="sheet-head">
       <div><h2>History</h2><p id="history-note" class="note"></p></div>
-      <button class="icon close" data-close="history-dialog">×</button>
+      <div class="history-tools">
+        <select id="history-room" title="Filter history by room"></select>
+        <button class="icon close" data-close="history-dialog">×</button>
+      </div>
     </div>
     <div id="history-list" class="history-list"></div>
     <div class="sheet-foot"><button id="history-more" class="ghost">Load older</button></div>

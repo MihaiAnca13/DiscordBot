@@ -64,6 +64,7 @@ const el = {
   historyList: document.getElementById('history-list'),
   historyNote: document.getElementById('history-note'),
   historyMore: document.getElementById('history-more'),
+  historyRoom: document.getElementById('history-room'),
   factionDialog: document.getElementById('faction-dialog'),
   factionTitle: document.getElementById('faction-title'),
   factionSub: document.getElementById('faction-sub'),
@@ -89,6 +90,8 @@ const state = {
   history: [],
   historyHasMore: false,
   historyLoaded: false,
+  historyRoom: '',
+  factionPlayer: null,
   toastTimer: null,
   drag: null,
 };
@@ -119,7 +122,7 @@ function roomName(room) {
 }
 
 function isCombat(message) {
-  return /combat|battle/i.test(message.room || '');
+  return /combat|battle|bombing/i.test(message.room || '');
 }
 
 function showToast(text, bad = false) {
@@ -594,9 +597,17 @@ function playerHtml(player) {
 
 function renderPlayers(view) {
   const players = view.game.players || [];
-  el.players.replaceChildren();
   el.players.innerHTML = players.map(playerHtml).join('');
   el.playersNote.textContent = `${players.length} seats`;
+  [...el.players.querySelectorAll('.player')].forEach((node, index) => {
+    const head = node.querySelector('.player-head');
+    head.title = 'Open faction reference';
+    head.addEventListener('click', () => {
+      state.factionPlayer = players[index];
+      renderFaction();
+      el.factionDialog.showModal();
+    });
+  });
 }
 
 // ---------------------------------------------------------------------- dock
@@ -648,14 +659,13 @@ function partChoices(message) {
     const part = state.catalog.parts?.[target.part] || { name: target.part, image: null };
     const title = target.kind === 'old' ? `Slot ${target.slot} · replace ${part.name}`
       : `Install ${part.name}`;
-    const key = target.kind === 'old' ? target.ship : target.ship;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push({ button, target, part, title });
+    if (!groups.has(target.ship)) groups.set(target.ship, []);
+    groups.get(target.ship).push({ button, target, part, title });
   }
   if (!count) return null;
   const sections = [];
   for (const [group, entries] of groups) {
-    const cards = entries.map(({ button, target, part }) => {
+    const cards = entries.map(({ button, target, part, title }) => {
       if (target.kind === 'ship') {
         return `<button type="button" class="ship-card" data-custom="${escapeHtml(button.custom_id)}">
           <span class="name">${escapeHtml(button.label || target.ship)}</span>
@@ -672,7 +682,7 @@ function partChoices(message) {
         info.hull ? `H${info.hull}` : null,
       ].filter(Boolean).map((text) => `<b>${text}</b>`).join(' ');
       return `<button type="button" class="part-card" data-custom="${escapeHtml(button.custom_id)}"
-        title="${escapeHtml(info.description || info.name || '')}">
+        title="${escapeHtml([title, info.description].filter(Boolean).join(' — '))}">
         ${info.image ? `<img src="${info.image}" alt="${escapeHtml(info.name)}" loading="lazy">` : '<div class="no-art">◇</div>'}
         <span class="name">${escapeHtml(info.name || target.part)}</span>
         <span class="meta">${target.kind === 'old' ? `slot ${target.slot}` : 'install'}</span>
@@ -943,10 +953,22 @@ async function loadHistory(reset = false) {
 }
 
 function renderHistory() {
-  el.historyList.replaceChildren(...state.history
-    .filter((message) => message.content || (message.attachments || []).length)
-    .map(historyItem));
-  el.historyNote.textContent = `${state.history.length} records · unresolved prompts stay in the action dock`;
+  const rooms = [...new Set(state.history.map((message) => message.room))];
+  const selected = state.historyRoom;
+  el.historyRoom.replaceChildren(...[['', 'All rooms'], ...rooms.map((room) => [room, roomName(room)])]
+    .map(([value, label]) => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      return option;
+    }));
+  el.historyRoom.value = rooms.includes(selected) ? selected : '';
+  const visible = state.history
+    .filter((message) => !state.historyRoom || message.room === state.historyRoom)
+    .filter((message) => message.content || (message.attachments || []).length);
+  el.historyList.replaceChildren(...visible.map(historyItem));
+  el.historyNote.textContent = `${visible.length}/${state.history.length} records`
+    + ' · unresolved prompts stay in the action dock';
   el.historyMore.classList.toggle('hidden', !state.historyHasMore);
   if (!state.history.length) {
     el.historyList.innerHTML = '<p class="note">No history yet.</p>';
@@ -961,7 +983,8 @@ function prettifyAbility(name) {
 function renderFaction() {
   const view = state.view;
   if (!view) return;
-  const player = view.you || (view.game.players || []).find((row) => row.is_you)
+  const player = state.factionPlayer || view.you
+    || (view.game.players || []).find((row) => row.is_you)
     || (view.game.players || [])[0];
   if (!player || !player.faction) {
     el.factionTitle.textContent = 'Faction';
@@ -1162,11 +1185,17 @@ function bind() {
   document.getElementById('open-history').addEventListener('click', async () => {
     el.historyDialog.showModal();
     state.history = [];
+    state.historyRoom = '';
     await loadHistory(true);
   });
   el.historyMore.addEventListener('click', () => loadHistory(false));
+  el.historyRoom.addEventListener('change', () => {
+    state.historyRoom = el.historyRoom.value;
+    renderHistory();
+  });
 
   document.getElementById('open-faction').addEventListener('click', () => {
+    state.factionPlayer = null;
     renderFaction();
     el.factionDialog.showModal();
   });

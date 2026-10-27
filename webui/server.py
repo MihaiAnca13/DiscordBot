@@ -15,7 +15,6 @@ from aiohttp import web
 import config
 from Buttons.Research import ResearchButtons
 from Buttons.Turn import TurnButtons
-from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from helpers.GamestateHelper import GamestateHelper
 from helpers.GameIds import list_active_game_ids
@@ -134,8 +133,7 @@ def player_state(game, seat, pid, stats):
     techs = {}
     for track in ("military", "grid", "nano"):
         techs[track] = [catalog.tech(tech_id) for tech_id in stats.get(f"{track}_tech", [])]
-    faction = catalog.by_name(stats.get("name")) or catalog.faction(
-        FactionData.FACTIONS.get(stats.get("name"), {}).get("artwork", ""))
+    faction = catalog.by_name(stats.get("name"))
     try:
         points = DrawHelper(game.gamestate).get_public_points(stats, False)
     except Exception:
@@ -422,7 +420,7 @@ class WebApp:
             return
         players = game.gamestate["players"]
         pid = game.get_player_from_color(color)
-        if pid is None:
+        if pid not in players:
             return
         player = players[pid]
         available = ResearchButtons.getPlayerTotalAvailableScience(player, game)
@@ -542,16 +540,17 @@ class WebApp:
         """Recovery: post the start-of-turn buttons when a player has no prompt open."""
         game_id = request.match_info["game_id"]
         seat = str(request.query.get("seat") or "")
-        game = self.game(game_id)
-        session, player = self._seat_player(game, seat)
-        if player is None:
-            return web.json_response({"error": "not a player in this game"}, status=403)
-        view = TurnButtons.getStartTurnButtons(game, player, player["color"])
-        names, colors = self._parts(game_id, game)
-        surface = Surface(self.store, game_id, seat=seat, mirror=self.mirror,
-                          media_dir=self.media_dir)
-        await surface.channel.send(f"{names.get(seat, player['color'])}, use buttons to do your turn",
-                                   view=view)
+        async with game_lock(game_id):
+            game = self.game(game_id)
+            session, player = self._seat_player(game, seat)
+            if player is None:
+                return web.json_response({"error": "not a player in this game"}, status=403)
+            view = TurnButtons.getStartTurnButtons(game, player, player["color"])
+            names, colors = self._parts(game_id, game)
+            surface = Surface(self.store, game_id, seat=seat, mirror=self.mirror,
+                              media_dir=self.media_dir)
+            await surface.channel.send(f"{names.get(seat, player['color'])}, use buttons to do your turn",
+                                       view=view)
         return web.json_response(await asyncio.to_thread(self.snapshot, game_id, seat))
 
     async def api_mirror(self, request):
