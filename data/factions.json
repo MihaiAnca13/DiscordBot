@@ -3782,22 +3782,22 @@
                         "empty"
                 ],
                 "cruiser_parts": [
-                        "ioc",
                         "elc",
-                        "hul",
+                        "ioc",
+                        "empty",
                         "nus",
-                        "nud",
-                        "empty"
+                        "hul",
+                        "nud"
                 ],
                 "dread_parts": [
-                        "ioc",
-                        "ioc",
                         "elc",
-                        "hul",
-                        "hul",
+                        "ioc",
+                        "ioc",
+                        "empty",
                         "nus",
-                        "nud",
-                        "empty"
+                        "hul",
+                        "hul",
+                        "nud"
                 ],
                 "starbase_parts": [
                         "elc",
@@ -3806,86 +3806,6 @@
                         "empty",
                         "hul"
                 ],
-                "blueprint_slots": {
-                        "interceptor": [
-                                [
-                                        1,
-                                        0
-                                ],
-                                [
-                                        0,
-                                        2
-                                ],
-                                [
-                                        1,
-                                        4
-                                ],
-                                [
-                                        2,
-                                        2
-                                ]
-                        ],
-                        "cruiser": [
-                                [
-                                        1,
-                                        0
-                                ],
-                                [
-                                        0,
-                                        2
-                                ],
-                                [
-                                        2,
-                                        2
-                                ],
-                                [
-                                        0,
-                                        6
-                                ],
-                                [
-                                        2,
-                                        6
-                                ],
-                                [
-                                        1,
-                                        6
-                                ]
-                        ],
-                        "dread": [
-                                [
-                                        0,
-                                        0
-                                ],
-                                [
-                                        2,
-                                        0
-                                ],
-                                [
-                                        0,
-                                        2
-                                ],
-                                [
-                                        2,
-                                        2
-                                ],
-                                [
-                                        1,
-                                        4
-                                ],
-                                [
-                                        0,
-                                        6
-                                ],
-                                [
-                                        2,
-                                        6
-                                ],
-                                [
-                                        3,
-                                        4
-                                ]
-                        ]
-                },
                 "tech_track_vp": [
                         0,
                         0,
@@ -4016,22 +3936,22 @@
                         "empty"
                 ],
                 "cruiser_parts": [
-                        "ioc",
                         "elc",
-                        "hul",
+                        "ioc",
+                        "empty",
                         "nus",
-                        "nud",
-                        "empty"
+                        "hul",
+                        "nud"
                 ],
                 "dread_parts": [
-                        "ioc",
-                        "ioc",
                         "elc",
-                        "hul",
-                        "hul",
+                        "ioc",
+                        "ioc",
+                        "empty",
                         "nus",
-                        "nud",
-                        "empty"
+                        "hul",
+                        "hul",
+                        "nud"
                 ],
                 "starbase_parts": [
                         "elc",
@@ -4040,86 +3960,6 @@
                         "empty",
                         "hul"
                 ],
-                "blueprint_slots": {
-                        "interceptor": [
-                                [
-                                        1,
-                                        0
-                                ],
-                                [
-                                        0,
-                                        2
-                                ],
-                                [
-                                        1,
-                                        4
-                                ],
-                                [
-                                        2,
-                                        2
-                                ]
-                        ],
-                        "cruiser": [
-                                [
-                                        1,
-                                        0
-                                ],
-                                [
-                                        0,
-                                        2
-                                ],
-                                [
-                                        2,
-                                        2
-                                ],
-                                [
-                                        0,
-                                        6
-                                ],
-                                [
-                                        2,
-                                        6
-                                ],
-                                [
-                                        1,
-                                        6
-                                ]
-                        ],
-                        "dread": [
-                                [
-                                        0,
-                                        0
-                                ],
-                                [
-                                        2,
-                                        0
-                                ],
-                                [
-                                        0,
-                                        2
-                                ],
-                                [
-                                        2,
-                                        2
-                                ],
-                                [
-                                        1,
-                                        4
-                                ],
-                                [
-                                        0,
-                                        6
-                                ],
-                                [
-                                        2,
-                                        6
-                                ],
-                                [
-                                        3,
-                                        4
-                                ]
-                        ]
-                },
                 "portrait_image": true
         },
         "hor": {
@@ -4248,22 +4088,22 @@
                         "empty"
                 ],
                 "cruiser_parts": [
-                        "ioc",
                         "elc",
-                        "hul",
+                        "ioc",
+                        "empty",
                         "nus",
-                        "nud",
-                        "empty"
+                        "hul",
+                        "nud"
                 ],
                 "dread_parts": [
-                        "ioc",
-                        "ioc",
                         "elc",
-                        "hul",
-                        "hul",
+                        "ioc",
+                        "ioc",
+                        "empty",
                         "nus",
-                        "nud",
-                        "empty"
+                        "hul",
+                        "hul",
+                        "nud"
                 ],
                 "starbase_parts": [
                         "elc",
@@ -4272,86 +4112,6 @@
                         "empty",
                         "hul"
                 ],
-                "blueprint_slots": {
-                        "interceptor": [
-                                [
-                                        1,
-                                        0
-                                ],
-                                [
-                                        0,
-                                        2
-                                ],
-                                [
-                                        1,
-                                        4
-                                ],
-                                [
-                                        2,
-                                        2
-                                ]
-                        ],
-                        "cruiser": [
-                                [
-                                        1,
-                                        0
-                                ],
-                                [
-                                        0,
-                                        2
-                                ],
-                                [
-                                        2,
-                                        2
-                                ],
-                                [
-                                        0,
-                                        6
-                                ],
-                                [
-                                        2,
-                                        6
-                                ],
-                                [
-                                        1,
-                                        6
-                                ]
-                        ],
-                        "dread": [
-                                [
-                                        0,
-                                        0
-                                ],
-                                [
-                                        2,
-                                        0
-                                ],
-                                [
-                                        0,
-                                        2
-                                ],
-                                [
-                                        2,
-                                        2
-                                ],
-                                [
-                                        1,
-                                        4
-                                ],
-                                [
-                                        0,
-                                        6
-                                ],
-                                [
-                                        2,
-                                        6
-                                ],
-                                [
-                                        3,
-                                        4
-                                ]
-                        ]
-                },
                 "tech_track_max": 4,
                 "portrait_image": true,
                 "reputation_only_slots": [

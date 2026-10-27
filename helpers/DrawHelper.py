@@ -1329,7 +1329,9 @@ class DrawHelper:
         color = (255, 255, 255)
         stroke_width = 2
         font = ImageFont.truetype("images/resources/arial.ttf", size=35)
-        blueprint_slots = FactionData.of(player).get("blueprint_slots", {})
+        # Blueprint geometry is static faction data. Older saves can retain a
+        # removed layout, so read it from the current faction definition.
+        blueprint_slots = FactionData.BY_NAME.get(player["name"], {}).get("blueprint_slots", {})
         slot_cells = {}
         for slot, ship in enumerate(ships):
             shipFullName = self.getShipFullName(ship)
@@ -1481,8 +1483,14 @@ class DrawHelper:
         if player.get("interceptor_parts"):
             process_parts(player["interceptor_parts"], interceptCoord, referenceX,sizeOfSquare,"interceptor",
                           slot_cells.get("int"))
-        process_parts(player["cruiser_parts"], cruiserCoord,referenceX,sizeOfSquare,"cruiser", slot_cells.get("cru"))
-        process_parts(player["dread_parts"], dreadCoord,referenceX,sizeOfSquare,"dreadnought", slot_cells.get("drd"))
+        cruiser_parts = player["cruiser_parts"]
+        dread_parts = player["dread_parts"]
+        if faction in ("cog", "midas", "horde") and player.get("blueprint_slots"):
+            # Existing saves stored parts in the temporary custom-layout order.
+            cruiser_parts = [cruiser_parts[index] for index in (1, 0, 5, 3, 2, 4)]
+            dread_parts = [dread_parts[index] for index in (2, 0, 1, 7, 5, 3, 4, 6)]
+        process_parts(cruiser_parts, cruiserCoord,referenceX,sizeOfSquare,"cruiser", slot_cells.get("cru"))
+        process_parts(dread_parts, dreadCoord,referenceX,sizeOfSquare,"dreadnought", slot_cells.get("drd"))
         if faction == "exile":
             process_parts(player["orb_parts"], orbCoord,referenceX,sizeOfSquare,"orbital")
         else:
