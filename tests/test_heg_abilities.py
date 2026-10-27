@@ -211,27 +211,58 @@ def test_lyra_reroll_and_nine_lives_can_be_pending_together(make_game, no_random
     no_random([6, 2])
     run(Combat.rollDice(game, "rollDice_101_blue_2_deleteMsg", FakeInteraction(channel)))
     ids = _all_combat_ids(channel)
-    assert any(cid.startswith("FCIDred_nineLives_101_") for cid in ids)
-    lyra_reroll = next(cid for cid in ids if cid.startswith("FCIDblue_rerollDie_101_blue_"))
+    first_nine_lives = next(cid for cid in ids if cid.startswith("FCIDred_nineLives_101_reroll_"))
+    pending = reload(game).gamestate["board"]["101"]["lyraRerollPending"]
+    lyra_reroll = f"FCIDblue_lyraReroll_101_{next(iter(pending))}"
     assert reload(game).gamestate["board"]["101"]["nineLivesPending"]
 
-    # Lyra pays its own colony ship; the pending Nine Lives choice is untouched.
+    # Lyra pays its own colony ship. Its reroll hits, so Hegemony now gets its own prompt.
     no_random([6])
     press(channel, 1, lyra_reroll)
     after = reload(game)
     assert after.get_player(1)["colony_ships"] == 2
     assert after.get_player(2)["colony_ships"] == 3
-    assert after.gamestate["board"]["101"]["nineLivesPending"]
+    nine_lives = [cid for cid in _all_combat_ids(channel)
+                  if cid.startswith("FCIDred_nineLives_101_reroll_")]
+    assert len(nine_lives) == 2
+    second_nine_lives = next(cid for cid in nine_lives if cid != first_nine_lives)
 
-    # Hegemony's forced reroll spends the defender's colony ship, not Lyra's.
-    nine_lives_reroll = next(cid for cid in _all_combat_ids(channel)
-                             if cid.startswith("FCIDred_nineLives_101_reroll_"))
-    no_random([6])
-    press(channel, 2, nine_lives_reroll)
+    # Hegemony's forced reroll misses; Lyra may spend another colony ship on that miss.
+    no_random([2])
+    press(channel, 2, second_nine_lives)
     after = reload(game)
     assert after.get_player(1)["colony_ships"] == 2
     assert after.get_player(2)["colony_ships"] == 2
-    assert after.gamestate["board"]["101"]["nineLivesPending"] == []
+    assert after.gamestate["board"]["101"]["lyraRerollPending"]
+    token = next(iter(after.gamestate["board"]["101"]["lyraRerollPending"]))
+    chained_reroll = f"FCIDblue_lyraReroll_101_{token}"
+
+    no_random([6])
+    press(channel, 1, chained_reroll)
+    assert reload(game).get_player(1)["colony_ships"] == 1
+
+
+def test_lyra_can_decline_the_colony_reroll(make_game, no_random, run, press):
+    game = make_game({
+        "advanced_ai": 0, "wa_ai": 0, "player_count": 2,
+        "players": {"1": player_stats("lyr", color="blue", colony_ships=3),
+                    "2": player_stats("heg", color="red", colony_ships=3)},
+        "board": {"101": {"owner": 0, "sector": 101, "disctile": 0,
+                          "player_ships": ["blue-cru", "red-cru"],
+                          "attacker": "blue", "defender": "red"}},
+    }, game_id="aeb1")
+    channel = FakeChannel("aeb1-actions")
+
+    no_random([2])
+    run(Combat.rollDice(game, "rollDice_101_blue_2_deleteMsg", FakeInteraction(channel)))
+    pending = reload(game).gamestate["board"]["101"]["lyraRerollPending"]
+    token = next(iter(pending))
+
+    press(channel, 1, f"FCIDblue_lyraDecline_101_{token}")
+
+    after = reload(game)
+    assert after.get_player(1)["colony_ships"] == 3
+    assert not after.gamestate["board"]["101"].get("lyraRerollPending")
 
 
 def test_pounce_round_counter_survives_kurita_first_shot_phases(make_game, run):

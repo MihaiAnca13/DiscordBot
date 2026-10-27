@@ -44,6 +44,7 @@ ANSWER_BUTTONS = ("selectDiscTile", "exploreDiscoveryTile", "keepDiscForPoints",
                   "reducePopFor", "addCubeToTrack", "drawReputation", "dontDrawReputation",
                   "ancientsCube", "setupTech", "reservedTile", "carapaceDone", "carapaceMissile",
                   "wolfPack", "phaseModuleDone", "phaseModuleNone", "phaseBombing", "nineLives",
+                  "lyraReroll", "lyraDecline",
                   "preGameOrbital", "declineSetupTech", "saveDiscoveryPart", "gain3resource",
                   "finishSetupResources")
 
@@ -512,6 +513,12 @@ class ButtonListener(commands.Cog):
             await Combat.rerollDie(game, customID, interaction, player, player_helper)
         elif customID.startswith("nineLives_"):
             await Combat.resolveNineLives(game, player_helper, interaction, customID)
+        elif customID.startswith("lyraReroll_"):
+            _, pos, token = customID.split("_")
+            await Combat.resolveLyraReroll(game, interaction, pos, token)
+        elif customID.startswith("lyraDecline_"):
+            _, pos, token = customID.split("_")
+            await Combat.declineLyraReroll(game, interaction, pos, token)
         elif customID.startswith("removeUnits"):
             await Combat.removeUnits(game, customID, player, interaction)
         elif customID.startswith("assignHitTo"):

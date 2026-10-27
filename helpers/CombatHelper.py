@@ -244,6 +244,8 @@ class Combat:
         tile["engagementRound"] = 1
         tile.pop("pounceRound", None)
         tile.pop("nineLivesPending", None)
+        tile.pop("lyraRerollPending", None)
+        tile.pop("lyraRerollToken", None)
         game.setCurrentRoller(None, pos)
         for side in sides:
             for player in side:
@@ -1279,6 +1281,7 @@ class Combat:
                         die_damage_bonus = (spine_bonus if spine_mode == "spinedmg"
                                             and die_source == cannon_index else 0)
                         computer_val = computerVal + hit_bonus
+                        die_hits = [entry[1] for entry in dieNums if entry[4] == die_roll_id]
                         hittableShips = []
                         if incoming_shield and dieColor != "pink":
                             update = True
@@ -1292,7 +1295,6 @@ class Combat:
                                                                                 ignoreShields)
                             nineLives = Combat.nine_lives_target(game, pos, colorOrAI, hittableShips)
                             if nineLives and oldNumPeeps == len(Combat.findPlayersInTile(game, pos)):
-                                die_hits = [entry[1] for entry in dieNums if entry[4] == die_roll_id]
                                 deferred_nine_lives.add(die_roll_id)
                                 await Combat.offerNineLives(game, interaction, pos, nineLives, {
                                     "roller": colorOrAI, "computer": computer_val, "speed": speed,
@@ -1314,20 +1316,16 @@ class Combat:
                                     wolf_misses.append([rollerType, dieNum, die_wolf_damage, dieColor,
                                                         computer_val, die_source, hit_bonus, die_damage_bonus])
                                 if all([player is not None,
-                                        "Lyra" in game.gamestate["players"][player]["name"],
+                                        FactionData.has(game.gamestate["players"][player],
+                                                        "reroll_dice_with_colony_ships"),
                                         game.gamestate["players"][player]["colony_ships"] > 0,
                                         oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
-                                    viewLyr = View()
-                                    label = "Reroll Die"
-                                    buttonID = (f"FCID{colorOrAI}_rerollDie_{pos}_{colorOrAI}"
-                                                f"_{computerVal}_{dieColor}_{counter}_{rollerType}")
-                                    viewLyr.add_item(Button(label=label, style=discord.ButtonStyle.green,
-                                                            custom_id=buttonID))
-                                    viewLyr.add_item(Button(label="Decline", style=discord.ButtonStyle.red,
-                                                            custom_id="FCID"+colorOrAI+"_deleteMsg"+"_"+str(counter)))
-                                    message = (game.gamestate["players"][player]["player_name"] + ", you can reroll a"
-                                               f" {dieColor} die that missed using one of your colony ships.")
-                                    asyncio.create_task(interaction.channel.send(message, view=viewLyr))
+                                    await Combat.offerLyraReroll(game, interaction, pos, {
+                                        "roller": colorOrAI, "computer": computer_val, "speed": speed,
+                                        "dieColor": dieColor, "damageBonus": die_damage_bonus,
+                                        "split": len(die_hits) > 1, "shielded": shielded,
+                                        "ignore": ignoreShields, "shipType": shipModel.ship_type,
+                                        "counter": counter})
                                 continue
                         else:
                             if all([player is not None,
@@ -1664,7 +1662,7 @@ class Combat:
             hittableShips = []
             if dieColor != "pink":
                 hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
-                                                                    dieNum, computerVal, pos, 3, ignoreShields)
+                                                                    dieNum, computerVal, pos, speed, ignoreShields)
                 if dieNum + computerVal > 5 and len(hittableShips) == 0:
                     message = (f"The computer bonus for a die that rolled a {dieNum}"
                                " was cancelled by the shields on each of the opponents ships.")
@@ -1734,6 +1732,16 @@ class Combat:
                     hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
                                                                         6, computerVal, pos, 3, ignoreShields)
             if len(hittableShips) > 0:
+                nineLives = Combat.nine_lives_target(game, pos, colorOrAI, hittableShips)
+                if (dieColor != "pink" and nineLives
+                        and oldNumPeeps == len(Combat.findPlayersInTile(game, pos))):
+                    await Combat.offerNineLives(game, interaction, pos, nineLives, {
+                        "roller": colorOrAI, "computer": computerVal, "speed": speed,
+                        "dieNum": dieNum, "hits": [dieDam], "dieColor": dieColor,
+                        "counter": 0, "ignore": ignoreShields, "damageBonus": 0,
+                        "split": False, "shielded": False, "shipType": shipType})
+                    await interaction.message.edit(view=None)
+                    return
                 if len(hittableShips) > 1:
                     if colorOrAI != "ai":
                         msg = (f"{interaction.user.mention}, choose which ship to hit"
@@ -1804,6 +1812,106 @@ class Combat:
     @staticmethod
     def has_pending_nine_lives(game: GamestateHelper, pos: str):
         return bool(game.gamestate["board"].get(pos, {}).get("nineLivesPending"))
+
+    @staticmethod
+    async def offerLyraReroll(game: GamestateHelper, interaction: discord.Interaction, pos: str, entry: dict):
+        """Lyra may spend a colony ship to reroll a missed die; the entry carries its full context."""
+        tile = game.gamestate["board"][pos]
+        token = tile.get("lyraRerollToken", 0) + 1
+        tile["lyraRerollToken"] = token
+        tile.setdefault("lyraRerollPending", {})[str(token)] = dict(entry)
+        game.update()
+        player = game.getPlayerObjectFromColor(entry["roller"])
+        view = View()
+        view.add_item(Button(label="Reroll Die", style=discord.ButtonStyle.green,
+                             custom_id=f"FCID{entry['roller']}_lyraReroll_{pos}_{token}"))
+        view.add_item(Button(label="Decline", style=discord.ButtonStyle.red,
+                             custom_id=f"FCID{entry['roller']}_lyraDecline_{pos}_{token}"))
+        await interaction.channel.send(
+            f"{player['player_name']}, you may reroll a {entry['dieColor']} die that missed"
+            " using one of your colony ships.", view=view)
+
+    @staticmethod
+    async def continueAfterLyraReroll(game: GamestateHelper, interaction: discord.Interaction,
+                                      pos: str, old_length: int):
+        tile = game.gamestate["board"].get(pos, {})
+        if (tile.get("lyraRerollPending") or tile.get("nineLivesPending")
+                or tile.get("unresolvedHits", 0)):
+            return
+        if len(Combat.findPlayersInTile(game, pos)) != old_length:
+            await Combat.checkCombatEnd(game, interaction, pos, old_length)
+        else:
+            await Combat.promptNextSpeed(game, pos, interaction.channel, True)
+
+    @staticmethod
+    async def resolveLyraReroll(game: GamestateHelper, interaction: discord.Interaction,
+                                pos: str, token: str):
+        tile = game.gamestate["board"].get(pos, {})
+        entry = tile.get("lyraRerollPending", {}).pop(str(token), None)
+        if entry is None:
+            await interaction.followup.send("That Lyra reroll was already resolved.", ephemeral=True)
+            return
+        old_length = len(Combat.findPlayersInTile(game, pos))
+        roller = entry["roller"]
+        player = game.getPlayerObjectFromColor(roller)
+        player_helper = PlayerHelper(game.get_player_from_color(roller), player)
+        if player_helper.adjust_colony_ships(1) is False:
+            await interaction.channel.send(
+                f"{interaction.user.mention}, you have no colony ships left to reroll with.")
+            await interaction.message.edit(view=None)
+            await Combat.continueAfterLyraReroll(game, interaction, pos, old_length)
+            return
+        game.update_player(player_helper)
+        dieNum = random.randint(1, 6)
+        hits = Combat.die_damage(game, roller, entry["dieColor"], dieNum,
+                                 entry["damageBonus"], entry["split"])
+        if entry["shielded"]:
+            hits = [Carapace.weapon_damage(game, pos, roller, entry["shipType"], damage)
+                    for damage in hits]
+        await interaction.channel.send(
+            f"{interaction.user.mention} rerolled a {entry['dieColor']} die with a colony ship:"
+            f" the die is rerolled into a {dieNum}.")
+        hittable = Combat.getOpponentUnitsThatCanBeHit(
+            game, roller, tile["player_ships"][:], dieNum, entry["computer"], pos,
+            entry["speed"], entry["ignore"])
+        if hittable:
+            nineLives = Combat.nine_lives_target(game, pos, roller, hittable)
+            if nineLives:
+                await Combat.offerNineLives(game, interaction, pos, nineLives, {
+                    "roller": roller, "computer": entry["computer"], "speed": entry["speed"],
+                    "dieNum": dieNum, "hits": list(hits), "dieColor": entry["dieColor"],
+                    "counter": entry.get("counter", 0), "ignore": entry["ignore"],
+                    "damageBonus": entry["damageBonus"], "split": entry["split"],
+                    "shielded": entry["shielded"], "shipType": entry["shipType"]})
+            else:
+                for index, damage in enumerate(hits):
+                    targets = Combat.getOpponentUnitsThatCanBeHit(
+                        game, roller, game.gamestate["board"][pos]["player_ships"][:], dieNum,
+                        entry["computer"], pos, entry["speed"], entry["ignore"])
+                    if not targets:
+                        break
+                    await Combat.offerHitPrompt(game, interaction, pos, roller, targets, dieNum,
+                                                damage, entry.get("counter", 0) + index,
+                                                deferEnd=True)
+        elif (FactionData.has(player, "reroll_dice_with_colony_ships")
+              and player["colony_ships"] > 0):
+            await Combat.offerLyraReroll(game, interaction, pos, entry)
+        else:
+            await interaction.channel.send("The rerolled die misses.")
+        await interaction.message.edit(view=None)
+        await Combat.continueAfterLyraReroll(game, interaction, pos, old_length)
+
+    @staticmethod
+    async def declineLyraReroll(game: GamestateHelper, interaction: discord.Interaction,
+                                pos: str, token: str):
+        tile = game.gamestate["board"].get(pos, {})
+        if tile.get("lyraRerollPending", {}).pop(str(token), None) is None:
+            await interaction.followup.send("That Lyra reroll was already resolved.", ephemeral=True)
+            return
+        await interaction.channel.send("The reroll was declined.")
+        await interaction.message.edit(view=None)
+        await Combat.continueAfterLyraReroll(game, interaction, pos,
+                                             len(Combat.findPlayersInTile(game, pos)))
 
     @staticmethod
     async def offerNineLives(game: GamestateHelper, interaction: discord.Interaction, pos: str,
@@ -1877,13 +1985,19 @@ class Combat:
                                                 dieNum, damage, entry["counter"] + index,
                                                 deferEnd=True)
         elif mode == "reroll":
-            await interaction.channel.send("The rerolled die misses.")
+            roller = game.getPlayerObjectFromColor(entry["roller"])
+            if (entry["dieColor"] != "pink"
+                    and FactionData.has(roller, "reroll_dice_with_colony_ships")
+                    and roller["colony_ships"] > 0):
+                await Combat.offerLyraReroll(game, interaction, pos, entry)
+            else:
+                await interaction.channel.send("The rerolled die misses.")
         game.update()
         if not pending:
             old_length = tile.pop("nineLivesOldLength", len(Combat.findPlayersInTile(game, pos)))
             if len(Combat.findPlayersInTile(game, pos)) != old_length:
                 await Combat.checkCombatEnd(game, interaction, pos, old_length)
-            elif not tile.get("unresolvedHits", 0):
+            elif not tile.get("unresolvedHits", 0) and not tile.get("lyraRerollPending"):
                 await Combat.promptNextSpeed(game, pos, interaction.channel, True)
             game.update()
         await interaction.message.edit(view=None)
@@ -1963,7 +2077,7 @@ class Combat:
             await channel.send("Resolve the pending hits and Rift Cannon effects before rolling again.")
             return
         if (tile.get("wolfPack") or tile.get("pendingWolfPack") or tile.get("ghostsRetreatPending")
-                or Combat.has_pending_nine_lives(game, pos)
+                or Combat.has_pending_nine_lives(game, pos) or tile.get("lyraRerollPending")
                 or any(not tile.get("phaseModuleReady", {}).get(color)
                        for color in tile.get("phaseModuleColors", []))):
             await channel.send("Resolve the pending faction ability choices before rolling again.")
@@ -1972,7 +2086,8 @@ class Combat:
 
     @staticmethod
     async def promptNextSpeed(game: GamestateHelper, pos: str, channel, update: bool, repeat: bool = False):
-        if Carapace.has_pending_missiles(game, pos) or Combat.has_pending_nine_lives(game, pos):
+        if (Carapace.has_pending_missiles(game, pos) or Combat.has_pending_nine_lives(game, pos)
+                or game.gamestate["board"].get(pos, {}).get("lyraRerollPending")):
             return
         currentSpeed = None
         if "currentSpeed" in game.gamestate["board"][pos]:
@@ -2714,6 +2829,8 @@ class Combat:
         game.gamestate["board"][pos].pop("ghostsRetreatPending", None)
         game.gamestate["board"][pos]["nineLivesPending"] = []
         game.gamestate["board"][pos].pop("nineLivesOldLength", None)
+        game.gamestate["board"][pos]["lyraRerollPending"] = {}
+        game.gamestate["board"][pos].pop("lyraRerollToken", None)
         game.gamestate["board"][pos].pop("firstShotPhase", None)
         game.gamestate["board"][pos].pop("firstShotSide", None)
         Combat.clear_phase_module(game, pos)
