@@ -42,7 +42,7 @@ def test_turtugan_blueprints_and_base_stats():
     row = tur_data()
     assert row["interceptor_parts"] == ["ioc", "nus", "nud"]
     assert row["cruiser_parts"] == ["ioc", "nus", "hul", "nud"]
-    assert row["dread_parts"] == ["ioc", "ioc", "nus", "hul", "hul", "nud"]
+    assert row["dread_parts"] == ["ioc", "ioc", "nus", "hul", "hul", "nud", "empty"]
     assert row["starbase_parts"] == ["hul", "nus", "nud"]
     for ship in ("interceptor", "cruiser", "dread", "starbase"):
         assert row[f"base_{ship}_speed"] == 0
