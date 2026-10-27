@@ -183,8 +183,8 @@ class WebMessage:
         await self.surface.mirror_delete(row)
         self.surface.store.remove(self.id)
 
-    async def edit(self, content=None, view=None, **kwargs):
-        buttons = buttons_from_view(view) if view is not None else None
+    async def edit(self, content=None, view=discord.utils.MISSING, **kwargs):
+        buttons = buttons_from_view(view) if view is not discord.utils.MISSING else None
         self.surface.store.update(self.id, content=content, buttons=buttons)
         await self.surface.mirror_edit(self.id, content, view)
 
@@ -211,7 +211,7 @@ class WebChannel:
     async def fetch_message(self, message_id):
         """Only the feed is authoritative: a deleted prompt is gone for every surface."""
         row = self.surface.store.get(int(message_id))
-        if row is None or row["deleted"]:
+        if row is None or row["deleted"] or not row["buttons"]:
             raise not_found()
         return WebMessage(self.surface, int(message_id))
 
@@ -270,10 +270,11 @@ class WebInteraction:
     """A press that arrived over HTTP, shaped exactly like the Discord object handlers expect."""
 
     def __init__(self, store, game_id, seat, custom_id=None, message_id=None, members=None,
-                 display_name=None, mirror=None, media_dir=None):
+                 display_name=None, mirror=None, media_dir=None, channel_name=None):
         self.store = store
         self.game_id = game_id
-        self.surface = Surface(store, game_id, seat=seat, mirror=mirror, media_dir=media_dir)
+        self.surface = Surface(store, game_id, seat=seat, mirror=mirror, media_dir=media_dir,
+                               channel_name=channel_name)
         self.channel = self.surface.channel
         self.message = WebMessage(self.surface, int(message_id)) if message_id is not None else None
         self.user = WebUser(str(seat), display_name)
@@ -303,10 +304,12 @@ class RecordingMessage:
         self.surface.store.remove(self.id)
         await self._real.delete()
 
-    async def edit(self, content=None, view=None, **kwargs):
-        buttons = buttons_from_view(view) if view is not None else None
+    async def edit(self, content=None, view=discord.utils.MISSING, **kwargs):
+        buttons = buttons_from_view(view) if view is not discord.utils.MISSING else None
         self.surface.store.update(self.id, content=content, buttons=buttons)
-        await self._real.edit(content=content, view=view, **kwargs)
+        if view is not discord.utils.MISSING:
+            kwargs["view"] = view
+        await self._real.edit(content=content, **kwargs)
 
 
 class RecordingChannel:

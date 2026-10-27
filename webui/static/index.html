@@ -7,34 +7,94 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <div class="left">
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">E</span>
+      <div><b>ECLIPSE</b><small>galactic table</small></div>
+    </div>
+    <div class="top-controls">
       <label for="game">Game</label>
       <select id="game"></select>
-      <label for="seat">Playing as</label>
+      <label for="seat">Seat</label>
       <select id="seat"></select>
+      <span id="round" class="badge round">Round ?</span>
+      <span id="turn" class="badge"></span>
     </div>
-    <div class="right">
-      <span id="status"></span>
-      <label class="toggle">
-        <input type="checkbox" id="mirror"> mirror to Discord
+    <div class="top-actions">
+      <button id="open-faction" class="ghost">Faction</button>
+      <button id="open-history" class="ghost">History</button>
+      <label class="toggle" title="When off, this game lives only in the browser">
+        <input type="checkbox" id="mirror"> Discord
       </label>
-      <button id="turn-menu" class="ghost">Show my turn menu</button>
+      <button id="turn-menu" class="primary hidden">My turn menu</button>
     </div>
   </header>
 
-  <main>
-    <section class="board">
-      <img id="board" alt="board">
-      <div id="board-note" class="note"></div>
+  <main class="table">
+    <section class="left">
+      <div class="card board-card">
+        <div class="card-head">
+          <h2>Galaxy</h2>
+          <div class="board-tools">
+            <span id="board-note" class="note"></span>
+            <button id="zoom-out" class="icon" title="Zoom out">−</button>
+            <button id="zoom-in" class="icon" title="Zoom in">+</button>
+            <button id="zoom-fit" class="ghost small">Fit</button>
+          </div>
+        </div>
+        <div id="board-viewport" class="board-viewport">
+          <div id="board-stage" class="board-stage">
+            <img id="board" alt="Galaxy board" draggable="false">
+            <div id="board-overlay" class="board-overlay"></div>
+          </div>
+          <div id="board-empty" class="board-empty hidden">Rendering the galaxy…</div>
+        </div>
+        <div id="board-hint" class="board-hint">Drag to pan · scroll to zoom</div>
+      </div>
+      <div class="card market-card">
+        <div class="card-head">
+          <h2>Tech market</h2>
+          <span id="market-note" class="note"></span>
+        </div>
+        <div id="tech-market" class="tech-market"></div>
+      </div>
     </section>
-    <section class="feed">
-      <div id="banner" class="banner"></div>
-      <div id="messages"></div>
+
+    <section class="right">
+      <div id="action-dock" class="action-dock"></div>
+      <div class="card players-card">
+        <div class="card-head">
+          <h2>Players</h2>
+          <span id="players-note" class="note"></span>
+        </div>
+        <div id="players" class="players"></div>
+      </div>
     </section>
   </main>
 
-  <div id="error" class="error"></div>
+  <dialog id="history-dialog" class="sheet">
+    <div class="sheet-head">
+      <div><h2>History</h2><p id="history-note" class="note"></p></div>
+      <button class="icon close" data-close="history-dialog">×</button>
+    </div>
+    <div id="history-list" class="history-list"></div>
+    <div class="sheet-foot"><button id="history-more" class="ghost">Load older</button></div>
+  </dialog>
+
+  <dialog id="faction-dialog" class="sheet faction-sheet">
+    <div class="sheet-head">
+      <div><h2 id="faction-title">Faction</h2><p id="faction-sub" class="note"></p></div>
+      <button class="icon close" data-close="faction-dialog">×</button>
+    </div>
+    <div id="faction-body" class="faction-body"></div>
+  </dialog>
+
+  <dialog id="zoom-dialog" class="sheet lightbox">
+    <button class="icon close" data-close="zoom-dialog">×</button>
+    <img id="zoom-image" alt="">
+  </dialog>
+
+  <div id="toast" class="toast"></div>
   <script src="/static/app.js"></script>
 </body>
 </html>

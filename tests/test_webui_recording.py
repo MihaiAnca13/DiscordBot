@@ -53,6 +53,16 @@ def test_deleting_through_the_feed_deletes_the_discord_message(store, run):
     assert channel.messages[0].id in channel.deleted
 
 
+def test_editing_discord_content_preserves_buttons_until_explicitly_removed(store, run):
+    channel = FakeChannel("aeb1-actions")
+    wrapped = RecordingInteraction(FakeInteraction(channel, custom_id="x"), store, "aeb1")
+    sent = run(wrapped.channel.send("prompt", view=view()))
+    run(sent.edit(content="updated"))
+    assert store.get(sent.id)["buttons"]
+    run(sent.edit(view=None))
+    assert store.get(sent.id)["buttons"] == []
+
+
 def test_ephemeral_discord_replies_are_private_to_the_presser(store, run):
     channel = FakeChannel("aeb1-actions")
     wrapped = RecordingInteraction(FakeInteraction(channel, custom_id="x", user_id=42), store, "aeb1")

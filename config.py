@@ -1,4 +1,5 @@
 import json
+import os
 import random
 
 
@@ -7,7 +8,7 @@ with open("config.json", "r") as f:
 
 token = data["token"]
 game_number = data["game_number"]
-gamestate_path = data["gamestate_path"]
+gamestate_path = os.environ.get("WEBUI_GAMESTATE_PATH", data["gamestate_path"])
 
 # Optional dev/testing keys in config.json. dev_mode lets configured testers
 # drive every player; guild_id scopes slash-command sync to one guild;

@@ -1,0 +1,12 @@
+.git
+.venv
+config.json
+gamestates
+webui/data
+.opencode
+.env
+.env.*
+output
+__pycache__
+.pytest_cache
+dev/webui/artifacts

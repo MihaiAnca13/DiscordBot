@@ -121,6 +121,25 @@ class FeedStore:
                           (self._next_rev(), message_id))
         self.conn.commit()
 
+    def clear_buttons(self, message_id):
+        """Keep the record and its canonical id, but retire its choices."""
+        row = self.get(message_id)
+        if row is None or row["deleted"] or not row["buttons"]:
+            return
+        self.update(message_id, buttons=[])
+
+    def set_buttons(self, message_id, buttons):
+        row = self.get(message_id)
+        if row is None or row["deleted"]:
+            return
+        self.update(message_id, buttons=buttons)
+
+    def prompts_in_room(self, game_id, room):
+        rows = self.conn.execute(
+            "SELECT * FROM messages WHERE game_id = ? AND room = ? AND deleted = 0"
+            " AND buttons != '[]' ORDER BY id ASC", (game_id, room)).fetchall()
+        return [self._as_message(row) for row in rows]
+
     def attach_discord(self, message_id, discord_id, room):
         self.conn.execute("UPDATE messages SET discord_id = ? WHERE id = ?", (str(discord_id), message_id))
         self.conn.commit()
@@ -156,9 +175,49 @@ class FeedStore:
             " ORDER BY id DESC LIMIT ?", (game_id, seat, limit)).fetchall()
         return [self._as_message(row) for row in rows]
 
+    def pending_messages(self, game_id, seat):
+        """Every prompt this seat can still answer, independent of the history page.
+
+        The history is paged and capped; an unresolved choice must never fall off it.
+        """
+        rows = self.conn.execute(
+            "SELECT * FROM messages WHERE game_id = ? AND deleted = 0"
+            " AND buttons != '[]'"
+            " AND (ephemeral_to IS NULL OR ephemeral_to = ?)"
+            " ORDER BY id ASC", (game_id, seat)).fetchall()
+        return [self._as_message(row) for row in rows]
+
     def visible_history(self, game_id, seat, limit=60):
         rows = self.conn.execute(
             "SELECT * FROM messages WHERE game_id = ?"
             " AND (ephemeral_to IS NULL OR ephemeral_to = ?)"
             " ORDER BY id DESC LIMIT ?", (game_id, seat, limit)).fetchall()
+        return [self._as_message(row) for row in rows]
+
+    def history_page(self, game_id, seat, before=None, limit=40):
+        """One page of the full feed, newest first, including used prompts."""
+        if before is None:
+            rows = self.conn.execute(
+                "SELECT * FROM messages WHERE game_id = ?"
+                " AND (ephemeral_to IS NULL OR ephemeral_to = ?)"
+                " ORDER BY id DESC LIMIT ?", (game_id, seat, limit)).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM messages WHERE game_id = ? AND id < ?"
+                " AND (ephemeral_to IS NULL OR ephemeral_to = ?)"
+                " ORDER BY id DESC LIMIT ?", (game_id, before, seat, limit)).fetchall()
+        messages = [self._as_message(row) for row in rows]
+        has_more = False
+        if messages:
+            has_more = self.conn.execute(
+                "SELECT 1 FROM messages WHERE game_id = ? AND id < ?"
+                " AND (ephemeral_to IS NULL OR ephemeral_to = ?) LIMIT 1",
+                (game_id, messages[-1]["id"], seat)).fetchone() is not None
+        return messages, has_more
+
+    def new_since(self, game_id, seat, after):
+        rows = self.conn.execute(
+            "SELECT * FROM messages WHERE game_id = ? AND id > ?"
+            " AND (ephemeral_to IS NULL OR ephemeral_to = ?)"
+            " ORDER BY id ASC", (game_id, after, seat)).fetchall()
         return [self._as_message(row) for row in rows]

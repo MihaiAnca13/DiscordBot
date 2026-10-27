@@ -51,7 +51,8 @@ class DiscordMirror:
             return
         try:
             message = await channel.fetch_message(int(discord_id))
-            await message.edit(content=content, view=view)
+            kwargs = {} if view is discord.utils.MISSING else {"view": view}
+            await message.edit(content=content, **kwargs)
         except discord.HTTPException as error:
             logging.getLogger(__name__).warning("mirror edit failed: %s", error)
 

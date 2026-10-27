@@ -7,6 +7,7 @@ prompts stay private.
 import pytest
 
 from Buttons.Turn import TurnButtons
+from Buttons.DiscoveryTile import DiscoveryTileButtons
 from helpers.GamestateHelper import GamestateHelper
 from listeners.ButtonListener import ButtonListener
 from webui.store import FeedStore
@@ -98,3 +99,19 @@ def test_a_pressed_button_that_edits_a_prompt_updates_the_feed(start_game, store
 
     prompts = store.open_messages("aeb1", "1")
     assert any(m["content"] and "choose which tile" in m["content"] for m in prompts)
+
+
+def test_discovery_points_remove_choices_and_cannot_be_claimed_again(start_game, store, run):
+    game, channel = start_game()
+    interaction = WebInteraction(store, game.game_id, "1", members=members(game))
+    run(DiscoveryTileButtons.sendDiscoveryTileOptions(
+        game, "201", interaction, game.get_player(1), "orb"))
+    message = next(m for m in store.open_messages("aeb1", "1") if m["buttons"])
+    press(run, store, game, "1", "FCIDblue_keepDiscForPoints", message["id"])
+    assert store.get(message["id"])["buttons"] == []
+
+    # Another action bypasses the short double-click guard, but not prompt consumption.
+    menu = turn_menu(run, store, game, "1", "blue")
+    press(run, store, game, "1", "FCIDblue_showReputation", menu.id)
+    press(run, store, game, "1", "FCIDblue_keepDiscForPoints", message["id"])
+    assert GamestateHelper(None, "aeb1").get_player(1)["disc_tiles_for_points"] == 1

@@ -1,0 +1,21 @@
+name: discordbot-webui-dev
+services:
+  webui:
+    build:
+      context: .
+      dockerfile: dev/webui/Dockerfile
+    ports:
+      - "127.0.0.1:8099:8099"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8099/api/games', timeout=3)"]
+      interval: 2s
+      timeout: 5s
+      start_period: 90s
+      retries: 30
+    volumes:
+      - webui-sandbox:/sandbox
+      - webui-feed:/app/webui/data
+      - ./dev/webui/artifacts:/app/dev/webui/artifacts
+volumes:
+  webui-sandbox:
+  webui-feed:
