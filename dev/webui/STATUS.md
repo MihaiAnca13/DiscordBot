@@ -160,9 +160,9 @@ Cold board render takes a few seconds; wait for `#board.naturalWidth > 0`.
 - `41daf51` current-phase prompt filtering, history room filter, per-seat faction panel.
 - `07c3113` + `54c0a94` + `a0f5199` population labels, smoother board rendering and a
   repeatable sandbox shuffle.
-- Direct-interaction pass: board pieces, ship/planet targets, tile preview, build and
-  discovery cards, blueprint slots, market research; audit in `INTERACTIONS.md`,
-  checks in `direct_checks.py`.
+- Direct-interaction pass (`31a042c`): board pieces, ship/planet targets, tile
+  preview, build and discovery cards, blueprint slots, market research; audit in
+  `INTERACTIONS.md`, checks in `direct_checks.py`.
 - The preview after the last check sits on the explored tile/influence prompt. Reset
   before baseline checks: `seed` → `up` → `smoke`/`browser_checks`.
 
