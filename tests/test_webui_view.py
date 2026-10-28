@@ -1,5 +1,6 @@
 """The read side of the web ui: one seat's choices, independent of history."""
 import pytest
+from PIL import Image
 
 from Buttons.Turn import TurnButtons
 from webui.server import build
@@ -139,6 +140,36 @@ def test_board_metadata_marks_unexplored_slots(start_game, store, app, run):
     assert any(tile["position"] == "000" and not tile["empty"] for tile in meta["tiles"])
     by_position = {tile["position"]: tile for tile in meta["tiles"]}
     assert by_position["000"]["label"] == "Galactic Center"
+
+
+def test_board_pieces_sit_on_the_drawn_ship_and_planet_snaps(start_game, store, app):
+    game, _channel = start_game()
+
+    pieces = app.snapshot("aeb1", "1")["pieces"]
+    tile = game.gamestate["board"]["201"]
+
+    ship = next(piece for piece in pieces
+                if piece["kind"] == "ship" and piece["position"] == "201")
+    assert ship["name"] == "blue-int" and ship["class"] == "int"
+    assert abs(ship["x"] - tile["int_snap"][0] * 345 / 1024) < 0.2
+    assert abs(ship["y"] - tile["int_snap"][1] * 300 / 1024) < 0.2
+
+    planet = next(piece for piece in pieces
+                  if piece["kind"] == "planet" and piece["position"] == "201"
+                  and piece["square"] == "money")
+    assert planet["pop"] == tile["money_pop"][0]
+    assert abs(planet["x"] - tile["money1_snap"][0] * 345 / 1024) < 0.2
+
+
+@pytest.mark.render
+def test_tile_preview_uses_the_engine_art(tmp_path):
+    from webui.render import render_tile_preview
+
+    path = render_tile_preview("314", 60, str(tmp_path))
+
+    assert path and path.endswith("314-60.webp")
+    with Image.open(path) as image:
+        assert image.size == (345, 300)
 
 
 def test_other_research_menu_drops_owned_and_unaffordable_techs(start_game, store, app):

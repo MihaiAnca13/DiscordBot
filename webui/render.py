@@ -83,6 +83,33 @@ def _map_image(gamestate):
     return context.crop((int(min_x), int(min_y), int(max_x), int(max_y)))
 
 
+def _tile_properties(sector):
+    with open(os.path.join("data", "sectors.json")) as data:
+        return json.load(data).get(sector)
+
+
+def render_tile_preview(sector, rotation, cache_dir):
+    """The engine's tile art at one offered rotation, for the on-board preview."""
+    rotation = int(rotation) % 360
+    properties = _tile_properties(sector)
+    if properties is None:
+        return None
+    folder = os.path.join(cache_dir, "tiles")
+    os.makedirs(folder, exist_ok=True)
+    target = os.path.join(folder, f"{sector}-{rotation}.webp")
+    if os.path.exists(target):
+        return target
+    image = DrawHelper({}).base_tile_image_with_rotation(
+        sector, rotation, properties.get("wormholes", []))
+    if properties.get("type") == "nebula":
+        image = image.rotate(rotation)
+    tile = image.resize((345, 300))
+    temporary = f"{target}.tmp"
+    tile.save(temporary, format="WEBP", quality=92, method=1)
+    os.replace(temporary, target)
+    return target
+
+
 def render_board(games_path, game_id, cache_dir, keep=3):
     """Return (path, key). Blocking: call it in a thread."""
     key = state_version(games_path, game_id)
@@ -115,4 +142,5 @@ def board_meta(games_path, game_id):
     for tile in geometry["tiles"]:
         tile["label"] = labels.get(tile["position"], tile["position"])
         tile["owner"] = gamestate["board"][tile["position"]].get("owner")
+        tile["orientation"] = gamestate["board"][tile["position"]].get("orientation", 0)
     return geometry

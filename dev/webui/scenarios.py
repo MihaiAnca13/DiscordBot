@@ -11,6 +11,8 @@ import asyncio
 import sys
 
 import discord
+from Buttons.DiscoveryTile import DiscoveryTileButtons
+from Buttons.Population import PopulationButtons
 from helpers.CombatHelper import Combat
 from webui.transport import WebInteraction
 
@@ -42,7 +44,11 @@ async def scenario_combat(game, store):
     game.add_tile("102", 0, "307")
     game.add_control("blue", "102")
     game.add_units(["blue-int"], "102")
+    game.add_units(["blue-cru"], "102")
+    game.add_units(["blue-drd"], "102")
     game.add_units(["red-int"], "102")
+    game.add_units(["red-cru"], "102")
+    game.add_units(["red-drd"], "102")
     game.noteUnitEntry("red", "102")
     interaction = WebInteraction(store, "aeb1", "1", members=members(game))
     await Combat.startCombatThreads(game, interaction)
@@ -51,6 +57,40 @@ async def scenario_combat(game, store):
 
 async def scenario_movement(game, store):
     connect_homes(game)
+
+
+async def scenario_movement_stack(game, store):
+    connect_homes(game)
+    game.add_units(["blue-int"], "201")
+
+
+async def scenario_influence(game, store):
+    """A neutral world with a blue ship: the influence menu can target it."""
+    game.add_tile("101", 0, "307")
+    game.add_units(["blue-int"], "101")
+
+
+async def scenario_population(game, store):
+    """An owned world with empty planet squares, and the engine's pop menu open."""
+    game.add_tile("101", 0, "307")
+    game.add_control("blue", "101")
+    interaction = WebInteraction(store, "aeb1", "1", members=members(game))
+    await PopulationButtons.startPopDrop(game, game.get_player(1), interaction)
+
+
+async def scenario_population_neutral(game, store):
+    """A grey planet: the engine then asks which cube type it should hold."""
+    game.add_tile("101", 0, "314")
+    game.add_control("blue", "101")
+    interaction = WebInteraction(store, "aeb1", "1", members=members(game))
+    await PopulationButtons.startPopDrop(game, game.get_player(1), interaction)
+
+
+async def scenario_discovery(game, store):
+    """The engine's own discovery choice, drawn from the centre tile's deck."""
+    interaction = WebInteraction(store, "aeb1", "1", members=members(game))
+    await DiscoveryTileButtons.exploreDiscoveryTile(game, "000", interaction, game.get_player(1))
+    await asyncio.sleep(0.5)  # the options are posted from a background task
 
 
 async def scenario_upkeep(game, store):
@@ -83,6 +123,11 @@ async def scenario_bankrupt(game, store):
 SCENARIOS = {
     "combat": scenario_combat,
     "movement": scenario_movement,
+    "movement-stack": scenario_movement_stack,
+    "influence": scenario_influence,
+    "population": scenario_population,
+    "population-neutral": scenario_population_neutral,
+    "discovery": scenario_discovery,
     "upkeep": scenario_upkeep,
     "scoring": scenario_scoring,
     "recovery": scenario_recovery,

@@ -63,26 +63,31 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
 | `POST /api/games/{id}/turn-menu?seat=` | recovery: re-post the start-of-turn buttons |
 | `POST /api/games/{id}/mirror` | web-only (`false`) vs cross-play (`true`); default true |
 | `GET /api/games/{id}/board.webp` | rendered map, cached by save-file version |
-| `GET /api/catalog` | tech and part facts/artwork for visual choices |
+| `GET /api/games/{id}/tile.webp?sector=&rot=` | one explored sector at an offered rotation, for the on-board preview |
+| `GET /api/catalog` | tech, part and discovery facts/artwork for visual choices |
 | `GET /api/media/{message_id}/{name}` | images the engine sent privately |
 | `/art/...` | read-only game artwork under `images/resources` |
 
 ## What the table does
 
 - **Board.** Map-only render with zoom, pan and fit. Placed sectors carry ship and
-  owner art; unexplored ring slots are drawn as dark hexes. Build, explore,
-  influence and movement targets become clickable hotspots. Movement also accepts
-  a drag of the ship token onto a destination, with the same hotspot click as the
-  touch/keyboard-safe alternative.
+  owner art; unexplored ring slots are drawn as dark hexes. The board is the choice
+  surface: ships are clickable tokens at their real snap points, unexplored slots
+  and legal destinations are marked worlds, empty planet squares are ghost targets
+  and the chosen explored tile previews in place. See
+  [dev/webui/INTERACTIONS.md](../dev/webui/INTERACTIONS.md).
 - **Player panels.** Resources, activations, income/upkeep, tech tracks, blueprint
-  slots with installed parts and public victory points, for every seat.
+  slots with installed parts and public victory points, for every seat. During an
+  Upgrade action the seat's own blueprint ship and slot are the click targets.
 - **Tech market and faction reference.** Market cards use the engine's artwork and
   the seat's discounted cost. The faction dialog shows the engine's faction board
   (rules reference) plus starting setup and ability names.
 - **Choices.** Pending prompts are fetched separately from history, so the 80-record
-  history cap can never hide an unresolved choice. Research and upgrade buttons are
-  drawn as tech/part cards; build, tile, population and movement choices get tile
-  chips and board hotspots. Finish/navigation buttons sit below the real choices.
+  history cap can never hide an unresolved choice. Research is chosen on the tech
+  market; upgrades on the blueprints; build units, replacement parts, discovery
+  cards and movement quantities are picture cards. Spatial choices carry a
+  collapsed "choose from a list" fallback for keyboard and screen-reader use.
+  Finish/navigation buttons sit below the real choices.
 - **Combat rooms.** Every battle keeps its own room name, orders and a collapsible
   battle log. An old combat overview stops offering a colour's roll once that
   colour has rolled.

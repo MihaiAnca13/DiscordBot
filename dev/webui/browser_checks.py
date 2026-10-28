@@ -98,9 +98,8 @@ def main():
         button = next(button for button in prompt["buttons"]
                       if button["custom_id"].startswith("FCIDblue_getTech_"))
         check("tech choices carry canonical ids", button["custom_id"].startswith("FCIDblue_getTech_"))
-        card = one.locator(
-            f'.prompt[data-message-id="{prompt["id"]}"] [data-custom="{button["custom_id"]}"]')
-        card.first.click()
+        tech_id = button["custom_id"].split("_getTech_")[1].split("_")[0]
+        one.locator(f'.tech-chip[data-tech="{tech_id}"]').first.click()
         one.wait_for_timeout(3000)
         bought = view("1")
         science_after_buy = bought["game"]["players"][0]["science"]

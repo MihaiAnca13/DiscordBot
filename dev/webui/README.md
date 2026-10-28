@@ -55,12 +55,33 @@ docker compose -f compose.webui.yaml up -d --wait webui
 docker compose -f compose.webui.yaml exec -T webui python -m dev.webui.playthrough combat
 ```
 
-`combat`, `movement`, `upkeep`, `scoring`, `bankrupt` and `recovery` are available.
+`combat`, `movement`, `movement-stack`, `influence`, `population`,
+`population-neutral`, `discovery`, `upkeep`, `scoring`, `bankrupt` and `recovery`
+are available.
 `python -m dev.webui.playthrough round|movement|full|combat` drives the prepared game
 through the live HTTP surface; `full` plays a pass-only game from round 1 to the final
 score screen. `python -m dev.webui.shot <url> <name>` saves desktop and narrow
 screenshots plus a JSON error report; `python -m dev.webui.smoke` is the minimal
 build-menu check.
+
+## Direct interaction checks
+
+Each flow clicks the visible object (ship, ring slot, planet square, blueprint, tech
+card, discovery card) and then asserts the engine's saved state changed. Prepare a
+flow's scenario first; the checks never fabricate an action, they press the buttons
+the engine offered.
+
+```sh
+docker compose -f compose.webui.yaml stop webui
+docker compose -f compose.webui.yaml run --rm webui python -m dev.webui.scenarios movement
+docker compose -f compose.webui.yaml up -d --wait webui
+docker compose -f compose.webui.yaml exec -T webui python -m dev.webui.direct_checks movement
+```
+
+Flows: `movement`, `movement-stack`, `explore`, `build`, `upgrade`, `influence`,
+`population`, `population-neutral`, `discovery`, `research`, `combat`. Use `seed`
+for the setup-less flows. `combat` drives both seats and needs a hit prompt; the
+check reports `skipped` when the rolled dice never offered a choice.
 
 ## Inspecting references
 

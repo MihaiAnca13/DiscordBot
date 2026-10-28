@@ -80,6 +80,7 @@ const state = {
   view: null,
   catalog: { techs: {}, parts: {} },
   boardVersion: null,
+  boardLoaded: false,
   boardMeta: null,
   zoom: 1,
   panX: 0,
@@ -94,6 +95,10 @@ const state = {
   factionPlayer: null,
   toastTimer: null,
   drag: null,
+  previewKey: null,
+  previewRotation: 0,
+  previewActions: [],
+  previewRotations: [],
 };
 
 // ------------------------------------------------------------------ helpers
@@ -183,32 +188,97 @@ function partButton(customId) {
   return null;
 }
 
-function tileAction(customId) {
+const SHIP_SHORT = {
+  interceptor: 'int', cruiser: 'cru', dreadnought: 'drd', dread: 'drd',
+  starbase: 'sb', orbital: 'orb', monolith: 'mon', int: 'int', cru: 'cru',
+  drd: 'drd', sb: 'sb', orb: 'orb', mon: 'mon',
+};
+
+function shipClass(name) {
+  return SHIP_SHORT[name] || name;
+}
+
+// A custom id that names a board object becomes part of the board, not a text
+// button. Everything else stays a normal choice in the dock. The engine still
+// owns legality: the object only carries the button it was offered.
+function objectAction(customId) {
   let match;
-  if ((match = customId.match(/_buildIn_(\d{3})/))) return { position: match[1], kind: 'build' };
-  if ((match = customId.match(/_exploreTile_(\d{3})/))) return { position: match[1], kind: 'explore' };
-  if ((match = customId.match(/_moveFrom_(\d{3})/))) return { position: match[1], kind: 'move' };
-  if ((match = customId.match(/_moveTo_\d{3}_([a-z]+)_(\d{3})/))) {
-    return { position: match[2], kind: 'move', to: true, ship: match[1] };
+  if ((match = customId.match(/_moveFrom_(\d{3})/))) {
+    return { kind: 'move-from', tile: match[1] };
   }
-  if ((match = customId.match(/_addInfluenceFinish_(\d{3})/))) {
-    return { position: match[1], kind: 'influence' };
+  if ((match = customId.match(/_moveThisShip_(\d{3})_([a-z]+)_/))) {
+    return { kind: 'move-ship', tile: match[1], ship: shipClass(match[2]) };
   }
-  if ((match = customId.match(/_removeInfluenceFinish_(\d{3})/))) {
-    return { position: match[1], kind: 'influence' };
+  if ((match = customId.match(/_moveTo_(\d{3})_([a-z]+)_(\d{3})/))) {
+    return { kind: 'move-dest', from: match[1], ship: shipClass(match[2]), tile: match[3] };
+  }
+  if ((match = customId.match(/_moveQueueContinue_(\d{3})_([a-z]+)_(\d{3})_/))) {
+    return { kind: 'move-dest', from: match[1], ship: shipClass(match[2]), tile: match[3],
+             queue: true };
+  }
+  if ((match = customId.match(/_moveQueue(?:Add|Reset|Done)_(\d{3})_([a-z]+)/))) {
+    return { kind: 'move-queue', tile: match[1], ship: shipClass(match[2]) };
+  }
+  if ((match = customId.match(/_exploreTile_(\d{3})/))) {
+    return { kind: 'explore', tile: match[1] };
+  }
+  if ((match = customId.match(/_placeTile_(\d{3})_([a-z0-9]+)_(\d+)/))) {
+    return { kind: 'explore-place', tile: match[1], sector: match[2], rotation: Number(match[3]) };
   }
   if ((match = customId.match(/_placeWarpPortal_(\d{3})/))) {
-    return { position: match[1], kind: 'explore' };
+    return { kind: 'explore', tile: match[1] };
   }
-  if ((match = customId.match(/_placeTile_(\d{3})/))) return { position: match[1], kind: 'explore' };
-  if ((match = customId.match(/_fillPopulation_(\d{3})/))) {
-    return { position: match[1], kind: 'population' };
+  if ((match = customId.match(/_addInfluenceFinish_(\d{3})/))) {
+    return { kind: 'influence-add', tile: match[1] };
   }
-  if ((match = customId.match(/_ancientsCube_[a-z]+_(\d{3})/))) {
-    return { position: match[1], kind: 'population' };
+  if ((match = customId.match(/_removeInfluenceFinish_(\d{3})/))) {
+    return { kind: 'influence-remove', tile: match[1] };
+  }
+  if ((match = customId.match(/_fillPopulation_(\d{3})_([a-z]+)_(\d+)(?:_([a-z]+))?/))) {
+    return { kind: 'population', tile: match[1], square: match[2], index: Number(match[3]),
+             cube: match[4] };
+  }
+  if ((match = customId.match(/_ancientsCube_([a-z]+)_(\d{3})/))) {
+    return { kind: 'population', tile: match[2], cube: match[1], disc: true };
+  }
+  if ((match = customId.match(/_buildIn_(\d{3})/))) {
+    return { kind: 'build-tile', tile: match[1] };
+  }
+  if ((match = customId.match(/_buildShip_([^_]+)_(\d+)_(\d{3})_([A-Za-z]+)/))) {
+    return { kind: 'build-unit', tile: match[3], ship: match[4], cost: Number(match[2]) };
+  }
+  if ((match = customId.match(/_upgradeShip_(\d+)_([a-z]+)_/))) {
+    return { kind: 'upgrade-ship', ship: shipClass(match[2]) };
+  }
+  if ((match = customId.match(/_selectOldPart_(\d+)_([a-z]+)_([a-z0-9]+)_([^_]+)_(\d+)/))) {
+    return { kind: 'upgrade-slot', ship: shipClass(match[2]), slot: Number(match[5]) };
+  }
+  if ((match = customId.match(/_assignHitTo_(\d{3})_([a-z]+)_([a-z0-9-]+)_(\d+)_(\d+)/))) {
+    return { kind: 'combat-hit', tile: match[1], unit: match[3] };
+  }
+  if ((match = customId.match(/_removeThisUnit_(\d{3})_([a-z0-9-]+)/))) {
+    return { kind: 'combat-remove', tile: match[1], unit: match[2] };
+  }
+  if ((match = customId.match(/_rollDice_(\d{3})_/))) {
+    return { kind: 'combat-roll', tile: match[1] };
+  }
+  if ((match = customId.match(/_ghostsRetreatTo_(\d{3})_/))) {
+    return { kind: 'retreat', tile: match[1] };
+  }
+  if ((match = customId.match(/_phaseBombing_(\d{3})_/))) {
+    return { kind: 'combat-roll', tile: match[1] };
   }
   return null;
 }
+
+const DISCOVERY_RE = /_(usedDiscForAbility|selectDiscTile)_([a-z0-9]+)_(\d{3})/;
+
+function discoveryChoice(customId) {
+  const match = customId.match(DISCOVERY_RE);
+  if (!match) return null;
+  return { action: match[1], disc: match[2], tile: match[3] };
+}
+
 
 // --------------------------------------------------------------------- board
 function fitBoard() {
@@ -225,6 +295,9 @@ function fitBoard() {
 function applyTransform() {
   el.stage.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
   el.stage.style.setProperty('--inv', String(1 / state.zoom));
+  // Labels and hit rings keep a usable screen size when the whole map is fitted.
+  el.stage.style.setProperty('--ui', String(Math.min(3, 1 / state.zoom)));
+  el.stage.style.setProperty('--ui-piece', String(Math.min(1.8, 1 / state.zoom)));
 }
 
 function zoomAt(factor, clientX, clientY) {
@@ -242,7 +315,8 @@ function zoomAt(factor, clientX, clientY) {
 function bindBoardPan() {
   let panning = null;
   el.viewport.addEventListener('pointerdown', (event) => {
-    if (event.target.closest('.drag-token') || event.target.closest('.hotspot')) return;
+    if (event.target.closest('.drag-token') || event.target.closest('.hotspot')
+        || event.target.closest('.piece') || event.target.closest('.tile-preview')) return;
     panning = { x: event.clientX, y: event.clientY, panX: state.panX, panY: state.panY };
     el.viewport.classList.add('grabbing');
     el.viewport.setPointerCapture(event.pointerId);
@@ -265,27 +339,68 @@ function bindBoardPan() {
   document.getElementById('zoom-fit').addEventListener('click', fitBoard);
 }
 
-function boardActions(view) {
+const PIECE_COLORS = {
+  blue: '#6cb8ff', red: '#ff7b7b', green: '#6fd39a', yellow: '#f0c96b',
+  purple: '#c48ef0', black: '#c9d3df', white: '#ffffff', ai: '#ff9d5c',
+};
+
+const TILE_PRIORITY = ['explore', 'influence-add', 'influence-remove', 'build-tile',
+  'move-dest', 'retreat', 'combat-roll', 'population'];
+
+const OBJECT_LABEL = {
+  explore: (tile) => (tile.empty ? `Explore ${tile.position}` : `Explore ${tile.label}`),
+  'influence-add': () => 'Place influence disc',
+  'influence-remove': () => 'Remove influence disc',
+  'build-tile': () => 'Build here',
+  'move-dest': () => 'Move here',
+  retreat: () => 'Retreat here',
+  'combat-roll': () => 'Roll dice here',
+  population: () => 'Place population',
+};
+
+function spatialActions(view) {
   const actions = [];
   const seen = new Set();
   for (const message of view.pending || []) {
     for (const button of message.buttons || []) {
-      const target = tileAction(button.custom_id || '');
-      if (!target) continue;
-      const key = `${target.position}:${target.kind}:${button.custom_id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      const customId = button.custom_id || '';
+      const target = objectAction(customId);
+      if (!target || seen.has(customId)) continue;
+      seen.add(customId);
       actions.push({ ...target, button, message });
     }
   }
   return actions;
 }
 
+function pieceIndex(view) {
+  const index = new Map();
+  for (const piece of view.pieces || []) {
+    if (!index.has(piece.position)) index.set(piece.position, []);
+    index.get(piece.position).push(piece);
+  }
+  return index;
+}
+
+function tileLabel(tile) {
+  return tile.empty ? `unexplored ${tile.position}` : tile.label || tile.position;
+}
+
+function pressNode(node, action) {
+  node.dataset.position = action.tile || '';
+  node.dataset.customId = action.button.custom_id;
+  node.dataset.messageId = action.message.id;
+  node.addEventListener('click', (event) => {
+    event.stopPropagation();
+    press(action.message.id, action.button.custom_id, node);
+  });
+}
+
 function renderOverlay(view) {
   const meta = state.boardMeta;
   el.overlay.replaceChildren();
   if (!meta || !meta.tiles) return;
-  const byPosition = new Map(meta.tiles.map((tile) => [tile.position, tile]));
+  const tiles = new Map(meta.tiles.map((tile) => [tile.position, tile]));
   // Unexplored ring slots: the board's shape stays readable between real tiles.
   for (const tile of meta.tiles) {
     if (!tile.empty) continue;
@@ -298,56 +413,240 @@ function renderOverlay(view) {
     slot.title = `Unexplored position ${tile.position}`;
     el.overlay.appendChild(slot);
   }
-  const actions = boardActions(view);
-  const byTile = new Map();
+
+  const actions = spatialActions(view);
+  const pieces = pieceIndex(view);
+
+  // A button that names a ship or a planet square lands on that exact object;
+  // everything else lands on the whole world.
+  const tileActions = new Map();
+  const targetKeys = new Set();
+  const shipTargets = [];
   for (const action of actions) {
-    if (!byTile.has(action.position)) byTile.set(action.position, []);
-    byTile.get(action.position).push(action);
+    const candidates = pieces.get(action.tile) || [];
+    if (action.kind === 'move-ship') {
+      const ship = candidates.find((piece) => piece.kind === 'ship' && piece.class === action.ship);
+      if (ship) { shipTargets.push({ piece: ship, action }); continue; }
+    }
+    if (action.kind === 'combat-hit' || action.kind === 'combat-remove') {
+      const key = `${action.kind}:${action.tile}:${action.unit}`;
+      const ship = candidates.find((piece) => piece.kind === 'ship' && piece.name === action.unit);
+      if (ship && !targetKeys.has(key)) {
+        targetKeys.add(key);
+        shipTargets.push({ piece: ship, action });
+        continue;
+      }
+    }
+    if (action.kind === 'population' && action.square && !action.cube) {
+      const planet = candidates.find((piece) => piece.kind === 'planet'
+        && piece.square === action.square && piece.index === action.index);
+      if (planet) { shipTargets.push({ piece: planet, action }); continue; }
+    }
+    if (action.kind === 'move-from') {
+      // Any ship in the system selects that system; the engine then asks which type.
+      const ships = candidates.filter((piece) => piece.kind === 'ship' && piece.color !== 'ai');
+      if (ships.length) {
+        ships.forEach((piece) => shipTargets.push({ piece, action }));
+        continue;
+      }
+    }
+    // Choices drawn as their own control (unit cards, quantity, blueprints) or as
+    // the tile preview must not also become a world hotspot.
+    if (['move-queue', 'build-unit', 'upgrade-ship', 'upgrade-slot', 'explore-place',
+      'combat-roll', 'combat-hit', 'combat-remove'].includes(action.kind)
+        || (action.kind === 'population' && action.cube)) {
+      continue;
+    }
+    if (!tileActions.has(action.tile)) tileActions.set(action.tile, []);
+    tileActions.get(action.tile).push(action);
   }
-  for (const [position, choices] of byTile) {
-    const tile = byPosition.get(position);
+
+  for (const [position, choices] of tileActions) {
+    const tile = tiles.get(position);
     if (!tile) continue;
-    // Several buttons on one world (tile rotations, resource types) need their
-    // labels: a single hotspot would silently choose one of them.
-    if (choices.length > 1) continue;
-    const action = choices[0];
+    const action = choices.sort((left, right) =>
+      TILE_PRIORITY.indexOf(left.kind) - TILE_PRIORITY.indexOf(right.kind))[0];
     const hotspot = document.createElement('button');
     hotspot.type = 'button';
     hotspot.className = `hotspot ${action.kind}${tile.empty ? ' empty' : ''}`;
-    hotspot.dataset.position = position;
-    hotspot.dataset.customId = action.button.custom_id;
-    hotspot.dataset.messageId = action.message.id;
-    hotspot.title = `${tile.label}: ${action.button.label || action.kind}`;
+    hotspot.title = `${tileLabel(tile)}: ${action.button.label || action.kind}`;
+    hotspot.setAttribute('aria-label', `${tileLabel(tile)}: ${OBJECT_LABEL[action.kind]?.(tile) || action.kind}`);
     hotspot.style.left = `${tile.x + 36}px`;
     hotspot.style.top = `${tile.y + 28}px`;
     hotspot.style.width = '273px';
     hotspot.style.height = '244px';
     const tag = document.createElement('span');
     tag.className = 'tag';
-    tag.textContent = tile.empty
-      ? `? ${position}`
-      : action.kind === 'move' && action.to
-        ? `Move → ${action.button.label || position}`
-        : `${action.kind} ${tile.label}`;
+    tag.textContent = OBJECT_LABEL[action.kind]?.(tile) || action.button.label || action.kind;
     hotspot.appendChild(tag);
-    hotspot.addEventListener('click', (event) => {
-      event.stopPropagation();
-      press(action.message.id, action.button.custom_id, hotspot);
-    });
+    pressNode(hotspot, action);
     el.overlay.appendChild(hotspot);
   }
-  // Drag a ship from its origin onto a legal destination; clicking works the same.
-  const destinations = actions.filter((action) => action.kind === 'move' && action.to);
+
+  // A chosen build system keeps a marker while its unit tray is open.
+  for (const position of new Set(actions.filter((action) => action.kind === 'build-unit')
+    .map((action) => action.tile))) {
+    const tile = tiles.get(position);
+    if (!tile) continue;
+    const marker = document.createElement('div');
+    marker.className = 'hotspot building';
+    marker.style.left = `${tile.x + 36}px`;
+    marker.style.top = `${tile.y + 28}px`;
+    marker.style.width = '273px';
+    marker.style.height = '244px';
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = `Building in ${tile.label || position}`;
+    marker.appendChild(tag);
+    el.overlay.appendChild(marker);
+  }
+  for (const position of new Set(actions.filter((action) => action.kind === 'combat-roll')
+    .map((action) => action.tile))) {
+    const tile = tiles.get(position);
+    if (!tile) continue;
+    const marker = document.createElement('div');
+    marker.className = 'hotspot battle';
+    marker.style.left = `${tile.x + 36}px`;
+    marker.style.top = `${tile.y + 28}px`;
+    marker.style.width = '273px';
+    marker.style.height = '244px';
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = `Battle in ${tile.label || position}`;
+    marker.appendChild(tag);
+    el.overlay.appendChild(marker);
+  }
+
+  for (const { piece, action } of shipTargets) {
+    const tile = tiles.get(piece.tile);
+    if (!tile) continue;
+    const size = piece.kind === 'planet' ? 46 : 56;
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = `piece ${piece.kind} ${action.kind} ${piece.color || ''}`;
+    node.style.left = `${tile.x + piece.x - size / 2}px`;
+    node.style.top = `${tile.y + piece.y - size / 2}px`;
+    node.style.width = `${size}px`;
+    node.style.height = `${size}px`;
+    node.style.setProperty('--ring', PIECE_COLORS[piece.color] || '#8fd8ff');
+    const what = piece.kind === 'ship'
+      ? `${piece.color} ${piece.class} in ${tileLabel(tile)}`
+      : `${piece.square} square in ${tileLabel(tile)}`;
+    node.title = `${what}: ${action.button.label || action.kind}`;
+    node.setAttribute('aria-label', `${what}: ${OBJECT_LABEL[action.kind]?.() || action.button.label}`);
+    const glyph = document.createElement('span');
+    glyph.className = 'glyph';
+    glyph.textContent = piece.kind === 'ship'
+      ? (piece.class === 'int' ? '▲' : piece.class === 'cru' ? '◆' : piece.class === 'drd' ? '■' : '✚')
+      : { money: '◉', science: '◈', material: '▣', neutral: '◇', orbital: '⬡' }[piece.square] || '◇';
+    node.appendChild(glyph);
+    const marks = { population: 'Pop', 'move-from': 'From', 'move-ship': 'Move',
+      'combat-hit': 'Hit', 'combat-remove': 'Remove' };
+    if (marks[action.kind]) {
+      const tag = document.createElement('span');
+      tag.className = 'tag';
+      tag.textContent = marks[action.kind];
+      node.appendChild(tag);
+    }
+    if (piece.count > 1) {
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = String(piece.count);
+      node.appendChild(count);
+    }
+    pressNode(node, action);
+    el.overlay.appendChild(node);
+  }
+
+  renderTilePreview(actions, tiles);
+  renderDragToken(actions, tiles, pieces);
+}
+
+function previewOptions(actions) {
+  return actions.filter((action) => action.kind === 'explore-place')
+    .sort((left, right) => left.rotation - right.rotation);
+}
+
+function renderTilePreview(actions, tiles) {
+  const places = previewOptions(actions);
+  if (!places.length) {
+    state.previewKey = null;
+    state.previewActions = [];
+    state.previewRotations = [];
+    return;
+  }
+  const key = `${places[0].tile}:${places[0].sector}`;
+  const rotations = [...new Set(places.map((action) => action.rotation))];
+  if (state.previewKey !== key || !rotations.includes(state.previewRotation)) {
+    state.previewKey = key;
+    state.previewRotation = rotations[0];
+  }
+  state.previewActions = places;
+  state.previewRotations = rotations;
+  const tile = tiles.get(places[0].tile);
+  if (!tile) return;
+  const preview = document.createElement('button');
+  preview.type = 'button';
+  preview.className = 'tile-preview';
+  preview.style.left = `${tile.x}px`;
+  preview.style.top = `${tile.y}px`;
+  preview.style.width = '345px';
+  preview.style.height = '300px';
+  preview.title = 'Rotate this sector, then place it';
+  preview.setAttribute('aria-label', 'Explored sector preview; activate to rotate');
+  preview.addEventListener('click', (event) => {
+    event.stopPropagation();
+    rotatePreview(1);
+  });
+  const image = document.createElement('img');
+  image.src = `/api/games/${encodeURIComponent(state.gameId)}/tile.webp`
+    + `?sector=${encodeURIComponent(places[0].sector)}&rot=${state.previewRotation}`;
+  image.alt = `Explored sector, rotation ${state.previewRotation} degrees`;
+  image.draggable = false;
+  preview.appendChild(image);
+  const tag = document.createElement('span');
+  tag.className = 'tag';
+  tag.textContent = rotations.length > 1
+    ? `⟳ ${state.previewRotation}° · click to rotate`
+    : `${state.previewRotation}° · ready to place`;
+  preview.appendChild(tag);
+  el.overlay.appendChild(preview);
+}
+
+function rotatePreview(direction) {
+  if (!state.previewRotations || !state.previewRotations.length) return;
+  const index = state.previewRotations.indexOf(state.previewRotation);
+  const next = (index + direction + state.previewRotations.length) % state.previewRotations.length;
+  state.previewRotation = state.previewRotations[next];
+  document.querySelectorAll('.preview-tools .stack-row b').forEach((node) => {
+    node.textContent = `${state.previewRotation}°`;
+  });
+  if (state.view) renderOverlay(state.view);
+}
+
+function placePreview() {
+  const action = state.previewActions?.find((entry) => entry.rotation === state.previewRotation);
+  if (action) press(action.message.id, action.button.custom_id, null);
+}
+
+function renderDragToken(actions, tiles, pieces) {
+  const destinations = actions.filter((action) => action.kind === 'move-dest');
   if (!destinations.length) return;
-  const origin = destinations[0].button.custom_id.match(/_moveTo_(\d{3})/)[1];
-  const originTile = byPosition.get(origin);
-  if (!originTile) return;
+  const origin = destinations[0].from;
+  const tile = tiles.get(origin);
+  if (!tile) return;
+  const ship = (pieces.get(origin) || []).find((piece) =>
+    piece.kind === 'ship' && piece.class === destinations[0].ship);
+  const x = ship ? ship.x : 172;
+  const y = ship ? ship.y : 150;
   const token = document.createElement('div');
   token.className = 'drag-token';
-  token.style.left = `${originTile.x + 172}px`;
-  token.style.top = `${originTile.y + 150}px`;
-  token.textContent = `⇢ ${destinations[0].ship}`;
-  token.title = 'Drag onto a highlighted destination, or click the destination.';
+  token.style.left = `${tile.x + x - 34}px`;
+  token.style.top = `${tile.y + y - 34}px`;
+  token.style.width = '68px';
+  token.style.height = '68px';
+  token.textContent = '✥';
+  token.title = `Drag this ${destinations[0].ship} onto a highlighted destination, or click one.`;
   el.overlay.appendChild(token);
   bindDragToken(token, destinations);
 }
@@ -356,9 +655,8 @@ function bindDragToken(token, destinations) {
   let start = null;
   token.addEventListener('pointerdown', (event) => {
     event.stopPropagation();
-    const rect = el.viewport.getBoundingClientRect();
     start = { x: event.clientX, y: event.clientY, left: token.offsetLeft, top: token.offsetTop,
-              rect, moved: false };
+              moved: false };
     token.setPointerCapture(event.pointerId);
   });
   token.addEventListener('pointermove', (event) => {
@@ -368,13 +666,13 @@ function bindDragToken(token, destinations) {
     start.moved = start.moved || Math.abs(dx) + Math.abs(dy) > 3;
     token.style.left = `${start.left + dx}px`;
     token.style.top = `${start.top + dy}px`;
-    const target = hotspotAt(event.clientX, event.clientY);
+    const target = hotspotAt(event.clientX, event.clientY, '.hotspot.move-dest');
     document.querySelectorAll('.hotspot.drop-target').forEach((node) => node.classList.remove('drop-target'));
     if (target) target.classList.add('drop-target');
   });
   token.addEventListener('pointerup', (event) => {
     if (!start) return;
-    const target = hotspotAt(event.clientX, event.clientY);
+    const target = hotspotAt(event.clientX, event.clientY, '.hotspot.move-dest');
     token.style.left = `${start.left}px`;
     token.style.top = `${start.top}px`;
     document.querySelectorAll('.hotspot.drop-target').forEach((node) => node.classList.remove('drop-target'));
@@ -392,14 +690,14 @@ function bindDragToken(token, destinations) {
   });
 }
 
-function hotspotAt(clientX, clientY) {
+function hotspotAt(clientX, clientY, selector = '.hotspot') {
   const rect = el.viewport.getBoundingClientRect();
   if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
     return null;
   }
   const x = (clientX - rect.left - state.panX) / state.zoom;
   const y = (clientY - rect.top - state.panY) / state.zoom;
-  return [...document.querySelectorAll('.hotspot')].find((node) =>
+  return [...document.querySelectorAll(selector)].find((node) =>
     x >= parseFloat(node.style.left) && x <= parseFloat(node.style.left) + parseFloat(node.style.width)
     && y >= parseFloat(node.style.top) && y <= parseFloat(node.style.top) + parseFloat(node.style.height)) || null;
 }
@@ -416,9 +714,10 @@ function renderBoard(view) {
     el.board.height = view.board_meta.height;
     el.board.style.width = `${view.board_meta.width}px`;
     el.board.style.height = `${view.board_meta.height}px`;
-    el.boardEmpty.classList.toggle('hidden', !!el.board.naturalWidth);
+    el.boardEmpty.classList.toggle('hidden', state.boardLoaded || !!el.board.naturalWidth);
     el.boardNote.textContent = 'rendering…';
     el.board.onload = () => {
+      state.boardLoaded = true;
       el.boardEmpty.classList.add('hidden');
       el.boardNote.textContent = '';
       if (state.fitPending) { state.fitPending = false; fitBoard(); }
@@ -429,6 +728,7 @@ function renderBoard(view) {
     };
     el.board.src = view.board;
     if (el.board.complete && el.board.naturalWidth) {
+      state.boardLoaded = true;
       el.boardEmpty.classList.add('hidden');
       el.boardNote.textContent = '';
       if (state.fitPending) { state.fitPending = false; fitBoard(); }
@@ -452,10 +752,14 @@ function renderMarket(view) {
   }
   if (!offers.length) {
     el.market.replaceChildren();
+    el.market.classList.remove('choosing');
     el.marketNote.textContent = 'empty';
     return;
   }
   el.marketNote.textContent = view.you ? 'cost for you' : 'base costs';
+  const choosing = offers.some((offer) => actionable.has(offer.id));
+  el.market.classList.toggle('choosing', choosing);
+  if (choosing) el.marketNote.textContent = 'pick a highlighted tech';
   const byTrack = new Map();
   for (const offer of offers) {
     const track = offer.track || 'any';
@@ -512,12 +816,35 @@ function techTracksHtml(player) {
   return rows.join('');
 }
 
-function blueprintHtml(blueprint) {
+function upgradeTargets(view) {
+  const ships = new Map();
+  const slots = new Map();
+  for (const message of view.pending || []) {
+    for (const button of message.buttons || []) {
+      const target = objectAction(button.custom_id || '');
+      if (!target) continue;
+      if (target.kind === 'upgrade-ship') ships.set(target.ship, { button, message });
+      if (target.kind === 'upgrade-slot') {
+        slots.set(`${target.ship}:${target.slot}`, { button, message });
+      }
+    }
+  }
+  return { ships, slots };
+}
+
+function blueprintHtml(blueprint, targets) {
+  const cls = shipClass(blueprint.ship);
+  const shipTarget = targets?.ships.get(cls);
   const slots = blueprint.slots.map((slot) => {
     const part = slot.part || {};
-    if (!part.id || part.id === 'empty') return '<span class="slot-empty"></span>';
-    return `<span class="slot-img" title="${escapeHtml(part.name || part.id)}">${
-      part.image ? `<img src="${part.image}" alt="${escapeHtml(part.name || part.id)}" loading="lazy">` : ''}</span>`;
+    const target = targets?.slots.get(`${cls}:${slot.index}`);
+    const art = !part.id || part.id === 'empty' ? '<span class="slot-empty"></span>'
+      : `<span class="slot-img" title="${escapeHtml(part.name || part.id)}">${
+        part.image ? `<img src="${part.image}" alt="${escapeHtml(part.name || part.id)}" loading="lazy">` : ''}</span>`;
+    if (!target) return art;
+    return `<button type="button" class="slot target" data-custom="${escapeHtml(target.button.custom_id)}"
+      data-message="${target.message.id}" title="Replace ${escapeHtml(part.name || 'this part')}">
+      ${art}<span class="slot-mark">×</span></button>`;
   }).join('');
   const stats = blueprint.stats || {};
   const bits = [
@@ -527,7 +854,9 @@ function blueprintHtml(blueprint) {
     stats.computer !== undefined ? `C${stats.computer}` : null,
     stats.hull !== undefined ? `H${stats.hull}` : null,
   ].filter(Boolean).map((text) => `<span>${text}</span>`).join('');
-  return `<div class="ship-mini">
+  return `<div class="ship-mini${shipTarget ? ' target' : ''}"
+    ${shipTarget ? `data-custom="${escapeHtml(shipTarget.button.custom_id)}" data-message="${shipTarget.message.id}"` : ''}
+    ${shipTarget ? 'title="Upgrade this blueprint"' : ''}>
     <div class="ship-mini-head"><b>${escapeHtml(blueprint.ship)}</b><span>${
       stats.cost !== undefined ? stats.cost : ''}</span></div>
     <div class="slots">${slots}</div>
@@ -535,7 +864,7 @@ function blueprintHtml(blueprint) {
   </div>`;
 }
 
-function playerHtml(player) {
+function playerHtml(player, targets) {
   const actions = player.actions || {};
   const actionRows = ['build', 'move', 'research', 'upgrade', 'explore', 'influence'].map((key) =>
     `<span class="action-chip ${actions[key] ? 'on' : 'zero'}" title="${key}">
@@ -587,7 +916,8 @@ function playerHtml(player) {
       </div>
       <div>
         <div class="panel-label">Blueprints</div>
-        <div class="blueprints">${(player.blueprints || []).map(blueprintHtml).join('')}</div>
+        <div class="blueprints">${(player.blueprints || []).map((blueprint) =>
+          blueprintHtml(blueprint, player.is_you ? targets : null)).join('')}</div>
       </div>
     </div>
     ${rep ? `<div class="reputation">${rep}</div>` : ''}
@@ -597,8 +927,15 @@ function playerHtml(player) {
 
 function renderPlayers(view) {
   const players = view.game.players || [];
-  el.players.innerHTML = players.map(playerHtml).join('');
+  const targets = upgradeTargets(view);
+  el.players.innerHTML = players.map((player) => playerHtml(player, targets)).join('');
   el.playersNote.textContent = `${players.length} seats`;
+  [...el.players.querySelectorAll('[data-custom]')].forEach((node) => {
+    node.addEventListener('click', (event) => {
+      event.stopPropagation();
+      press(Number(node.dataset.message), node.dataset.custom, node);
+    });
+  });
   [...el.players.querySelectorAll('.player')].forEach((node, index) => {
     const head = node.querySelector('.player-head');
     head.title = 'Open faction reference';
@@ -611,11 +948,19 @@ function renderPlayers(view) {
 }
 
 // ---------------------------------------------------------------------- dock
+const FREE_TECH_RE = /_getFreeTech_([a-z0-9]+)(?:_(military|grid|nano))?$/;
+
+function freeTechChoice(customId) {
+  const match = customId.match(FREE_TECH_RE);
+  if (!match) return null;
+  return { tech: match[1], track: match[2] || 'any' };
+}
+
 function techChoices(message, choices) {
   const techs = [];
   const other = [];
   for (const button of message.buttons || []) {
-    const target = techButton(button.custom_id || '');
+    const target = techButton(button.custom_id || '') || freeTechChoice(button.custom_id || '');
     if (!target) { other.push(button); continue; }
     techs.push({ button, target });
   }
@@ -652,8 +997,8 @@ function partChoices(message) {
     if (!target) { other.push(button); continue; }
     count += 1;
     if (target.kind === 'ship') {
-      if (!groups.has('Upgrade which ship')) groups.set('Upgrade which ship', []);
-      groups.get('Upgrade which ship').push({ button, target });
+      // The ship itself is the target: it is the blueprint in the player panel.
+      other.push(button);
       continue;
     }
     const part = state.catalog.parts?.[target.part] || { name: target.part, image: null };
@@ -663,6 +1008,7 @@ function partChoices(message) {
     groups.get(target.ship).push({ button, target, part, title });
   }
   if (!count) return null;
+  if (!groups.size) return null;
   const sections = [];
   for (const [group, entries] of groups) {
     const cards = entries.map(({ button, target, part, title }) => {
@@ -721,6 +1067,240 @@ function genericChoices(buttons, message) {
   return wrap;
 }
 
+// ------------------------------------------------------------- direct choices
+function boardPromptHint(buttons, message) {
+  const wrap = document.createElement('div');
+  wrap.className = 'object-hint';
+  const label = document.createElement('span');
+  label.className = 'hint-label';
+  label.textContent = 'Pick it on the board';
+  wrap.appendChild(label);
+  const details = document.createElement('details');
+  details.className = 'choice-fallback';
+  details.innerHTML = '<summary>Or choose from a list</summary>';
+  details.appendChild(genericChoices(buttons, message));
+  wrap.appendChild(details);
+  return wrap;
+}
+
+function researchPrompt(html, message) {
+  const wrap = document.createElement('div');
+  wrap.className = 'object-hint';
+  const label = document.createElement('span');
+  label.className = 'hint-label';
+  label.textContent = 'Choose a technology in the tech market';
+  wrap.appendChild(label);
+  const details = document.createElement('details');
+  details.className = 'choice-fallback';
+  details.innerHTML = '<summary>Or choose from a list</summary>';
+  const holder = document.createElement('div');
+  holder.innerHTML = html;
+  details.appendChild(holder);
+  details.addEventListener('click', (event) => {
+    const node = event.target.closest('[data-custom]');
+    if (!node) return;
+    press(message.id, node.dataset.custom, node);
+  });
+  wrap.appendChild(details);
+  return wrap;
+}
+
+function upgradePrompt(buttons, message, text) {
+  const wrap = document.createElement('div');
+  wrap.className = 'object-hint';
+  const label = document.createElement('span');
+  label.className = 'hint-label';
+  label.textContent = text;
+  wrap.appendChild(label);
+  const details = document.createElement('details');
+  details.className = 'choice-fallback';
+  details.innerHTML = '<summary>Or choose from a list</summary>';
+  details.appendChild(genericChoices(buttons, message));
+  wrap.appendChild(details);
+  return wrap;
+}
+
+const BUILD_ART = { Interceptor: 'int', Cruiser: 'cru', Dreadnought: 'drd',
+  Starbase: 'sb', Orbital: 'orb', Monolith: 'mon' };
+const SHIP_NAMES = { int: 'interceptor', cru: 'cruiser', drd: 'dreadnought',
+  sb: 'starbase', orb: 'orbital', mon: 'monolith' };
+
+function labelFor(position) {
+  const tile = (state.boardMeta?.tiles || []).find((row) => row.position === position);
+  return tile && !tile.empty ? (tile.label || position) : position;
+}
+
+function buildPanel(entries, message) {
+  const wrap = document.createElement('div');
+  wrap.className = 'build-tray';
+  const tile = entries[0].target.tile;
+  const materials = state.view?.you?.materials;
+  const total = Number(((message.content || '').match(/Total cost so far of (\d+)/) || [])[1] || 0);
+  const head = document.createElement('div');
+  head.className = 'tray-head';
+  const left = materials === undefined ? '' : (materials - total) >= 0
+    ? ` · <span class="materials">${materials - total} materials left</span>`
+    : ` · <span class="materials short">${total - materials} more material${total - materials === 1 ? '' : 's'} needed</span>`;
+  head.innerHTML = `Building in <b>${escapeHtml(labelFor(tile))}</b>${left}`;
+  wrap.appendChild(head);
+  const cards = document.createElement('div');
+  cards.className = 'build-cards';
+  const color = state.view?.you?.color || '';
+  for (const entry of entries) {
+    const target = entry.target;
+    const cost = Number(((entry.button.label || '').match(/\((\d+)\)/) || [])[1]);
+    const short = BUILD_ART[target.ship] || target.ship.toLowerCase();
+    const art = `/art/components/basic_ships/${['orb', 'mon'].includes(short) ? short : `${color}-${short}`}.png`;
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'build-card';
+    card.title = (entry.button.label || target.ship)
+      + (materials !== undefined && (materials - total) < cost
+        ? ' — costs more than your materials; trade at the spend step' : '');
+    card.classList.toggle('short', materials !== undefined && (materials - total) < cost);
+    card.innerHTML = `<img src="${art}" alt="" loading="lazy">
+      <span class="name">${escapeHtml(target.ship)}</span>
+      <span class="cost">◉ ${Number.isNaN(cost) ? '?' : cost}</span>`;
+    card.addEventListener('click', () => press(message.id, entry.button.custom_id, card));
+    cards.appendChild(card);
+  }
+  wrap.appendChild(cards);
+  return wrap;
+}
+
+function stackPanel(entries, message) {
+  const wrap = document.createElement('div');
+  wrap.className = 'stack-choice';
+  const add = entries.find((entry) => /_moveQueueAdd_/.test(entry.button.custom_id));
+  const reset = entries.find((entry) => /_moveQueueReset_/.test(entry.button.custom_id));
+  const done = entries.find((entry) => /_moveQueueDone_/.test(entry.button.custom_id));
+  if (!add || !done) return null;
+  const selected = Number(((done.button.label || '').match(/(\d+)/) || [])[1] || 1);
+  const counts = (add.button.label || '').match(/(\d+)\/(\d+)/) || [];
+  const max = counts.length ? Number(counts[2]) : selected;
+  const head = document.createElement('div');
+  head.className = 'tray-head';
+  head.innerHTML = `Moving <b>${selected}</b> of up to ${max} ${escapeHtml(
+    SHIP_NAMES[(objectAction(done.button.custom_id) || {}).ship] || 'ships')}`
+    + ` from <b>${escapeHtml((objectAction(done.button.custom_id) || {}).tile || '')}</b>`;
+  wrap.appendChild(head);
+  const row = document.createElement('div');
+  row.className = 'stack-row';
+  const minus = document.createElement('button');
+  minus.type = 'button';
+  minus.className = 'choice';
+  minus.textContent = 'Reset';
+  minus.title = 'Start the selection again';
+  minus.disabled = selected <= 1;
+  minus.addEventListener('click', () => press(message.id, reset.button.custom_id, minus));
+  const count = document.createElement('b');
+  count.textContent = String(selected);
+  const plus = document.createElement('button');
+  plus.type = 'button';
+  plus.className = 'icon';
+  plus.textContent = '+';
+  plus.title = 'Add another ship to this move';
+  plus.disabled = selected >= max || add.button.disabled;
+  plus.addEventListener('click', () => press(message.id, add.button.custom_id, plus));
+  const move = document.createElement('button');
+  move.type = 'button';
+  move.className = 'choice s3';
+  move.textContent = `Move ${selected}`;
+  move.addEventListener('click', () => press(message.id, done.button.custom_id, move));
+  row.append(minus, count, plus, move);
+  wrap.appendChild(row);
+  return wrap;
+}
+
+function discoveryPanel(entries, keep, message) {
+  const wrap = document.createElement('div');
+  wrap.className = 'discovery-card';
+  if (entries.length > 1 && entries.every((entry) => entry.action === 'selectDiscTile')) {
+    // Two drawn tiles: each is its own card, with its own art.
+    const grid = document.createElement('div');
+    grid.className = 'discovery-choices';
+    for (const entry of entries) {
+      const info = state.catalog.discoveries?.[entry.disc];
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'discovery-choice';
+      card.innerHTML = `${info?.image ? `<img src="${info.image}" alt="${escapeHtml(info.name)}">` : ''}
+        <span>${escapeHtml(info?.name || entry.disc)}</span>`;
+      card.addEventListener('click', () => press(message.id, entry.button.custom_id, card));
+      grid.appendChild(card);
+    }
+    wrap.appendChild(grid);
+    return wrap;
+  }
+  const source = entries[0]?.disc ? state.catalog.discoveries?.[entries[0].disc] : null;
+  const image = source?.image || (message.attachments || [])[0]?.url;
+  if (image) {
+    const art = document.createElement('img');
+    art.src = image;
+    art.alt = source?.name || 'Discovery tile';
+    wrap.appendChild(art);
+  }
+  const body = document.createElement('div');
+  body.className = 'discovery-body';
+  if (source?.name) body.innerHTML = `<b>${escapeHtml(source.name)}</b>`;
+  for (const entry of entries) {
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = 'choice s3';
+    node.textContent = 'Use it for its ability';
+    node.addEventListener('click', () => press(message.id, entry.button.custom_id, node));
+    body.appendChild(node);
+  }
+  if (keep) {
+    const node = document.createElement('button');
+    node.type = 'button';
+    node.className = 'choice';
+    node.textContent = 'Keep it for 2 points';
+    node.addEventListener('click', () => press(message.id, keep.custom_id, node));
+    body.appendChild(node);
+  }
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function previewPanel(entries, message) {
+  const wrap = document.createElement('div');
+  wrap.className = 'preview-tools';
+  const head = document.createElement('div');
+  head.className = 'tray-head';
+  head.innerHTML = `Sector <b>${escapeHtml(entries[0].sector)}</b> for <b>${escapeHtml(entries[0].tile)}</b>`;
+  wrap.appendChild(head);
+  const row = document.createElement('div');
+  row.className = 'stack-row';
+  const left = document.createElement('button');
+  left.type = 'button';
+  left.className = 'icon';
+  left.textContent = '⟲';
+  left.title = 'Rotate left (←)';
+  left.addEventListener('click', () => rotatePreview(-1));
+  const deg = document.createElement('b');
+  deg.textContent = `${state.previewRotation}°`;
+  const right = document.createElement('button');
+  right.type = 'button';
+  right.className = 'icon';
+  right.textContent = '⟳';
+  right.title = 'Rotate right (→)';
+  right.addEventListener('click', () => rotatePreview(1));
+  const place = document.createElement('button');
+  place.type = 'button';
+  place.className = 'choice s3';
+  place.textContent = 'Place tile here';
+  place.title = 'Place the previewed sector (Enter)';
+  place.addEventListener('click', () => placePreview());
+  row.append(left, deg, right, place);
+  wrap.appendChild(row);
+  wrap.appendChild(Object.assign(document.createElement('div'), {
+    className: 'note',
+    textContent: 'Click the preview on the board to rotate. The engine only offers legal orientations.',
+  }));
+  return wrap;
+}
+
 function promptCard(message, index) {
   const card = document.createElement('section');
   card.className = `prompt${message.private ? ' private' : ''}${isCombat(message) ? ' combat' : ''}${index > 0 ? ' older' : ''}`;
@@ -742,49 +1322,100 @@ function promptCard(message, index) {
   content.className = 'content';
   content.innerHTML = bodyHtml(message.content);
   body.appendChild(content);
-  for (const attachment of message.attachments || []) {
-    const image = document.createElement('img');
-    image.className = 'attachment';
-    image.src = attachment.url;
-    image.alt = attachment.name || '';
-    image.loading = 'lazy';
-    body.appendChild(image);
+  // The engine's combined orientation image is replaced by the on-board preview,
+  // and discovery cards carry their own art.
+  const previewing = (message.buttons || [])
+    .some((button) => objectAction(button.custom_id || '')?.kind === 'explore-place');
+  const discovering = (message.buttons || []).some((button) =>
+    discoveryChoice(button.custom_id || '') || /_keepDiscForPoints$/.test(button.custom_id || ''));
+  if (!previewing && !discovering) {
+    for (const attachment of message.attachments || []) {
+      const image = document.createElement('img');
+      image.className = 'attachment';
+      image.src = attachment.url;
+      image.alt = attachment.name || '';
+      image.loading = 'lazy';
+      body.appendChild(image);
+    }
   }
 
-  const choices = buttonById({ pending: [message] });
-  const enriched = techChoices(message) || partChoices(message);
-  if (enriched) {
+  const buttons = message.buttons || [];
+  const spatial = buttons.filter((button) => objectAction(button.custom_id || ''));
+  const dockSpatial = (button) => {
+    const target = objectAction(button.custom_id);
+    return target.kind === 'combat-roll' || (target.kind === 'population' && target.cube);
+  };
+  const handled = new Set(spatial
+    .filter((button) => !dockSpatial(button))
+    .map((button) => button.custom_id));
+
+  const tech = techChoices(message);
+  if (tech) {
+    buttons.filter((button) => !tech.other.includes(button))
+      .forEach((button) => handled.add(button.custom_id));
+    body.appendChild(researchPrompt(tech.html, message));
+  }
+  const partButtons = buttons.map((button) => ({ button, target: partButton(button.custom_id || '') }))
+    .filter((entry) => entry.target && entry.target.kind !== 'ship');
+  const oldPartsOnly = partButtons.length > 0
+    && partButtons.every((entry) => entry.target.kind === 'old');
+  const parts = oldPartsOnly ? null : partChoices(message);
+  if (parts) {
+    buttons.filter((button) => !parts.other.includes(button))
+      .forEach((button) => handled.add(button.custom_id));
     const holder = document.createElement('div');
-    holder.innerHTML = enriched.html;
+    holder.innerHTML = parts.html;
     body.appendChild(holder);
     for (const node of holder.querySelectorAll('[data-custom]')) {
       node.addEventListener('click', () => {
-        const entry = choices.get(node.dataset.custom);
+        const entry = buttonById({ pending: [message] }).get(node.dataset.custom);
         if (entry) press(entry.message.id, entry.button.custom_id, node);
       });
     }
-    // Buttons already drawn as cards must not also appear as plain choices.
-    body.appendChild(genericChoices(enriched.other, message));
-  } else {
-    const tiles = (message.buttons || []).map((button) => ({ button, target: tileAction(button.custom_id || '') }))
-      .filter((entry) => entry.target);
-    if (tiles.length) {
-      const row = document.createElement('div');
-      row.className = 'tile-choices';
-      for (const { button, target } of tiles) {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'tile-chip';
-        chip.textContent = `${button.label || target.position}`;
-        chip.title = 'Highlighted on the galaxy board';
-        chip.addEventListener('click', () => press(message.id, button.custom_id, chip));
-        row.appendChild(chip);
-      }
-      body.appendChild(row);
-    }
-    const plain = (message.buttons || []).filter((button) => !tileAction(button.custom_id || ''));
-    body.appendChild(genericChoices(plain, message));
   }
+
+  const places = buttons.map((button) => ({ button, target: objectAction(button.custom_id || '') }))
+    .filter((entry) => entry.target?.kind === 'explore-place');
+  if (places.length) body.appendChild(previewPanel(places.map((entry) => entry.target), message));
+
+  const builds = buttons.map((button) => ({ button, target: objectAction(button.custom_id || '') }))
+    .filter((entry) => entry.target?.kind === 'build-unit');
+  if (builds.length) body.appendChild(buildPanel(builds, message));
+
+  const queue = buttons.filter((button) => objectAction(button.custom_id || '')?.kind === 'move-queue');
+  if (queue.length) {
+    const stack = stackPanel(queue.map((button) => ({ button })), message);
+    if (stack) body.appendChild(stack);
+  }
+
+  const discoveries = buttons.map((button) => ({ button, ...(discoveryChoice(button.custom_id || '') || {}) }))
+    .filter((entry) => entry.action);
+  const keep = buttons.find((button) => /_keepDiscForPoints$/.test(button.custom_id || ''));
+  if (discoveries.length || keep) {
+    discoveries.forEach((entry) => handled.add(entry.button.custom_id));
+    if (keep) handled.add(keep.custom_id);
+    body.appendChild(discoveryPanel(discoveries, keep, message));
+  }
+
+  const upgradeShips = spatial.filter((button) => objectAction(button.custom_id).kind === 'upgrade-ship');
+  const upgradeSlots = spatial.filter((button) => objectAction(button.custom_id).kind === 'upgrade-slot');
+  if (upgradeShips.length) {
+    body.appendChild(upgradePrompt(upgradeShips, message,
+      'Pick the ship blueprint in your player panel'));
+  }
+  if (upgradeSlots.length) {
+    body.appendChild(upgradePrompt(upgradeSlots, message,
+      'Pick the part slot marked on your blueprint'));
+  }
+  const boardSpatial = spatial.filter((button) => {
+    const kind = objectAction(button.custom_id).kind;
+    if (dockSpatial(button)) return false;
+    if (kind === 'build-tile' && builds.length) return false;
+    return !['upgrade-ship', 'upgrade-slot', 'explore-place', 'build-unit'].includes(kind);
+  });
+  if (boardSpatial.length) body.appendChild(boardPromptHint(boardSpatial, message));
+
+  body.appendChild(genericChoices(buttons.filter((button) => !handled.has(button.custom_id)), message));
   card.appendChild(body);
   return card;
 }
@@ -1155,6 +1786,7 @@ function bind() {
   el.game.addEventListener('change', async () => {
     state.gameId = el.game.value;
     state.boardVersion = null;
+    state.boardLoaded = false;
     state.lastKey = null;
     localStorage.setItem('eclipse-game', state.gameId);
     state.seat = localStorage.getItem(`eclipse-seat-${state.gameId}`) || '';
@@ -1213,6 +1845,19 @@ function bind() {
 
   window.addEventListener('resize', () => {
     if (state.fitPending) fitBoard();
+  });
+  window.addEventListener('keydown', (event) => {
+    if (!state.previewKey || event.target.closest('input,select,textarea,button,a,summary')) return;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      rotatePreview(-1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      rotatePreview(1);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      placePreview();
+    }
   });
   bindBoardPan();
 }

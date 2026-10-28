@@ -24,7 +24,7 @@ from helpers.PlayerHelper import PlayerHelper
 from helpers.ShipHelper import PlayerShip
 from listeners.ButtonListener import ButtonListener
 from webui import catalog
-from webui.render import board_meta, render_board
+from webui.render import board_meta, render_board, render_tile_preview
 from webui.store import FeedStore
 from webui.transport import Surface, WebInteraction
 
@@ -34,6 +34,9 @@ STATIC_DIR = os.path.join(ROOT, "static")
 ART_DIR = os.path.join(os.path.dirname(ROOT), "images", "resources")
 
 SHIPS = ("interceptor", "cruiser", "dreadnought", "starbase")
+PIECE_SHIPS = ("int", "cru", "drd", "sb", "orb", "mon", "anc", "gcds", "grd")
+PLANET_SQUARES = ("money", "science", "material", "neutral", "moneyadv",
+                  "scienceadv", "materialadv", "neutraladv", "orbital")
 
 
 async def prepare_images(app):
@@ -217,6 +220,66 @@ def _is_standing(message):
                for button in message["buttons"])
 
 
+def _snap_point(point, width=345, height=300):
+    """Save snapshots use a 1024-wide tile; the board paints tiles at 345x300."""
+    if not point or len(point) < 2:
+        return None
+    return {"x": round(point[0] * width / 1024, 1), "y": round(point[1] * height / 1024, 1)}
+
+
+def _tile_pieces(tile, drawn_on, position):
+    """The clickable objects the engine's own tile image already shows.
+
+    A ship token sits on the snap point the engine draws it at, so the browser can
+    put a hit target (or a drag handle) exactly on the visible unit. Empty planet
+    squares have no art of their own, so the browser draws them as ghosts.
+    """
+    ships = {}
+    for unit in tile.get("player_ships", []):
+        if "-" not in unit:
+            continue
+        color, kind = unit.split("-", 1)
+        kind = kind.replace("adv", "")
+        if kind not in PIECE_SHIPS:
+            continue
+        anchor = _snap_point(tile.get(f"{'ai' if kind in ('anc', 'gcds', 'grd') else kind}_snap"))
+        if anchor is None:
+            continue
+        entry = ships.setdefault(unit, {"kind": "ship", "name": unit, "color": color,
+                                        "class": kind, "count": 0,
+                                        "position": position, "tile": drawn_on, **anchor})
+        entry["count"] += 1
+    planets = []
+    for kind in PLANET_SQUARES:
+        populations = tile.get(f"{kind}_pop")
+        if not populations:
+            continue
+        for index, value in enumerate(populations):
+            key = "orb" if kind == "orbital" else f"{kind}{index + 1}"
+            anchor = _snap_point(tile.get(f"{key}_snap"))
+            if anchor is None:
+                continue
+            planets.append({"kind": "planet", "square": kind, "index": index,
+                            "pop": int(value or 0), "position": position,
+                            "tile": drawn_on, **anchor})
+    pieces = list(ships.values()) + planets
+    return pieces
+
+
+def _board_pieces(game):
+    """Everything clickable that the board image already draws, in tile pixels."""
+    pieces = []
+    for position, tile in game.gamestate["board"].items():
+        if "nebula_parent" in tile:
+            continue  # painted inside the parent's image
+        pieces.extend(_tile_pieces(tile, position, position))
+        for sibling in tile.get("nebula_internal", []):
+            sub = game.gamestate["board"].get(sibling)
+            if sub:
+                pieces.extend(_tile_pieces(sub, position, sibling))
+    return pieces
+
+
 def _current_prompts(pending):
     if not pending:
         return pending
@@ -362,6 +425,7 @@ class WebApp:
                 "points": you_row["points"],
                 "trade_value": you_row["trade_value"],
                 "colony_ships": you_row["colony_ships"],
+                "disc_tiles": you_row["disc_tiles"],
                 "faction": you_row["faction"],
                 "passed": you_row["passed"],
                 "is_your_turn": you_row["color"] in active,
@@ -370,6 +434,7 @@ class WebApp:
             "version": version,
             "board": f"/api/games/{game_id}/board.webp?v={version}",
             "board_meta": self._board(game_id, version),
+            "pieces": _board_pieces(game),
             "tech_market": self._tech_market(game, you),
             "result": sorted(
                 [{"id": row["id"], "name": row["name"], "color": row["color"],
@@ -568,7 +633,30 @@ class WebApp:
             return web.json_response({"error": "unknown game"}, status=404)
         response = web.FileResponse(path)
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        response.headers["Content-Type"] = "image/webp"
         response.headers["X-Board-Key"] = key
+        return response
+
+    async def api_tile(self, request):
+        """A single explored tile at one rotation, painted by the engine's own art."""
+        game_id = request.match_info["game_id"]
+        sector = request.query.get("sector") or ""
+        try:
+            rotation = int(request.query.get("rot") or 0)
+        except ValueError:
+            return web.json_response({"error": "rot must be a number"}, status=400)
+        if not re.fullmatch(r"[a-z0-9]+", sector) or rotation % 60:
+            return web.json_response({"error": "sector and a 60° rotation are required"}, status=400)
+        try:
+            path = await asyncio.to_thread(
+                render_tile_preview, sector, rotation, self.render_dir)
+        except FileNotFoundError:
+            return web.json_response({"error": "unknown game"}, status=404)
+        if path is None:
+            return web.json_response({"error": "unknown sector"}, status=404)
+        response = web.FileResponse(path)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        response.headers["Content-Type"] = "image/webp"
         return response
 
     async def api_media(self, request):
@@ -598,6 +686,7 @@ class WebApp:
         app.router.add_post("/api/games/{game_id}/turn-menu", self.api_turn_menu)
         app.router.add_post("/api/games/{game_id}/mirror", self.api_mirror)
         app.router.add_get("/api/games/{game_id}/board.webp", self.api_board)
+        app.router.add_get("/api/games/{game_id}/tile.webp", self.api_tile)
         app.router.add_get("/api/media/{message_id}/{name}", self.api_media)
         app.router.add_static("/static", STATIC_DIR)
         app.router.add_static("/art", ART_DIR)

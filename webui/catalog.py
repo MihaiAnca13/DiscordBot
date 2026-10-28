@@ -18,6 +18,7 @@ def _load(*parts):
 TECHS = _load("data", "techs.json")
 PARTS = _load("data", "parts.json")
 FACTIONS = _load("data", "factions.json")
+DISCOVERIES = _load("data", "discoverytiles.json")
 
 
 def art_url(relative):
@@ -69,6 +70,16 @@ def part(part_id):
             "range": details.get("range", 0), "speed": details.get("speed", 0)}
 
 
+def discovery(disc_id):
+    details = DISCOVERIES.get(disc_id)
+    if not details:
+        return {"id": disc_id, "name": disc_id, "image": None, "description": ""}
+    name = details["name"].lower().replace(" ", "_")
+    return {"id": disc_id, "name": details["name"],
+            "image": art_url(f"components/discovery_tiles/discovery_{name}.png"),
+            "description": details.get("description", "")}
+
+
 def faction_board_image(artwork):
     if not artwork:
         return None
@@ -109,4 +120,5 @@ def snapshot():
     return {
         "techs": {tech_id: tech(tech_id) for tech_id in TECHS},
         "parts": {part_id: part(part_id) for part_id in PARTS},
+        "discoveries": {disc_id: discovery(disc_id) for disc_id in DISCOVERIES},
     }
