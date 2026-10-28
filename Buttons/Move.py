@@ -195,6 +195,15 @@ class MoveButtons:
         return tiles
 
     @staticmethod
+    def buildMoveOriginView(game, player, move_count, ship_filter, suffix):
+        view = View()
+        tiles = MoveButtons.getListOfUnpinnedShipTiles(game, player, ship_filter)
+        for tile in tiles:
+            view.add_item(Button(label=game.get_tile_label(tile), style=discord.ButtonStyle.red,
+                                 custom_id=f"FCID{player['color']}_moveFrom_{tile}_{move_count}{suffix}"))
+        return view, tiles
+
+    @staticmethod
     async def startMove(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str, button: bool):
         nested = "herRegroup" in buttonID
         raid_resume = "herRaidResume" in buttonID
@@ -210,14 +219,10 @@ class MoveButtons:
             game.update()
         if not nested and len(buttonID.split("_")) > 2 and not raid_resume:
             ship_filter = buttonID.split("_")[2]
-        view = View()
-        tiles = MoveButtons.getListOfUnpinnedShipTiles(game, player, ship_filter)
         suffix = f"_herRegroup_{phase}" if nested else ""
         if not nested and ship_filter != "all":
             suffix = f"_{ship_filter}"
-        for tile in tiles:
-            view.add_item(Button(label=game.get_tile_label(tile), style=discord.ButtonStyle.red,
-                                 custom_id=f"FCID{player['color']}_moveFrom_{tile}_{moveCount}{suffix}"))
+        view, tiles = MoveButtons.buildMoveOriginView(game, player, moveCount, ship_filter, suffix)
         if nested:
             MoveButtons.addRegroupBackButton(view, player, phase)
         elif (not player.get("passed") and FactionData.has(player, "raid")

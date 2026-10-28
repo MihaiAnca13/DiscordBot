@@ -206,6 +206,11 @@ class ButtonListener(commands.Cog):
                 return
 
         # Save buttons already posted before the setup phase used the generic delete id.
+        if player is not None and customID == "deleteMsg" and any(
+                getattr(button, "label", None) == "Done Paying"
+                for row in interaction.message.components for button in getattr(row, "children", [])):
+            if await ResearchButtons.has_unpaid_research(player, interaction):
+                return
         if customID == "deleteMsg" and any(
                 getattr(button, "label", None) == "Save For Future Upgrade Action"
                 for row in interaction.message.components for button in getattr(row, "children", [])):

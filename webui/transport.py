@@ -13,11 +13,14 @@ Nothing here changes game rules. If a handler uses a Discord attribute neither
 class knows, the press fails loudly instead of silently doing nothing.
 """
 import os
+import re
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import discord
 
+from helpers.CombatHelper import Combat
+from helpers.GamestateHelper import GamestateHelper
 from webui.store import buttons_from_view
 
 
@@ -63,6 +66,35 @@ def save_media(media_dir, message_id, files):
             handle.write(data)
         entries.append({"name": safe, "url": f"/api/media/{message_id}/{safe}"})
     return entries
+
+
+def combat_context(game_id, room, content, buttons, custom_id=None, game=None):
+    match = re.search(r"Tile (\d+[a-z]?), (?:Combat|Bombing)", room or "")
+    if not match:
+        return {}
+    game = game or GamestateHelper(None, game_id)
+    tile = game.gamestate["board"].get(match[1], {})
+
+    def button_color(command):
+        roll = re.search(r"(?:^|_)rollDice_[^_]+_([^_]+)_", command or "")
+        if roll:
+            return roll[1]
+        owner = re.match(r"FCID([^_]+)_", command or "")
+        return owner[1] if owner and owner[1] != "dummy" else None
+
+    owners = {button_color(button.get("custom_id")) for button in buttons}
+    owners.discard(None)
+    color = next(iter(owners)) if len(owners) == 1 else button_color(custom_id)
+    if not buttons:
+        for pid, player in game.gamestate["players"].items():
+            if content and (content.startswith(player["player_name"]) or content.startswith(f"<@{pid}>")):
+                color = player["color"]
+                break
+        if (content or "").startswith("AI stats"):
+            color = "ai"
+    side = next((side for side in ("defender", "attacker")
+                 if color in Combat.sideOf(tile.get(side))), None)
+    return {"color": color, "side": side}
 
 
 class _ButtonRow:
@@ -112,7 +144,9 @@ class WebUser:
 class WebGuild:
     """Roles exist only so community-mode colour matching keeps working."""
 
-    emojis = []
+    emojis = [discord.PartialEmoji(name=f"dice_{kind}_{face}", id=0)
+              for kind in ("ion", "plasma", "antimatter", "soliton", "rift")
+              for face in range(1, 7)]
     channels = []
     categories = []
     default_role = _Role("@everyone")
@@ -226,6 +260,7 @@ class Surface:
         self.mirror = mirror
         self.media_dir = media_dir
         self.ephemeral_to = None
+        self.custom_id = None
         self.channel = WebChannel(self, name=channel_name or f"{game_id}-actions")
 
     def _mirrors(self):
@@ -234,11 +269,13 @@ class Surface:
     async def send(self, content, view=None, file=None, files=None, ephemeral_to=None, room=None):
         room = room or self.channel.name
         payload = collect_files(file, files)
+        buttons = buttons_from_view(view) if view is not None else []
         message_id = self.store.record(
             self.game_id, room, content=content,
-            buttons=buttons_from_view(view) if view is not None else [],
+            buttons=buttons,
             ephemeral_to=None if ephemeral_to is None else str(ephemeral_to),
-            author_id=self.seat)
+            author_id=self.seat,
+            combat=combat_context(self.game_id, room, content, buttons, self.custom_id))
         attachments = save_media(self.media_dir, message_id, payload) if self.media_dir else []
         if attachments:
             self.store.update(message_id, attachments=attachments)
@@ -276,6 +313,7 @@ class WebInteraction:
         self.surface = Surface(store, game_id, seat=seat, mirror=mirror, media_dir=media_dir,
                                channel_name=channel_name)
         self.channel = self.surface.channel
+        self.surface.custom_id = custom_id
         self.message = WebMessage(self.surface, int(message_id)) if message_id is not None else None
         self.user = WebUser(str(seat), display_name)
         colors = list((members or {}).get("colors", []))
@@ -323,13 +361,16 @@ class RecordingChannel:
     async def send(self, content=None, view=None, file=None, files=None, **kwargs):
         real = await self._real.send(content=content, view=view, file=file, files=files, **kwargs)
         attachments = [{"name": a.filename, "url": a.url} for a in getattr(real, "attachments", [])]
+        room = getattr(self._real, "name", "discord")
+        buttons = buttons_from_view(view) if view is not None else []
         message_id = self.surface.store.record(
-            self.surface.game_id, getattr(self._real, "name", "discord"), content=content,
-            buttons=buttons_from_view(view) if view is not None else [],
+            self.surface.game_id, room, content=content,
+            buttons=buttons,
             attachments=attachments,
             ephemeral_to=self.surface.ephemeral_to,
             author_id=self.surface.seat,
-            discord_id=real.id)
+            discord_id=real.id,
+            combat=combat_context(self.surface.game_id, room, content, buttons, self.surface.custom_id))
         return RecordingMessage(real, self.surface, message_id)
 
     async def fetch_message(self, message_id):
@@ -376,6 +417,7 @@ class RecordingInteraction:
         self.surface = Surface(store, game_id, seat=str(getattr(interaction.user, "id", "")),
                                mirror=mirror)
         self.channel = RecordingChannel(interaction.channel, self.surface)
+        self.surface.custom_id = interaction.data.get("custom_id")
         self.surface.channel = self.channel
         self.followup = RecordingResponder(interaction.followup, self.surface, ephemeral=True)
         self.response = RecordingResponder(interaction.response, self.surface, ephemeral=False)

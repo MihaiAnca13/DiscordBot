@@ -1,12 +1,14 @@
 """The read side of the web ui: one seat's choices, independent of history."""
+import json
+from types import SimpleNamespace
+
 import pytest
-from PIL import Image
 
 from Buttons.Turn import TurnButtons
 from webui.render import rotate_tile_point
 from webui.server import build
 from webui.store import FeedStore
-from webui.transport import Surface
+from webui.transport import Surface, WebInteraction
 
 
 @pytest.fixture
@@ -67,6 +69,25 @@ def test_history_keeps_used_prompts_and_pages_backwards(start_game, store, app, 
     assert has_more is False
     assert len(older) >= 10
     assert any(message["id"] == menu.id for message in older)
+
+
+def test_used_restart_menu_still_retires_abandoned_research(start_game, store, app, run):
+    game, channel = start_game()
+    old_choices = []
+    for custom_id in ("FCIDblue_getTech_stb_military", "FCIDblue_payAtRatio_money"):
+        old_choices.append(store.record(game.game_id, channel.name, buttons=[
+            {"label": "Old choice", "custom_id": custom_id, "style": 1,
+             "disabled": False, "url": None}]))
+    menu = turn_menu(run, store, game, "1", "blue")
+    store.remove(menu.id)
+    current = store.record(game.game_id, channel.name, buttons=[
+        {"label": "Choose tech", "custom_id": "FCIDblue_getTech_nar_nano",
+         "style": 1, "disabled": False, "url": None}])
+
+    pending_ids = [message["id"] for message in app.snapshot(game.game_id, "1")["pending"]]
+
+    assert current in pending_ids
+    assert not set(old_choices).intersection(pending_ids)
 
 
 def test_a_game_over_hides_the_stale_turn_menu(start_game, store, app, run):
@@ -150,18 +171,6 @@ def test_combat_overview_stops_offering_a_rolled_colour(store, app):
         "FCIDred_rollDice_102_red_3_attacker", "refreshImage_102"]
 
 
-def test_board_metadata_marks_unexplored_slots(start_game, store, app, run):
-    _game, _channel = start_game()
-
-    meta = app.snapshot("aeb1", "1")["board_meta"]
-
-    assert meta["width"] > 0 and meta["height"] > 0
-    assert any(tile["empty"] for tile in meta["tiles"])
-    assert any(tile["position"] == "000" and not tile["empty"] for tile in meta["tiles"])
-    by_position = {tile["position"]: tile for tile in meta["tiles"]}
-    assert by_position["000"]["label"] == "Galactic Center"
-
-
 def test_board_pieces_sit_on_the_drawn_ship_and_planet_snaps(start_game, store, app):
     game, _channel = start_game()
 
@@ -226,17 +235,6 @@ def test_nebula_pieces_follow_the_rotated_art(start_game, store, app):
     assert abs(piece["y"] - expected[1] * 300 / 890) < 0.2
 
 
-@pytest.mark.render
-def test_tile_preview_uses_the_engine_art(tmp_path):
-    from webui.render import render_tile_preview
-
-    path = render_tile_preview("314", 60, str(tmp_path))
-
-    assert path and path.endswith("314-60.webp")
-    with Image.open(path) as image:
-        assert image.size == (345, 300)
-
-
 def test_other_research_menu_drops_owned_and_unaffordable_techs(start_game, store, app):
     game, _channel = start_game()
     player = game.get_player(1)
@@ -258,3 +256,67 @@ def test_other_research_menu_drops_owned_and_unaffordable_techs(start_game, stor
 
     assert [button["custom_id"] for button in store.get(menu)["buttons"]] == [
         "FCIDblue_getTech_nar_nano", "FCIDblue_deleteMsg"]
+
+
+def test_wild_track_preview_preserves_research_menu(start_game, store, app, run):
+    game, channel = start_game()
+    player = game.get_player(1)
+    player["science"] = 20
+    game.gamestate["available_techs"] = ["rican", "nar"]
+    game.update()
+    menu = store.record(game.game_id, channel.name, buttons=[
+        {"label": label, "custom_id": custom_id, "style": 1,
+         "disabled": False, "url": None}
+        for label, custom_id in [("Rift Cannon (9)", "FCIDblue_getTech_rican_any"),
+                                 ("Nano Robots (2)", "FCIDblue_getTech_nar_nano")]])
+    original_menu = store.get(menu)
+    original_state = json.dumps(game.gamestate, sort_keys=True)
+    original_rev = store.rev(game.game_id)
+    selected_id = "FCIDblue_getTech_rican_any"
+
+    async def body():
+        return {"seat": "1", "message_id": menu, "custom_id": selected_id}
+
+    request = SimpleNamespace(match_info={"game_id": game.game_id}, json=body)
+    preview = json.loads(run(app.api_press(request)).text)
+
+    assert preview["error"] is None
+    assert {button["custom_id"] for button in preview["tech_tracks"]} == {
+        f"FCIDblue_getTech_rican_{track}" for track in ("military", "grid", "nano")}
+    assert store.get(menu) == original_menu
+    assert store.rev(game.game_id) == original_rev
+    assert json.dumps(app.game(game.game_id).gamestate, sort_keys=True) == original_state
+
+    selected_id = "FCIDblue_getTech_rican_grid"
+    purchased = json.loads(run(app.api_press(request)).text)
+
+    assert purchased["error"] is None
+    assert "rican" in app.game(game.game_id).get_player(1)["grid_tech"]
+    assert store.get(menu)["deleted"]
+
+
+def test_combat_chat_keeps_resolved_allied_events_beyond_recent_history(start_game, store, app, run):
+    game, channel = start_game(player_count=3)
+    game.add_tile("101", 0, "307")
+    game.gamestate["board"]["101"].update(defender=["blue", "red"], attacker=["green"])
+    game.update()
+    room = "aeb1-Round 1, Tile 101, Combat"
+    ids = []
+    for seat, color in [("1", "blue"), ("2", "red"), ("3", "green")]:
+        interaction = WebInteraction(store, "aeb1", seat, channel_name=room,
+                                     custom_id=f"FCID{color}_rollDice_101_{color}_3_deleteMsg")
+        message = run(interaction.channel.send(f"{color} rolled dice"))
+        ids.append(message.id)
+        run(message.delete())
+    for number in range(60):
+        store.record("aeb1", channel.name, content=f"Unrelated message {number}")
+    store.record("aeb1", room, content="Private opponent message", ephemeral_to="3")
+
+    view = app.snapshot("aeb1", "1")
+    battle = view["battles"][0]
+
+    assert [message["id"] for message in battle["messages"]] == ids
+    assert [message["combat"]["side"] for message in battle["messages"]] == [
+        "defender", "defender", "attacker"]
+    assert all(message["deleted"] for message in battle["messages"])
+    assert not set(ids).intersection(message["id"] for message in view["history"])

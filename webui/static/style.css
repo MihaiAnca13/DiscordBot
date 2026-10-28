@@ -154,7 +154,11 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
   box-shadow: 0 0 0 3px #2b8fa84d, 0 0 22px #39c4e588;
 }
 .hotspot:disabled, .piece:disabled { opacity: .45; cursor: progress; }
-.hotspot.build-tile { border-color: #f0c96b88; background: #e0a93a22; }
+.hotspot.build-tile { border-color: #f0c96b88; background: transparent; }
+button.hotspot.build-tile:hover:not(:disabled), button.hotspot.build-tile:focus-visible {
+  background: transparent; border-color: var(--gold);
+  box-shadow: 0 0 0 3px #e0a93a44, 0 0 22px #e0a93a88;
+}
 .hotspot.move-dest { border-color: #82d8a588; background: #46b47a22; }
 .hotspot.influence-add, .hotspot.influence-remove {
   border-color: #c48ef0aa; background: #9b5fd022;
@@ -225,6 +229,16 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
   color: #e8f7ff; font-size: 9px; line-height: 13px; text-align: center;
 }
 .piece.move-from, .piece.move-ship { border-style: dashed; }
+button.piece:is(.move-from, .move-ship),
+button.piece:is(.move-from, .move-ship):hover:not(:disabled),
+button.piece:is(.move-from, .move-ship):focus-visible { background: transparent; }
+.piece.move-from .glyph, .piece.move-ship .glyph { display: none; }
+.move-count {
+  position: absolute; z-index: 8; width: 32px; height: 32px;
+  padding: 0; border-radius: 50%; border-color: var(--cyan);
+  background: #071019ed; color: #e8f7ff; font-weight: 700;
+  transform: scale(var(--ui-piece, 1));
+}
 .piece.combat-hit, .piece.combat-remove { border-color: #ff7b7b; color: #ff9a9a; --ring: #ff7b7b; }
 .piece.planet { animation: none; border-style: dotted; }
 .piece.planet .glyph { font-size: 18px; }
@@ -468,16 +482,26 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
 .battle-room > header small { color: #c79494; font-size: 10px; }
 .battle-mark { font-size: 18px; color: #ff8d8d; }
 .battle-room .prompt { border-radius: 0; border: 0; border-top: 1px solid #542b2e; box-shadow: none; background: #171014; }
-.battle-room .prompt:first-of-type { border-top: 0; }
 .battle-room .prompt-head { background: #1c1013; }
-.battle-log { border-top: 1px solid #542b2e; }
-.battle-log summary {
-  cursor: pointer; padding: 8px 13px; font-size: 11px; color: #d9a9a9;
-  text-transform: uppercase; letter-spacing: .09em; background: #1a1013;
+.battle-sides { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; font-size: 12px; }
+.battle-sides span:last-child { text-align: right; }
+.battle-chat { max-height: 70vh; overflow-y: auto; padding: 10px; overflow-anchor: none; }
+.battle-event { margin-bottom: 12px; min-width: 0; }
+.battle-event.defender { margin-right: 15%; }
+.battle-event.attacker { margin-left: 15%; }
+.battle-author { font-size: 11px; margin: 0 4px 4px; }
+.battle-event.attacker .battle-author { text-align: right; }
+.battle-chat .battle-event > .history-item, .battle-chat .battle-event > .prompt {
+  border: 1px solid #542b2e; border-radius: 9px; padding: 8px; background: #171014;
 }
-.battle-log .history-list { max-height: 300px; background: #100c10; }
-.battle-log .history-item { border-color: #2a1d22; }
-.battle-log .history-content { color: #d8c4c8; }
+.battle-chat .history-meta .room, .battle-chat .history-meta .used { display: none; }
+.battle-chat .history-content { color: #d8c4c8; overflow-wrap: anywhere; }
+.battle-chat img.attachment {
+  display: block; width: auto; height: auto; max-width: 100%; max-height: 320px; object-fit: contain;
+}
+button.battle-image-zoom, button.battle-image-zoom:hover:not(:disabled) {
+  display: block; max-width: 100%; padding: 0; border: 0; background: transparent; cursor: zoom-in;
+}
 
 /* ---------------------------------------------------------------- players */
 .players-card .card-head { position: sticky; top: 57px; background: #101724f2; z-index: 3; border-radius: 12px 12px 0 0; }

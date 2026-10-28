@@ -13,6 +13,15 @@ from discord.ui import View, Button
 
 class ResearchButtons:
     @staticmethod
+    async def has_unpaid_research(player, interaction):
+        remaining = player.get("research_payment_due", 0)
+        if not remaining:
+            return False
+        await interaction.followup.send(f"Pay the remaining {remaining} science for your technology first, "
+                                        "or restart the turn.", ephemeral=True)
+        return True
+
+    @staticmethod
     async def handle_wild_tech_selection(view: View, tech_details, tech, player, setup=False):
         for tech_type, button_style in [("military", discord.ButtonStyle.red),
                                         ("grid", discord.ButtonStyle.green),
@@ -34,6 +43,13 @@ class ResearchButtons:
         pending_task = True
         is_setup = [game.get_player_from_color(player["color"]), "setup_tech"] in game.preGameTasks()
         cost = ResearchButtons.calculate_cost(tech_details, tech_type, player)
+        if await ResearchButtons.has_unpaid_research(player, interaction):
+            return False
+        if cost > player["science"] and cost > ResearchButtons.getPlayerTotalAvailableScience(player, game):
+            await interaction.followup.send("You cannot afford that technology, including trades.", ephemeral=True)
+            return False
+        player["research_payment_due"] = max(0, cost - player["science"])
+        game.update_player(player_helper)
         game.playerResearchTech(game.get_player_from_color(player["color"]), tech, tech_type)
         with open("data/techs.json", "r") as f:
             tech_data = json.load(f)
@@ -50,11 +66,9 @@ class ResearchButtons:
             paid = min(cost, player["science"])
             view = View()
             trade_value = player['trade_value']
-            val = paid
             for resource_type, button_style in [("materials", discord.ButtonStyle.gray),
                                                 ("money", discord.ButtonStyle.blurple)]:
                 if player[resource_type] >= trade_value:
-                    val += player[resource_type] // trade_value
                     view.add_item(Button(label=f"Pay {trade_value} {resource_type.capitalize()}",
                                          style=button_style,
                                          custom_id=f"FCID{player['color']}_payAtRatio_{resource_type}"))
@@ -64,14 +78,6 @@ class ResearchButtons:
                                      custom_id=f"FCID{player['color']}_magColShipForSpentResource_science"))
             view.add_item(Button(label="Done Paying", style=discord.ButtonStyle.red,
                                  custom_id=f"FCID{player['color']}_deleteMsg"))
-            if val < cost:
-                view2 = View()
-                view2.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
-                                      custom_id=f"FCID{player['color']}_restartTurn"))
-                await interaction.channel.send(f"Attempted to pay a cost of {str(cost)} but you did not have enough. "
-                                               "Please restart the turn or manually adjust resources"
-                                               " if for some reason you should have more", view=view2)
-                return
             msg = player_helper.adjust_science(-paid)
             game.update_player(player_helper)
             money_ratio = FactionData.of(player).get("money_trade_ratio", 1)
@@ -321,6 +327,8 @@ class ResearchButtons:
     @staticmethod
     async def getTech(game: GamestateHelper, player, player_helper: PlayerHelper,
                       interaction: discord.Interaction, buttonID: str):
+        if await ResearchButtons.has_unpaid_research(player, interaction):
+            return False
         tech, tech_type = buttonID.split("_")[1:3]
         is_setup = [game.get_player_from_color(player["color"]), "setup_tech"] in game.preGameTasks()
         with open("data/techs.json", "r") as f:
@@ -356,6 +364,15 @@ class ResearchButtons:
             await interaction.channel.send(f"{player['player_name']} does not have enough {resource_type} to trade.")
             return
         msg = player_helper.adjust_resource(resource_type, -trade_value)
+        remaining = player.get("research_payment_due", 0)
+        if remaining:
+            paid = FactionData.of(player).get("money_trade_ratio", 1) if resource_type == "money" else 1
+            player["research_payment_due"] = max(0, remaining - paid)
+            if paid > remaining:
+                player_helper.adjust_science(paid - remaining)
+            msg += f" Remaining research cost: {player['research_payment_due']} science."
+            if not player["research_payment_due"]:
+                await interaction.message.delete()
         game.update_player(player_helper)
         await interaction.channel.send(msg)
 

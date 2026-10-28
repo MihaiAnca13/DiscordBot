@@ -59,6 +59,9 @@ class FeedStore:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(messages)")}
+        if "combat" not in columns:
+            self.conn.execute("ALTER TABLE messages ADD COLUMN combat TEXT")
         self.conn.commit()
 
     def close(self):
@@ -92,15 +95,15 @@ class FeedStore:
         return self.conn.execute("SELECT COALESCE(MAX(rev), 0) + 1 FROM messages").fetchone()[0]
 
     def record(self, game_id, room, content=None, buttons=None, attachments=None,
-               ephemeral_to=None, author_id=None, discord_id=None):
+               ephemeral_to=None, author_id=None, discord_id=None, combat=None):
         rev = self._next_rev()
         cur = self.conn.execute(
             "INSERT INTO messages (game_id, room, author_id, content, buttons, attachments,"
-            " ephemeral_to, discord_id, rev, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            " ephemeral_to, discord_id, rev, created_at, combat) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (game_id, room, author_id, content,
              json.dumps(buttons or []), json.dumps(attachments or []),
              ephemeral_to, None if discord_id is None else str(discord_id),
-             rev, time.time()))
+             rev, time.time(), json.dumps(combat or {})))
         self.conn.commit()
         return cur.lastrowid
 
@@ -159,6 +162,7 @@ class FeedStore:
         message = dict(row)
         message["buttons"] = json.loads(message["buttons"] or "[]")
         message["attachments"] = json.loads(message["attachments"] or "[]")
+        message["combat"] = json.loads(message.get("combat") or "{}")
         message["deleted"] = bool(message["deleted"])
         return message
 
@@ -175,16 +179,24 @@ class FeedStore:
             " ORDER BY id DESC LIMIT ?", (game_id, seat, limit)).fetchall()
         return [self._as_message(row) for row in rows]
 
-    def pending_messages(self, game_id, seat):
+    def pending_messages(self, game_id, seat, include_deleted=False):
         """Every prompt this seat can still answer, independent of the history page.
 
         The history is paged and capped; an unresolved choice must never fall off it.
         """
         rows = self.conn.execute(
-            "SELECT * FROM messages WHERE game_id = ? AND deleted = 0"
+            "SELECT * FROM messages WHERE game_id = ? AND (deleted = 0 OR ?)"
             " AND buttons != '[]'"
             " AND (ephemeral_to IS NULL OR ephemeral_to = ?)"
-            " ORDER BY id ASC", (game_id, seat)).fetchall()
+            " ORDER BY id ASC", (game_id, include_deleted, seat)).fetchall()
+        return [self._as_message(row) for row in rows]
+
+    def combat_history(self, game_id, seat):
+        rows = self.conn.execute(
+            "SELECT * FROM messages WHERE game_id = ?"
+            " AND (room LIKE '%combat%' OR room LIKE '%battle%' OR room LIKE '%bombing%')"
+            " AND (ephemeral_to IS NULL OR ephemeral_to = ?) ORDER BY id ASC",
+            (game_id, seat)).fetchall()
         return [self._as_message(row) for row in rows]
 
     def visible_history(self, game_id, seat, limit=60):

@@ -6,6 +6,7 @@ from Buttons.Explore import ExploreButtons
 from Buttons.Harvester import HarvesterButtons
 from Buttons.Population import PopulationButtons
 from Buttons.Pulsar import PulsarButtons
+from Buttons.Research import ResearchButtons
 from helpers.EmojiHelper import Emoji
 from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
@@ -73,6 +74,8 @@ class TurnButtons:
 
     @staticmethod
     async def endTurn(player, game: GamestateHelper, interaction: discord.Interaction):
+        if await ResearchButtons.has_unpaid_research(player, interaction):
+            return
         from helpers.CombatHelper import Combat
         nextPlayer = game.get_next_player(player)
         await game.updateNamesAndOutRimTiles(interaction)
@@ -124,6 +127,8 @@ class TurnButtons:
     @staticmethod
     async def passForRound(player, game: GamestateHelper, interaction: discord.Interaction,
                            player_helper: PlayerHelper):
+        if await ResearchButtons.has_unpaid_research(player, interaction):
+            return
         from helpers.CombatHelper import Combat
         player_helper.stats["allianceLeaveClosed"] = True
         game.update_player(player_helper)
@@ -486,6 +491,10 @@ class TurnButtons:
             await interaction.followup.send("You do not have enough color ships for this.")
             return
         ships = player_helper.adjust_colony_ships(1)
+        if resource == "science" and player.get("research_payment_due", 0):
+            player["research_payment_due"] -= 1
+            if not player["research_payment_due"]:
+                await interaction.message.delete()
         message = (f"{player['player_name']} exhausted 1 colony ship to get and then immediately spend 1 {resource}. "
                    f"They have {ships} colony ship{'s' if ships == 1 else ''} left.")
         await interaction.channel.send(message)
@@ -540,6 +549,8 @@ class TurnButtons:
     @staticmethod
     async def finishAction(player, game: GamestateHelper, interaction: discord.Interaction,
                            player_helper: PlayerHelper):
+        if await ResearchButtons.has_unpaid_research(player, interaction):
+            return
         player_helper.stats["allianceLeaveClosed"] = True
         player_helper.stats.pop("influenceActionActive", None)
         player_helper.stats.pop("influenceActionUsed", None)

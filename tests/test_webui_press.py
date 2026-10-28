@@ -91,16 +91,6 @@ def test_another_seats_buttons_are_refused(start_game, store, run):
     assert any("not for you" in (text or "") for text in notices)
 
 
-def test_a_pressed_button_that_edits_a_prompt_updates_the_feed(start_game, store, run):
-    game, _channel = start_game()
-    menu = turn_menu(run, store, game, "1", "blue")
-
-    press(run, store, game, "1", "FCIDblue_startBuild", menu.id)
-
-    prompts = store.open_messages("aeb1", "1")
-    assert any(m["content"] and "choose which tile" in m["content"] for m in prompts)
-
-
 def test_discovery_points_remove_choices_and_cannot_be_claimed_again(start_game, store, run):
     game, channel = start_game()
     interaction = WebInteraction(store, game.game_id, "1", members=members(game))

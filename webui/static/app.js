@@ -121,9 +121,12 @@ function bodyHtml(content) {
     .replace(/^\s*##\s+(.*)$/gm, '<h3>$1</h3>')
     .replace(/^\s*#\s+(.*)$/gm, '<h3>$1</h3>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/&lt;(a?):([\w]+):(\d+)&gt;/g, (_m, animated, name, id) =>
-      `<img class="emoji" alt=":${name}:" loading="lazy" `
-      + `src="https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}">`);
+    .replace(/&lt;(a?):([\w]+):(\d+)&gt;/g, (_m, animated, name, id) => {
+      const source = /^dice_(ion|plasma|antimatter|soliton|rift)_[1-6]$/.test(name)
+        ? `/art/components/dice_faces/${name}.png`
+        : `https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}`;
+      return `<img class="emoji" alt=":${name}:" loading="lazy" src="${source}">`;
+    });
 }
 
 function signed(value) {
@@ -329,7 +332,8 @@ function bindBoardPan() {
   let panning = null;
   el.viewport.addEventListener('pointerdown', (event) => {
     if (event.target.closest('.drag-token') || event.target.closest('.hotspot')
-        || event.target.closest('.piece') || event.target.closest('.tile-preview')) return;
+        || event.target.closest('.piece') || event.target.closest('.move-count')
+        || event.target.closest('.tile-preview')) return;
     panning = { x: event.clientX, y: event.clientY, panX: state.panX, panY: state.panY };
     el.viewport.classList.add('grabbing');
     el.viewport.setPointerCapture(event.pointerId);
@@ -399,13 +403,35 @@ function tileLabel(tile) {
   return tile.empty ? `unexplored ${tile.position}` : tile.label || tile.position;
 }
 
-function pressNode(node, action) {
+function pressNode(node, action, ship = null) {
   node.dataset.position = action.tile || '';
   node.dataset.customId = action.button.custom_id;
   node.dataset.messageId = action.message.id;
+  const select = async () => {
+    await press(action.message.id, action.button.custom_id, node);
+    if (action.kind === 'move-from' && ship) {
+      const next = spatialActions(state.view).find((entry) =>
+        entry.kind === 'move-ship' && entry.tile === action.tile && entry.ship === ship);
+      if (next) await press(next.message.id, next.button.custom_id, null);
+    }
+  };
+  let dragged = false;
+  if (['move-from', 'move-ship'].includes(action.kind)) {
+    node.addEventListener('pointerdown', (event) => {
+      const start = { x: event.clientX, y: event.clientY };
+      dragged = false;
+      window.addEventListener('pointerup', async (end) => {
+        dragged = Math.hypot(end.clientX - start.x, end.clientY - start.y) > 5;
+        if (!dragged) return;
+        await select();
+        const destination = hotspotAt(end.clientX, end.clientY, '.hotspot.move-dest');
+        if (destination) await press(Number(destination.dataset.messageId), destination.dataset.customId, destination);
+      }, { once: true });
+    });
+  }
   node.addEventListener('click', (event) => {
     event.stopPropagation();
-    press(action.message.id, action.button.custom_id, node);
+    if (!dragged) select();
   });
 }
 
@@ -567,7 +593,8 @@ function renderOverlay(view) {
     const planetLabel = { money: 'Gold', moneyadv: 'Adv Gold', science: 'Science',
       scienceadv: 'Adv Science', material: 'Material', materialadv: 'Adv Material',
       neutral: 'Neutral', neutraladv: 'Adv Neutral', orbital: 'Orbital' }[piece.square] || piece.square;
-    const marks = { population: planetLabel, 'move-from': 'From', 'move-ship': 'Move',
+    const shipName = SHIP_NAMES[piece.class] || piece.class;
+    const marks = { population: planetLabel, 'move-from': shipName, 'move-ship': shipName,
       'combat-hit': 'Hit', 'combat-remove': 'Remove' };
     if (marks[action.kind]) {
       const tag = document.createElement('span');
@@ -581,8 +608,29 @@ function renderOverlay(view) {
       count.textContent = String(piece.count);
       node.appendChild(count);
     }
-    pressNode(node, action);
+    pressNode(node, action, piece.class);
     el.overlay.appendChild(node);
+  }
+
+  for (const action of actions.filter((entry) => entry.button.counts?.length)) {
+    const tile = targetTile(action.tile);
+    const ship = (pieces.get(action.tile) || []).find((piece) =>
+      piece.kind === 'ship' && piece.class === action.ship && piece.color === view.you?.color);
+    if (!tile || !ship) continue;
+    const choices = action.button.counts;
+    choices.forEach((choice, index) => {
+      const angle = choices.length === 1 ? -Math.PI / 2
+        : -5 * Math.PI / 6 + 2 * Math.PI / 3 * index / (choices.length - 1);
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'move-count';
+      button.textContent = choice.label.match(/\((\d+)\)/)?.[1];
+      button.setAttribute('aria-label', `Move ${button.textContent} ${SHIP_NAMES[ship.class]}`);
+      button.style.left = `${tile.x + ship.x + 65 * Math.cos(angle) - 16}px`;
+      button.style.top = `${tile.y + ship.y + 65 * Math.sin(angle) - 16}px`;
+      pressNode(button, { ...action, button: choice });
+      el.overlay.appendChild(button);
+    });
   }
 
   renderTilePreview(actions, tiles);
@@ -829,13 +877,12 @@ function renderMarket(view) {
   const choosing = choices.size > 0;
   if (!choosing) {
     document.getElementById('tech-track-dialog').close();
-    state.techTrackPrompt = null;
   }
   const card = el.market.closest('.market-card');
   const wasChoosing = card.classList.contains('researching');
   card.classList.toggle('researching', choosing);
   if (choosing) {
-    document.querySelector('.table').insertBefore(card, document.querySelector('.players-card'));
+    if (!wasChoosing) document.querySelector('.table').insertBefore(card, document.querySelector('.players-card'));
     document.getElementById('market-toggle').setAttribute('aria-expanded', 'true');
     document.getElementById('market-content').classList.remove('collapsed');
     document.getElementById('market-content').inert = false;
@@ -844,6 +891,7 @@ function renderMarket(view) {
   }
   const stage = document.createElement('div');
   stage.className = 'market-stage';
+  stage.style.aspectRatio = el.market.firstElementChild?.style.aspectRatio || '';
   const image = panelImage(view, 'market', '', 'Available technologies');
   if (choosing) {
     image.loading = 'eager';
@@ -883,13 +931,6 @@ function renderMarket(view) {
         else press(tracks[0].message.id, tracks[0].button.custom_id, button);
       });
       stage.appendChild(button);
-      if (needsTrackChoice) {
-        const key = tracks.map((entry) => `${entry.message.id}:${entry.button.custom_id}`).join('|');
-        if (state.techTrackPrompt !== key) {
-          state.techTrackPrompt = key;
-          showTechTracks(region.tech, tracks);
-        }
-      }
     }
     if (!wasChoosing) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }).catch((error) => showToast(error.message, true));
@@ -1127,50 +1168,6 @@ function buildPanel(entries, message) {
   return wrap;
 }
 
-function stackPanel(entries, message) {
-  const wrap = document.createElement('div');
-  wrap.className = 'stack-choice';
-  const add = entries.find((entry) => /_moveQueueAdd_/.test(entry.button.custom_id));
-  const reset = entries.find((entry) => /_moveQueueReset_/.test(entry.button.custom_id));
-  const done = entries.find((entry) => /_moveQueueDone_/.test(entry.button.custom_id));
-  if (!add || !done) return null;
-  const selected = Number(((done.button.label || '').match(/(\d+)/) || [])[1] || 1);
-  const counts = (add.button.label || '').match(/(\d+)\/(\d+)/) || [];
-  const max = counts.length ? Number(counts[2]) : selected;
-  const head = document.createElement('div');
-  head.className = 'tray-head';
-  head.innerHTML = `Moving <b>${selected}</b> of up to ${max} ${escapeHtml(
-    SHIP_NAMES[(objectAction(done.button.custom_id) || {}).ship] || 'ships')}`
-    + ` from <b>${escapeHtml((objectAction(done.button.custom_id) || {}).tile || '')}</b>`;
-  wrap.appendChild(head);
-  const row = document.createElement('div');
-  row.className = 'stack-row';
-  const minus = document.createElement('button');
-  minus.type = 'button';
-  minus.className = 'choice';
-  minus.textContent = 'Reset';
-  minus.title = 'Start the selection again';
-  minus.disabled = selected <= 1;
-  minus.addEventListener('click', () => press(message.id, reset.button.custom_id, minus));
-  const count = document.createElement('b');
-  count.textContent = String(selected);
-  const plus = document.createElement('button');
-  plus.type = 'button';
-  plus.className = 'icon';
-  plus.textContent = '+';
-  plus.title = 'Add another ship to this move';
-  plus.disabled = selected >= max || add.button.disabled;
-  plus.addEventListener('click', () => press(message.id, add.button.custom_id, plus));
-  const move = document.createElement('button');
-  move.type = 'button';
-  move.className = 'choice s3';
-  move.textContent = `Move ${selected}`;
-  move.addEventListener('click', () => press(message.id, done.button.custom_id, move));
-  row.append(minus, count, plus, move);
-  wrap.appendChild(row);
-  return wrap;
-}
-
 function discoveryPanel(entries, keep, message) {
   const wrap = document.createElement('div');
   wrap.className = 'discovery-card';
@@ -1347,8 +1344,10 @@ function promptCard(message, index) {
 
   const queue = buttons.filter((button) => objectAction(button.custom_id || '')?.kind === 'move-queue');
   if (queue.length) {
-    const stack = stackPanel(queue.map((button) => ({ button })), message);
-    if (stack) body.appendChild(stack);
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = 'Choose how many ships to move above the stack on the map.';
+    body.appendChild(hint);
   }
 
   const discoveries = buttons.map((button) => ({ button, ...(discoveryChoice(button.custom_id || '') || {}) }))
@@ -1447,34 +1446,70 @@ function isChoicePrompt(message) {
   return buttons.some((button) => button.custom_id && !NAV_BUTTONS.test(button.custom_id));
 }
 
-function battlePanel(room, messages, view) {
+function battlePanel(battle, messages, view) {
   const section = document.createElement('section');
   section.className = 'battle-room';
-  const log = (view.history || []).filter((message) => message.room === room
-    && (message.content || (message.attachments || []).length))
-    .sort((a, b) => a.id - b.id);
-  section.innerHTML = `<header><span class="battle-mark">⚔</span>
-    <div><b>${escapeHtml(room.replace(/^aeb\d+-/, ''))}</b>
-    <small>${messages.length} open order${messages.length === 1 ? '' : 's'} · room ${escapeHtml(room)}</small></div></header>`;
-  messages.sort((a, b) => a.id - b.id).forEach((message, index) =>
-    section.appendChild(promptCard(message, index)));
-  if (log.length) {
-    const details = document.createElement('details');
-    details.className = 'battle-log';
-    details.innerHTML = `<summary>Battle log · ${log.length} records</summary>`;
-    const list = document.createElement('div');
-    list.className = 'history-list';
-    list.append(...log.map(historyItem));
-    details.appendChild(list);
-    section.appendChild(details);
+  const playerName = (color) => color === 'ai' ? 'Guardians / AI'
+    : (view.game.players.find((player) => player.color === color)?.name || color);
+  const sideName = (side) => side.colors.map(playerName).join(' + ') || side.role;
+  const header = document.createElement('header');
+  header.innerHTML = `<span class="battle-mark">⚔</span><div><b>${escapeHtml(
+    battle.room.replace(/^aeb\d+-/, ''))}</b></div>`;
+  section.appendChild(header);
+  const sides = document.createElement('div');
+  sides.className = 'battle-sides';
+  sides.innerHTML = battle.sides.map((side) => `<span>${escapeHtml(sideName(side))}</span>`).join('');
+  section.appendChild(sides);
+  const chat = document.createElement('div');
+  chat.className = 'battle-chat';
+  chat.dataset.room = battle.room;
+  chat.setAttribute('role', 'log');
+  chat.setAttribute('aria-label', `Combat history: ${battle.room}`);
+  const active = new Map(messages.map((message) => [message.id, message]));
+  const events = new Map(battle.messages.map((message) => [message.id, message]));
+  messages.forEach((message) => events.set(message.id, {
+    ...message, combat: message.combat?.color ? message.combat : events.get(message.id)?.combat,
+  }));
+  for (const message of [...events.values()].sort((a, b) => a.id - b.id)) {
+    if (!message.content && !(message.attachments || []).length && !active.has(message.id)) continue;
+    const event = document.createElement('div');
+    const side = message.combat?.side;
+    event.className = `battle-event ${side || 'neutral'}`;
+    const color = message.combat?.color;
+    if (color) {
+      const author = document.createElement('div');
+      author.className = 'battle-author';
+      author.textContent = playerName(color);
+      author.style.color = PIECE_COLORS[color] || 'var(--muted)';
+      event.appendChild(author);
+    }
+    event.appendChild(active.has(message.id) ? promptCard(message, 0) : historyItem(message));
+    event.querySelectorAll('img.attachment').forEach((image) => {
+      const zoom = document.createElement('button');
+      zoom.type = 'button';
+      zoom.className = 'battle-image-zoom';
+      zoom.setAttribute('aria-label', 'Enlarge combat image');
+      image.replaceWith(zoom);
+      zoom.appendChild(image);
+      zoom.addEventListener('click', () => {
+        el.zoomImage.src = image.src;
+        el.zoomImage.alt = image.alt;
+        el.zoomDialog.showModal();
+      });
+    });
+    chat.appendChild(event);
   }
+  section.appendChild(chat);
   return section;
 }
 
 function renderDock(view) {
+  const scrolls = new Map([...el.dock.querySelectorAll('.battle-chat')].map((chat) =>
+    [chat.dataset.room, { top: chat.scrollTop,
+      followsLatest: chat.scrollHeight - chat.scrollTop - chat.clientHeight < 32 }]));
   el.dock.replaceChildren();
   const pending = [...(view.pending || [])];
-  if (!pending.length) {
+  if (!pending.length && !(view.battles || []).length) {
     el.dock.appendChild(waitingCard(view));
     return;
   }
@@ -1497,8 +1532,22 @@ function renderDock(view) {
     if (!rooms.has(message.room)) rooms.set(message.room, []);
     rooms.get(message.room).push(message);
   }
-  for (const [room, messages] of rooms) {
-    el.dock.appendChild(battlePanel(room, messages, view));
+  for (const battle of view.battles || []) {
+    const panel = battlePanel(battle, rooms.get(battle.room) || [], view);
+    el.dock.appendChild(panel);
+    const chat = panel.querySelector('.battle-chat');
+    const previous = scrolls.get(battle.room);
+    let followsLatest = !previous || previous.followsLatest;
+    const restoreScroll = () => {
+      chat.scrollTop = previous && !previous.followsLatest ? previous.top : chat.scrollHeight;
+    };
+    restoreScroll();
+    chat.addEventListener('scroll', () => {
+      followsLatest = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 32;
+    });
+    chat.querySelectorAll('img').forEach((image) => image.addEventListener('load', () => {
+      if (followsLatest) chat.scrollTop = chat.scrollHeight;
+    }, { once: true }));
   }
   const table = unique.filter((message) => !isCombat(message));
   const primary = table.filter(isChoicePrompt).sort((a, b) => b.id - a.id);
@@ -1627,6 +1676,12 @@ async function press(messageId, customId, node) {
     if (view.error) showToast(view.error, true);
     else el.toast.classList.remove('on');
     render(view, true);
+    const selectedTech = techButton(customId);
+    if (!view.error && selectedTech?.track === 'any') {
+      const tracks = (view.tech_tracks || []).filter((button) => techButton(button.custom_id))
+        .map((button) => ({ message: { id: messageId }, button }));
+      if (tracks.length) showTechTracks(selectedTech.tech, tracks);
+    }
     if (el.historyDialog.open) await loadHistory(true);
   } catch (error) {
     showToast(`press failed: ${error}`, true);
@@ -1678,6 +1733,7 @@ function viewSignature(view) {
     seat: view.seat,
     version: view.version,
     pending: view.pending,
+    battles: view.battles,
     game: view.game,
     you: view.you,
     market: view.tech_market,

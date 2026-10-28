@@ -11,13 +11,16 @@ import re
 import traceback
 
 from aiohttp import web
+from discord.ui import View
 from Buttons.Draft import DraftButtons
 from setup.GameInit import GameInit
 
 import config
 from Buttons.Research import ResearchButtons
+from Buttons.Move import MoveButtons
 from Buttons.Turn import TurnButtons
 from helpers.DrawHelper import DrawHelper
+from helpers.CombatHelper import Combat
 from helpers.GamestateHelper import GamestateHelper
 from helpers.GameIds import list_active_game_ids, list_game_ids
 from helpers.GameLock import game_lock
@@ -28,8 +31,8 @@ from listeners.ButtonListener import ButtonListener
 from webui import catalog
 from webui.render import (SOURCE_H, SOURCE_W, TILE_H, TILE_W, board_meta, render_board,
                           render_tile_preview, render_panel, rotate_tile_point)
-from webui.store import FeedStore
-from webui.transport import Surface, WebInteraction
+from webui.store import FeedStore, buttons_from_view
+from webui.transport import Surface, WebInteraction, combat_context
 
 LOG = logging.getLogger(__name__)
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -105,6 +108,7 @@ def _message(row, players, seat=None, color=None):
         "private": bool(row["ephemeral_to"]),
         "deleted": deleted,
         "created": row["created_at"],
+        "combat": row.get("combat") or {},
         "actionable": bool(buttons and for_you),
         "for_you": bool(for_you),
     }
@@ -298,14 +302,19 @@ def _board_pieces(game):
     return pieces
 
 
-def _current_prompts(pending):
+def _is_past_combat(room, round_number):
+    match = re.search(r"-Round (\d+), Tile .+, (?:Combat|Bombing)$", room or "")
+    return bool(match and round_number is not None and int(match[1]) < round_number)
+
+
+def _current_prompts(pending, turn_menus=()):
     if not pending:
         return pending
     superseding = [message for message in pending
                    if _is_phase_prompt(message) or not _is_standing(message)]
     newest = max((message["id"] for message in superseding), default=0)
     turn_starts = {}
-    for message in pending:
+    for message in [*pending, *turn_menus]:
         if _is_turn_menu(message):
             turn_starts[message["room"]] = max(turn_starts.get(message["room"], 0), message["id"])
     return [message for message in pending
@@ -388,16 +397,49 @@ class WebApp:
         active = game.gamestate.get("activePlayerColor", [])
         you_color = (you or {}).get("color")
 
+        rows = self.store.pending_messages(game_id, seat_requested, include_deleted=True)
+        # Used turn menus still mark the boundary of an abandoned action.
+        turn_menus = [_message({**row, "deleted": False}, players, seat_requested, you_color)
+                      for row in rows if _is_turn_menu(row)]
+        turn_menus = [message for message in turn_menus if message["actionable"]]
         pending = [_message(row, players, seat_requested, you_color)
-                   for row in self.store.pending_messages(game_id, seat_requested)]
+                   for row in rows if not row["deleted"]]
         pending = [message for message in pending
-                   if message["actionable"] and seat_requested]
+                   if message["actionable"] and seat_requested
+                   and not _is_past_combat(message["room"], game.gamestate.get("roundNum"))]
         drafting = game.gamestate.get("draftingPlayers", [])
         if drafting and seat_requested != str(drafting[0]):
             pending = [message for message in pending if not any(
                 (button.get("custom_id") or "").startswith("draftFaction_")
                 for button in message["buttons"])]
-        pending = _current_prompts(pending)
+        pending = _current_prompts(pending, turn_menus)
+        for message in pending:
+            for button in list(message["buttons"]):
+                match = re.fullmatch(r"FCID([^_]+)_startMove_(\d+)", button.get("custom_id") or "")
+                if not match or int(match[2]) < 2 or button.get("disabled"):
+                    continue
+                color, move_count = match.groups()
+                player = game.getPlayerObjectFromColor(color)
+                view, tiles = MoveButtons.buildMoveOriginView(game, player, move_count, "all", "")
+                message["buttons"].extend(buttons_from_view(view))
+        for message in pending:
+            for button in message["buttons"]:
+                match = re.fullmatch(r"FCID([^_]+)_moveQueueDone_(.+)", button.get("custom_id") or "")
+                if not match:
+                    continue
+                color, command = match.groups()
+                parts = command.split("_")
+                origin, ship, move_count = parts[:3]
+                nested, phase, ship_filter, suffix = MoveButtons.getMoveQueueContext(
+                    f"moveQueueDone_{command}", 5)
+                player = game.getPlayerObjectFromColor(color)
+                maximum = min(MoveButtons.getMovableShipsOfType(game, player, origin, ship),
+                              MoveButtons.getRemainingMoveActivations(player, int(move_count), nested))
+                button["counts"] = []
+                for count in range(1, maximum + 1):
+                    choices = MoveButtons.buildMoveQueueView(player, origin, ship, move_count, count, maximum, suffix)
+                    button["counts"].extend(choice for choice in buttons_from_view(choices)
+                                            if "_moveQueueDone_" in choice["custom_id"])
         history, history_more = self.store.history_page(game_id, seat_requested, limit=40)
         history = [_message(row, players, seat_requested, you_color) for row in history]
         # Compatibility: the flat recent feed the day-1 page and its checks read.
@@ -409,6 +451,21 @@ class WebApp:
         ended = bool(game.gamestate.get("gameEnded"))
         if ended:
             pending = []
+
+        battles = {}
+        for row in self.store.combat_history(game_id, seat_requested):
+            room = row["room"]
+            if _is_past_combat(room, game.gamestate.get("roundNum")):
+                continue
+            position = re.search(r"Tile (\d+[a-z]?)", room)
+            tile = game.gamestate["board"].get(position[1], {}) if position else {}
+            if room not in battles:
+                battles[room] = {"room": room, "messages": [], "sides": [
+                    {"role": side, "colors": Combat.sideOf(tile.get(side))}
+                    for side in ("defender", "attacker")]}
+            if not row.get("combat"):
+                row["combat"] = combat_context(game_id, room, row["content"], row["buttons"], game=game)
+            battles[room]["messages"].append(_message(row, players, seat_requested, you_color))
 
         player_rows = [player_state(game, seat, pid, stats) for pid, stats in players.items()]
         you_row = next((row for row in player_rows if row["is_you"]), None)
@@ -475,6 +532,7 @@ class WebApp:
                  for row in player_rows],
                 key=lambda row: (row["points"] is None, -(row["points"] or 0))),
             "pending": pending,
+            "battles": list(battles.values()),
             "history": history,
             "history_more": history_more,
             "messages": messages,
@@ -656,6 +714,29 @@ class WebApp:
                 game = self.game(game_id)
                 names, colors = self._parts(game_id, game)
                 row = self.store.get(int(message_id))
+                pending = self.snapshot(game_id, seat)["pending"]
+                allowed = [button for message in pending if message["id"] == int(message_id)
+                           for button in message["buttons"] if not button.get("disabled")]
+                allowed += [choice for button in allowed for choice in button.get("counts", [])]
+                track_choices = []
+                for button in allowed:
+                    match = re.fullmatch(r"FCID([^_]+)_getTech_([^_]+)_any(_setup)?",
+                                         button.get("custom_id") or "")
+                    if not match:
+                        continue
+                    color, tech, setup = match.groups()
+                    player = game.getPlayerObjectFromColor(color)
+                    view = await ResearchButtons.handle_wild_tech_selection(
+                        View(), catalog.TECHS[tech], tech, player, bool(setup))
+                    tracks = buttons_from_view(view)
+                    if custom_id == button["custom_id"]:
+                        return web.json_response({**self.snapshot(game_id, seat),
+                                                  "tech_tracks": tracks, "error": None})
+                    track_choices.extend(tracks)
+                if not any(button.get("custom_id") == custom_id
+                           for button in [*allowed, *track_choices]):
+                    return web.json_response({**self.snapshot(game_id, seat),
+                                              "error": "That choice is no longer active."})
                 room = row["room"] if row else None
                 interaction = WebInteraction(
                     self.store, game_id, seat, custom_id=custom_id, message_id=int(message_id),
