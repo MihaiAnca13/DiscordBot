@@ -4,6 +4,7 @@ services:
     build:
       context: .
       dockerfile: dev/webui/Dockerfile
+    command: ["python", "-m", "dev.webui.reload"]
     ports:
       - "127.0.0.1:8099:8099"
     healthcheck:
@@ -13,6 +14,14 @@ services:
       start_period: 90s
       retries: 30
     volumes:
+      - ./webui:/app/webui
+      - ./Buttons:/app/Buttons
+      - ./commands:/app/commands
+      - ./helpers:/app/helpers
+      - ./listeners:/app/listeners
+      - ./setup:/app/setup
+      - ./dev:/app/dev
+      - ./config.py:/app/config.py
       - webui-sandbox:/sandbox
       - webui-feed:/app/webui/data
       - ./dev/webui/artifacts:/app/dev/webui/artifacts

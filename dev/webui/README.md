@@ -116,3 +116,10 @@ agent's host permissions still matter. Leave normal OpenCode permissions enabled
 
 `docker compose -f compose.webui.yaml down` stops development; volumes persist.
 No command here stops or changes the separate wave2 bot.
+
+### Live code changes
+
+The dev container mounts source folders from this checkout. Python edits restart
+the server automatically within a second; refresh the browser for HTML, CSS, or
+JavaScript changes. Game saves and feed data persist across restarts. Dependency
+or Dockerfile changes still require `docker compose -f compose.webui.yaml up -d --build`.

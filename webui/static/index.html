@@ -15,14 +15,22 @@
     <div class="top-controls">
       <label for="game">Game</label>
       <select id="game"></select>
+      <button id="new-game" class="ghost hidden">New game</button>
       <label for="seat">Seat</label>
       <select id="seat"></select>
       <span id="round" class="badge round">Round ?</span>
-      <span id="turn" class="badge"></span>
+      <div class="turn-status">
+        <span id="turn" class="badge"></span>
+        <img id="turn-order" alt="Turn order and passing order" class="hidden">
+      </div>
+      <span id="s3-remaining" class="badge s3-count"></span>
     </div>
     <div class="top-actions">
       <button id="open-faction" class="ghost">Faction</button>
       <button id="open-history" class="ghost">History</button>
+      <button class="ghost" data-reference="ai">AI stats</button>
+      <button class="ghost" data-reference="species">Minor species</button>
+      <button class="ghost" data-reference="parts">Parts reference</button>
       <label class="toggle" title="When off, this game lives only in the browser">
         <input type="checkbox" id="mirror"> Discord
       </label>
@@ -51,27 +59,45 @@
         </div>
         <div id="board-hint" class="board-hint">Drag to pan · scroll to zoom</div>
       </div>
-      <div class="card market-card">
-        <div class="card-head">
-          <h2>Tech market</h2>
-          <span id="market-note" class="note"></span>
-        </div>
-        <div id="tech-market" class="tech-market"></div>
-      </div>
+
     </section>
 
     <section class="right">
       <div id="action-dock" class="action-dock"></div>
-      <div class="card players-card">
+      <section class="card market-card">
+        <button id="market-toggle" class="card-head" aria-expanded="true" aria-controls="market-content" type="button">
+          <h2>Tech market</h2>
+          <span id="market-note" class="note"></span>
+        </button>
+        <div id="market-content" class="market-content"><div class="market-clip"><div id="tech-market" class="tech-market"></div></div></div>
+      </section>
+    </section>
+      <section class="card players-card">
         <div class="card-head">
-          <h2>Players</h2>
+          <div class="players-heading"><h2>Players</h2><button id="toggle-player-boards" class="icon" type="button" title="Collapse all player boards" aria-label="Collapse all player boards">▴</button></div>
           <span id="players-note" class="note"></span>
         </div>
         <div id="players" class="players"></div>
-      </div>
-    </section>
+      </section>
   </main>
 
+  <dialog id="new-game-dialog" class="sheet">
+    <form id="new-game-form">
+      <div class="sheet-head"><h2>New game · dev sandbox</h2><button type="button" class="icon close" data-close="new-game-dialog">×</button></div>
+      <p>Local player seats. Choose factions in the draft after creating the game.</p>
+      <p><label>Game name <input name="name" required maxlength="100" value="New game"></label></p>
+      <p><label>Players <input name="players" type="number" min="1" max="9" value="2" required></label></p>
+      <p><label>AI ships <select name="ai"><option value="def">Default</option><option value="adv">Advanced</option><option value="wa">Worlds Apart</option><option value="random">Random and separate</option></select></label></p>
+<p><label><input type="checkbox" name="rift_cannon" checked> Rift cannons</label></p>
+<p><label><input type="checkbox" name="turn_order_variant" checked> Passing order turns</label></p>
+<p><label><input type="checkbox" name="galactic_event_tiles"> Galactic event tiles</label></p>
+<p><label><input type="checkbox" name="hyperlanes"> Hyperlanes (4–5 players)</label></p>
+<p><label><input type="checkbox" name="community_parts"> Community parts</label></p>
+<p><label><input type="checkbox" name="community_rep_mod"> Community reputation</label></p>
+<p><label><input type="checkbox" name="ban_factions"> Ban factions</label></p>
+<p><label><input type="checkbox" name="alliances"> Alliances (4+ players)</label></p>
+<p><label><input type="checkbox" name="community_factions"> Community factions</label></p>
+<p id="new-game-error" role="alert"></p><div class="sheet-foot"><button class="primary" type="submit">Create game</button></div></form></dialog>
   <dialog id="history-dialog" class="sheet">
     <div class="sheet-head">
       <div><h2>History</h2><p id="history-note" class="note"></p></div>
@@ -90,6 +116,16 @@
       <button class="icon close" data-close="faction-dialog">×</button>
     </div>
     <div id="faction-body" class="faction-body"></div>
+  </dialog>
+
+  <dialog id="tech-track-dialog" class="sheet tech-track-sheet">
+    <div class="sheet-head"><h2 id="tech-track-title">Choose technology track</h2><button class="icon close" data-close="tech-track-dialog">×</button></div>
+    <div id="tech-track-choices" class="tech-track-choices"></div>
+  </dialog>
+
+  <dialog id="reference-dialog" class="sheet reference-sheet">
+    <div class="sheet-head"><h2 id="reference-title"></h2><button class="icon close" data-close="reference-dialog">×</button></div>
+    <div id="reference-body"></div>
   </dialog>
 
   <dialog id="zoom-dialog" class="sheet lightbox">

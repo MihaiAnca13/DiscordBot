@@ -549,7 +549,7 @@ class DrawHelper:
 
         return is_adjacent(tile1, tile2) and is_adjacent(tile2, tile1)
 
-    def display_techs(self, message:str, techs):
+    def display_techs(self, message:str, techs, regions=None):
         context = Image.new("RGBA", (2500 * 3, 450 * 3), (0, 0, 0, 255))
         techsAvailable = techs
         with open("data/techs.json", "r") as f:
@@ -623,6 +623,9 @@ class DrawHelper:
                 # tech_image = self.use_image(tech_path)
                 # tech_image = tech_image.resize((73,73))
                 context.paste(tech_image, (ultimateX, y), mask=tech_image)
+                if regions is not None:
+                    regions.append({"tech": tech, "x": ultimateX, "y": y,
+                                    "width": tech_image.width, "height": tech_image.height})
                 # if part_data.get(tech, {}).get("nrg_use", 0) > 0:
                 #     energy_image = self.use_image("images/resources/components/energy/" +
                 #                                   f"{str(part_data[tech]['nrg_use'])}energy.png")

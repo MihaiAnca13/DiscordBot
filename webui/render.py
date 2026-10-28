@@ -150,7 +150,8 @@ def render_board(games_path, game_id, cache_dir, keep=3):
     temporary = f"{target}.tmp"
     rendered.save(temporary, format="WEBP", quality=88, method=1)
     os.replace(temporary, target)
-    cached = sorted(os.path.join(folder, name) for name in os.listdir(folder))
+    cached = sorted(os.path.join(folder, name) for name in os.listdir(folder)
+                    if name.endswith(".map.webp"))
     for stale in cached[:-keep]:
         os.unlink(stale)
     return target, key
@@ -202,3 +203,48 @@ def board_meta(games_path, game_id):
         })
     geometry["subsectors"] = subsectors
     return geometry
+
+
+def render_panel(games_path, game_id, panel, seat, cache_dir):
+    """Use the same market and player-board images as the Discord bot."""
+    key = state_version(games_path, game_id)
+    folder = os.path.join(cache_dir, game_id, "panels")
+    os.makedirs(folder, exist_ok=True)
+    name = f"{panel}-{seat}" if panel == "player" else panel
+    if panel == "turn-order":
+        name = "turn-order-compact"
+    target = os.path.join(folder, f"{key}.{name}.webp")
+    layout_path = f"{target}.json"
+    if not os.path.exists(target) or (panel == "market" and not os.path.exists(layout_path)):
+        game = GamestateHelper(None, game_id)
+        drawing = DrawHelper(game.gamestate)
+        if panel == "market":
+            regions = []
+            image = drawing.display_techs("Available Techs", game.gamestate["available_techs"], regions)
+            with open(layout_path, "w") as handle:
+                json.dump({"width": image.width, "height": image.height, "regions": regions}, handle)
+        elif panel == "turn-order":
+            order = drawing.display_turn_order()
+            count = max(1, len(game.gamestate["players"]))
+            height = 270 if game.gamestate.get("pass_order") else 175
+            image = order.crop((0, 85, max(95 * count, 130 + 65 * len(game.gamestate.get("pass_order", []))), height))
+        elif panel in ("ai", "species", "parts"):
+            reference = drawing.display_remaining_tiles()
+            bounds = {"ai": (0, 270, 630, 560), "species": (640, 0, 1300, 200),
+                      "parts": (1300, 0, 1900, 450)}
+            image = reference.crop(bounds[panel])
+        else:
+            player = game.gamestate["players"].get(seat)
+            if player is None or not player.get("color"):
+                return None
+            image = drawing.player_area(player)
+        temporary = f"{target}.tmp"
+        image.save(temporary, format="WEBP", quality=92, method=1)
+        os.replace(temporary, target)
+        cached = sorted(os.path.join(folder, entry) for entry in os.listdir(folder)
+                        if entry.endswith(f".{name}.webp"))
+        for stale in cached[:-3]:
+            os.unlink(stale)
+            if os.path.exists(f"{stale}.json"):
+                os.unlink(f"{stale}.json")
+    return target

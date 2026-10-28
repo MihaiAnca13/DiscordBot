@@ -57,3 +57,11 @@ def test_rift_cannon_disabled(make_game):
 
 def test_rift_cannon_enabled(make_game):
     assert "rican" in _setup_techs(make_game, rift_cannon=True)
+
+
+def test_single_player_setup(make_game):
+    game = make_game(_minimal_gamestate())
+    game.setup_techs_and_outer_rim(1, False, False)
+    assert game.gamestate["player_count"] == 1
+    assert len(game.gamestate["tile_deck_300"]) == 5
+    assert game.gamestate["available_techs"]

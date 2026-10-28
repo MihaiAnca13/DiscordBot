@@ -11,13 +11,15 @@ import re
 import traceback
 
 from aiohttp import web
+from Buttons.Draft import DraftButtons
+from setup.GameInit import GameInit
 
 import config
 from Buttons.Research import ResearchButtons
 from Buttons.Turn import TurnButtons
 from helpers.DrawHelper import DrawHelper
 from helpers.GamestateHelper import GamestateHelper
-from helpers.GameIds import list_active_game_ids
+from helpers.GameIds import list_active_game_ids, list_game_ids
 from helpers.GameLock import game_lock
 from helpers.ImageCache import ImageCacheHelper
 from helpers.PlayerHelper import PlayerHelper
@@ -25,7 +27,7 @@ from helpers.ShipHelper import PlayerShip
 from listeners.ButtonListener import ButtonListener
 from webui import catalog
 from webui.render import (SOURCE_H, SOURCE_W, TILE_H, TILE_W, board_meta, render_board,
-                          render_tile_preview, rotate_tile_point)
+                          render_tile_preview, render_panel, rotate_tile_point)
 from webui.store import FeedStore
 from webui.transport import Surface, WebInteraction
 
@@ -156,7 +158,7 @@ def player_state(game, seat, pid, stats):
                       "ring": tile.get("ring"), "ships": tile.get("player_ships", [])})
     return {
         "id": pid,
-        "name": _clean_name(stats.get("username") or stats.get("name") or pid),
+        "name": _clean_name(stats.get("username") or stats.get("player_name") or stats.get("name") or pid),
         "faction_name": stats.get("name"),
         "color": color,
         "artwork": (faction or {}).get("artwork") or color,
@@ -302,9 +304,14 @@ def _current_prompts(pending):
     superseding = [message for message in pending
                    if _is_phase_prompt(message) or not _is_standing(message)]
     newest = max((message["id"] for message in superseding), default=0)
+    turn_starts = {}
+    for message in pending:
+        if _is_turn_menu(message):
+            turn_starts[message["room"]] = max(turn_starts.get(message["room"], 0), message["id"])
     return [message for message in pending
-            if not ((_is_turn_menu(message) or _is_phase_prompt(message))
-                    and not _is_standing(message) and message["id"] < newest)]
+            if _is_standing(message) or not (
+                message["id"] < turn_starts.get(message["room"], 0)
+                or ((_is_turn_menu(message) or _is_phase_prompt(message)) and message["id"] < newest))]
 
 
 class WebApp:
@@ -330,7 +337,7 @@ class WebApp:
 
     def _parts(self, game_id, game):
         players = game.gamestate["players"]
-        names = {pid: (stats.get("username") or stats.get("color") or pid)
+        names = {pid: (stats.get("username") or stats.get("player_name") or stats.get("color") or pid)
                  for pid, stats in players.items()}
         colors = [stats.get("color") for stats in players.values() if stats.get("color")]
         return names, colors
@@ -385,6 +392,11 @@ class WebApp:
                    for row in self.store.pending_messages(game_id, seat_requested)]
         pending = [message for message in pending
                    if message["actionable"] and seat_requested]
+        drafting = game.gamestate.get("draftingPlayers", [])
+        if drafting and seat_requested != str(drafting[0]):
+            pending = [message for message in pending if not any(
+                (button.get("custom_id") or "").startswith("draftFaction_")
+                for button in message["buttons"])]
         pending = _current_prompts(pending)
         history, history_more = self.store.history_page(game_id, seat_requested, limit=40)
         history = [_message(row, players, seat_requested, you_color) for row in history]
@@ -403,8 +415,13 @@ class WebApp:
         payload = {
             "game": {
                 "id": game_id,
+                "name": game.gamestate.get("game_name", game_id),
                 "round": game.gamestate.get("roundNum"),
                 "round_max": 8,
+                "s3_remaining": len(game.gamestate.get("tile_deck_300", [])) + len(game.gamestate.get("tile_discard_deck_300", [])),
+                "minor_species": game.gamestate.get("minor_species", []),
+                "setup": not bool(game.gamestate.get("setup_finished")),
+                "drafting_seat": str((game.gamestate.get("draftingPlayers") or [""])[0]),
                 "active": active,
                 "ended": bool(game.gamestate.get("gameEnded")),
                 "players": [{
@@ -532,21 +549,60 @@ class WebApp:
                 self.store.set_buttons(row["id"], kept)
 
     # -- handlers --------------------------------------------------------
+    async def api_create_game(self, request):
+        if self.games_path != "/sandbox/games":
+            return web.json_response({"error": "Game creation is restricted to the dev sandbox"}, status=403)
+        body = await request.json()
+        name = body.get("name", "")
+        count = body.get("players")
+        ai = body.get("ai", "def")
+        options = ("rift_cannon", "turn_order_variant", "galactic_event_tiles", "hyperlanes",
+                   "community_parts", "community_rep_mod", "ban_factions", "alliances", "community_factions")
+        if (not isinstance(name, str) or not name.strip() or len(name) > 100
+                or type(count) is not int or not 1 <= count <= 9
+                or ai not in ("def", "adv", "wa", "random")
+                or any(type(body.get(key, False)) is not bool for key in options)):
+            return web.json_response({"error": "Invalid game settings"}, status=400)
+        if body.get("hyperlanes") and count not in (4, 5):
+            return web.json_response({"error": "Hyperlanes require 4 or 5 players"}, status=400)
+        if body.get("alliances") and count < 4:
+            return web.json_response({"error": "Alliances require at least 4 players"}, status=400)
+        players = [[seat, f"Player {seat}"] for seat in range(1, count + 1)]
+        async with game_lock("dev-create"):
+            while os.path.exists(os.path.join(self.games_path, f"aeb{config.game_number}.json")):
+                config.game_number += 1
+            init = GameInit(name.strip(), players, ai, body.get("rift_cannon", True),
+                            body.get("turn_order_variant", True), body.get("community_parts", False),
+                            body.get("community_rep_mod", False), body.get("community_factions", False))
+            init.create_game()
+            game_id = init.gamestate["game_id"]
+            game = self.game(game_id)
+            game.setAlliances(body.get("alliances", False))
+            game.setup_techs_and_outer_rim(count, body.get("galactic_event_tiles", False), body.get("hyperlanes", False))
+            self.store.set_mirror(game_id, False)
+            interaction = WebInteraction(self.store, game_id, "1", media_dir=self.media_dir)
+            await DraftButtons.startDraft(game, players, interaction, interaction.channel, body.get("ban_factions", False))
+        return web.json_response({"id": game_id}, status=201)
+
     async def api_games(self, request):
         games = []
-        for game_id in list_active_game_ids():
+        active_ids = set(list_active_game_ids())
+        for game_id in list_game_ids():
             try:
                 game = self.game(game_id)
             except (OSError, ValueError):
                 continue
+            if game_id not in active_ids and game.gamestate.get("setup_finished"):
+                continue
             names, _colors = self._parts(game_id, game)
             games.append({
                 "id": game_id,
+                "name": game.gamestate.get("game_name", game_id),
                 "round": game.gamestate.get("roundNum"),
                 "active": game.gamestate.get("activePlayerColor", []),
                 "players": [_clean_name(names[pid]) for pid in game.gamestate["players"]],
             })
-        return web.json_response({"games": games})
+        return web.json_response({"games": games, "can_create": self.games_path == "/sandbox/games"})
 
     async def api_view(self, request):
         game_id = request.match_info["game_id"]
@@ -653,6 +709,33 @@ class WebApp:
         response.headers["X-Board-Key"] = key
         return response
 
+    async def api_market_layout(self, request):
+        game_id = request.match_info["game_id"]
+        try:
+            async with game_lock(game_id):
+                path = await asyncio.to_thread(render_panel, self.games_path, game_id,
+                                               "market", "", self.render_dir)
+        except FileNotFoundError:
+            return web.json_response({"error": "unknown game"}, status=404)
+        return web.FileResponse(f"{path}.json", headers={"Cache-Control": "no-cache"})
+
+    async def api_panel(self, request):
+        game_id = request.match_info["game_id"]
+        panel = request.match_info["panel"]
+        seat = request.query.get("seat", "")
+        if panel not in ("market", "player", "turn-order", "ai", "species", "parts") or (panel == "player" and not seat.isdigit()):
+            return web.json_response({"error": "unknown panel"}, status=400)
+        try:
+            async with game_lock(game_id):
+                path = await asyncio.to_thread(render_panel, self.games_path, game_id, panel, seat, self.render_dir)
+        except FileNotFoundError:
+            return web.json_response({"error": "unknown game"}, status=404)
+        if path is None:
+            return web.json_response({"error": "player has not drafted a faction"}, status=404)
+        response = web.FileResponse(path)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
     async def api_tile(self, request):
         """A single explored tile at one rotation, painted by the engine's own art."""
         game_id = request.match_info["game_id"]
@@ -695,6 +778,7 @@ class WebApp:
         app.on_startup.append(prepare_images)
         app.router.add_get("/", self.index)
         app.router.add_get("/api/games", self.api_games)
+        app.router.add_post("/api/games", self.api_create_game)
         app.router.add_get("/api/games/{game_id}/view", self.api_view)
         app.router.add_get("/api/games/{game_id}/history", self.api_history)
         app.router.add_get("/api/catalog", self.api_catalog)
@@ -703,6 +787,8 @@ class WebApp:
         app.router.add_post("/api/games/{game_id}/mirror", self.api_mirror)
         app.router.add_get("/api/games/{game_id}/board.webp", self.api_board)
         app.router.add_get("/api/games/{game_id}/tile.webp", self.api_tile)
+        app.router.add_get("/api/games/{game_id}/{panel}.webp", self.api_panel)
+        app.router.add_get("/api/games/{game_id}/market-layout", self.api_market_layout)
         app.router.add_get("/api/media/{message_id}/{name}", self.api_media)
         app.router.add_static("/static", STATIC_DIR)
         app.router.add_static("/art", ART_DIR)

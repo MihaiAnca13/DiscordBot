@@ -6,6 +6,8 @@ engine uses and points at the artwork it already ships.
 import json
 import os
 
+from helpers.FactionReference import faction_references
+
 ART_ROOT = os.path.join("images", "resources")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -100,6 +102,9 @@ def faction(key):
         "name": row["name"],
         "artwork": row.get("artwork", key),
         "image": faction_board_image(row.get("artwork", key)),
+        "reference": next((text for text, board in faction_references()
+                           if board == ("terran_conglomerate_board.png" if key.startswith("ter")
+                                        else f"{row.get('artwork', key)}_board.png")), ""),
         "abilities": row.get("abilities", []),
         "start": {field: row.get(field) for field in (
             "money", "science", "materials", "colony_ships", "trade_value",

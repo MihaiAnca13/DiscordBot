@@ -1,9 +1,17 @@
 // One page, one API client. Keep every HTTP call in this file's `api` object so the
 // whole thing can be lifted into a Vue app when it moves into the OBG repo.
 const api = {
+  async marketLayout(gameId) {
+    const response = await fetch(`/api/games/${gameId}/market-layout`);
+    if (!response.ok) throw new Error('Could not load technology targets');
+    return response.json();
+  },
   async games() {
     const response = await fetch('/api/games');
-    return (await response.json()).games || [];
+    const data = await response.json();
+    state.isDevMode = !!data.can_create;
+    document.getElementById('new-game').classList.toggle('hidden', !data.can_create);
+    return data.games || [];
   },
   async view(gameId, seat) {
     const response = await fetch(`/api/games/${gameId}/view?seat=${encodeURIComponent(seat)}`);
@@ -76,6 +84,8 @@ const el = {
 
 const state = {
   gameId: null,
+  isDevMode: false,
+  collapsedBoards: new Set(),
   seat: '',
   view: null,
   catalog: { techs: {}, parts: {} },
@@ -472,7 +482,11 @@ function renderOverlay(view) {
     if (!tile) continue;
     const action = choices.sort((left, right) =>
       TILE_PRIORITY.indexOf(left.kind) - TILE_PRIORITY.indexOf(right.kind))[0];
-    const box = hitBox(tile);
+    const target = hitBox(tile);
+    const isInfluence = ['influence-add', 'influence-remove'].includes(action.kind);
+    const box = isInfluence
+      ? { x: target.x + target.width / 2 - 20, y: target.y + target.height / 2 - 20, width: 40, height: 40 }
+      : target;
     const hotspot = document.createElement('button');
     hotspot.type = 'button';
     hotspot.className = `hotspot ${action.kind}${tile.empty ? ' empty' : ''}`;
@@ -549,8 +563,11 @@ function renderOverlay(view) {
     glyph.textContent = piece.kind === 'ship'
       ? (piece.class === 'int' ? '▲' : piece.class === 'cru' ? '◆' : piece.class === 'drd' ? '■' : '✚')
       : { money: '◉', science: '◈', material: '▣', neutral: '◇', orbital: '⬡' }[piece.square] || '◇';
-    node.appendChild(glyph);
-    const marks = { population: 'Pop', 'move-from': 'From', 'move-ship': 'Move',
+    if (piece.kind !== 'planet') node.appendChild(glyph);
+    const planetLabel = { money: 'Gold', moneyadv: 'Adv Gold', science: 'Science',
+      scienceadv: 'Adv Science', material: 'Material', materialadv: 'Adv Material',
+      neutral: 'Neutral', neutraladv: 'Adv Neutral', orbital: 'Orbital' }[piece.square] || piece.square;
+    const marks = { population: planetLabel, 'move-from': 'From', 'move-ship': 'Move',
       'combat-hit': 'Hit', 'combat-remove': 'Remove' };
     if (marks[action.kind]) {
       const tag = document.createElement('span');
@@ -589,7 +606,7 @@ function renderTilePreview(actions, tiles) {
   const rotations = [...new Set(places.map((action) => action.rotation))];
   if (state.previewKey !== key || !rotations.includes(state.previewRotation)) {
     state.previewKey = key;
-    state.previewRotation = rotations[0];
+    state.previewRotation = places[0].rotation;
   }
   state.previewActions = places;
   state.previewRotations = rotations;
@@ -614,19 +631,30 @@ function renderTilePreview(actions, tiles) {
   image.alt = `Explored sector, rotation ${state.previewRotation} degrees`;
   image.draggable = false;
   preview.appendChild(image);
-  const tag = document.createElement('span');
-  tag.className = 'tag';
-  tag.textContent = rotations.length > 1
-    ? `⟳ ${state.previewRotation}° · click to rotate`
-    : `${state.previewRotation}° · ready to place`;
-  preview.appendChild(tag);
   el.overlay.appendChild(preview);
+  const controls = document.createElement('div');
+  controls.className = 'map-preview-tools';
+  controls.style.left = `${tile.x + 172.5}px`;
+  controls.style.top = `${tile.y + 270}px`;
+  for (const [direction, label, glyph] of [[-1, 'Rotate left', '⟲'], [1, 'Rotate right', '⟳']]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'icon';
+    button.textContent = glyph;
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.addEventListener('click', () => rotatePreview(direction));
+    controls.appendChild(button);
+  }
+  controls.addEventListener('pointerdown', (event) => event.stopPropagation());
+  controls.addEventListener('click', (event) => event.stopPropagation());
+  el.overlay.appendChild(controls);
 }
 
 function rotatePreview(direction) {
   if (!state.previewRotations || !state.previewRotations.length) return;
   const index = state.previewRotations.indexOf(state.previewRotation);
-  const next = (index + direction + state.previewRotations.length) % state.previewRotations.length;
+  const next = (index - direction + state.previewRotations.length) % state.previewRotations.length;
   state.previewRotation = state.previewRotations[next];
   document.querySelectorAll('.preview-tools .stack-row b').forEach((node) => {
     node.textContent = `${state.previewRotation}°`;
@@ -752,209 +780,188 @@ function trackLabel(track) {
   return { military: 'Military', grid: 'Grid', nano: 'Nano', any: 'Rare' }[track] || track;
 }
 
+function panelImage(view, panel, seat, label) {
+  const image = document.createElement('img');
+  image.className = 'rendered-panel';
+  image.alt = label;
+  image.loading = 'lazy';
+  image.src = `/api/games/${encodeURIComponent(view.game.id)}/${panel}.webp`
+    + `?v=${encodeURIComponent(view.version)}&seat=${encodeURIComponent(seat || '')}`;
+  image.title = ['ai', 'species', 'player'].includes(panel) ? label : 'Click to enlarge';
+  if (panel === 'player') image.style.cursor = 'default';
+  if (!['ai', 'species', 'player'].includes(panel)) image.addEventListener('click', () => {
+    if (panel === 'market' && image.closest('.researching')) return;
+    el.zoomImage.src = image.src;
+    el.zoomImage.alt = label;
+    el.zoomDialog.showModal();
+  });
+  return image;
+}
+
+function showTechTracks(techId, entries) {
+  const dialog = document.getElementById('tech-track-dialog');
+  const info = state.catalog.techs?.[techId];
+  document.getElementById('tech-track-title').textContent = `${info?.name || 'Technology'} · choose track`;
+  document.getElementById('tech-track-choices').replaceChildren(...entries.map((entry) => {
+    const target = techButton(entry.button.custom_id) || freeTechChoice(entry.button.custom_id);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `tech-track-choice ${target.track}`;
+    const cost = entry.button.label.match(/\((\d+)\)/)?.[1];
+    button.textContent = `${trackLabel(target.track)}${cost ? ` · ${cost} science` : ''}`;
+    button.addEventListener('click', () => {
+      dialog.close();
+      press(entry.message.id, entry.button.custom_id, null);
+    });
+    return button;
+  }));
+  if (!dialog.open) dialog.showModal();
+}
+
 function renderMarket(view) {
-  const offers = view.tech_market || [];
-  const choices = buttonById(view);
-  const actionable = new Map();
-  for (const [customId, entry] of choices) {
-    const tech = techButton(customId);
-    if (tech) actionable.set(tech.tech, entry);
+  const choices = new Map();
+  for (const [id, entry] of buttonById(view)) {
+    const target = techButton(id) || freeTechChoice(id);
+    if (!target) continue;
+    if (!choices.has(target.tech)) choices.set(target.tech, []);
+    choices.get(target.tech).push(entry);
   }
-  if (!offers.length) {
-    el.market.replaceChildren();
-    el.market.classList.remove('choosing');
-    el.marketNote.textContent = 'empty';
-    return;
+  const choosing = choices.size > 0;
+  if (!choosing) {
+    document.getElementById('tech-track-dialog').close();
+    state.techTrackPrompt = null;
   }
-  el.marketNote.textContent = view.you ? 'cost for you' : 'base costs';
-  const choosing = offers.some((offer) => actionable.has(offer.id));
-  el.market.classList.toggle('choosing', choosing);
-  if (choosing) el.marketNote.textContent = 'pick a highlighted tech';
-  const byTrack = new Map();
-  for (const offer of offers) {
-    const track = offer.track || 'any';
-    if (!byTrack.has(track)) byTrack.set(track, []);
-    byTrack.get(track).push(offer);
+  const card = el.market.closest('.market-card');
+  const wasChoosing = card.classList.contains('researching');
+  card.classList.toggle('researching', choosing);
+  if (choosing) {
+    document.querySelector('.table').insertBefore(card, document.querySelector('.players-card'));
+    document.getElementById('market-toggle').setAttribute('aria-expanded', 'true');
+    document.getElementById('market-content').classList.remove('collapsed');
+    document.getElementById('market-content').inert = false;
+  } else if (wasChoosing) {
+    document.querySelector('.right').appendChild(card);
   }
-  const rows = [];
-  for (const track of ['military', 'grid', 'nano', 'any']) {
-    if (!byTrack.has(track)) continue;
-    const row = document.createElement('div');
-    row.className = 'track-row';
-    row.innerHTML = `<div class="track-label ${track}">${trackLabel(track)}</div>`;
-    const cards = document.createElement('div');
-    cards.className = 'track-cards';
-    for (const offer of byTrack.get(track)) {
-      const entry = actionable.get(offer.id);
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = `tech-chip${entry ? ' playable' : ''}`;
-      card.title = `${offer.name}${offer.description ? ` — ${offer.description}` : ''}`;
-      card.dataset.tech = offer.id;
-      const cost = offer.your_cost ?? offer.cost;
-      card.innerHTML = `${offer.image
-        ? `<img src="${offer.image}" alt="${escapeHtml(offer.name)}" loading="lazy">`
-        : '<div class="no-art">◇</div>'}
-        <span class="tc-name">${escapeHtml(offer.name)}</span>
-        <span class="tc-cost">${cost ?? '?'}</span>`;
-      if (entry) {
-        card.addEventListener('click', () => press(entry.message.id, entry.button.custom_id, card));
+  const stage = document.createElement('div');
+  stage.className = 'market-stage';
+  const image = panelImage(view, 'market', '', 'Available technologies');
+  if (choosing) {
+    image.loading = 'eager';
+    image.style.cursor = 'default';
+    image.title = 'Choose a highlighted technology';
+  }
+  stage.appendChild(image);
+  el.market.replaceChildren(stage);
+  el.marketNote.textContent = choosing ? 'Choose a highlighted technology' : 'Click to enlarge';
+  if (!choosing) return;
+  api.marketLayout(view.game.id).then((layout) => {
+    if (!stage.isConnected) return;
+    image.width = layout.width;
+    image.height = layout.height;
+    stage.style.aspectRatio = `${layout.width} / ${layout.height}`;
+    for (let index = 0; index < layout.regions.length; index += 1) {
+      const region = layout.regions[index];
+      const entries = choices.get(region.tech) || [];
+      // Duplicate tiles overlap in the bot's market; expose only their visible area.
+      const next = layout.regions[index + 1];
+      const width = next && next.y === region.y ? Math.min(region.width, next.x - region.x) : region.width;
+      if (!entries.length) continue;
+      const trackEntries = entries.filter((entry) => techButton(entry.button.custom_id)?.track !== 'any');
+      const tracks = trackEntries.length ? trackEntries : entries;
+      const needsTrackChoice = tracks.length > 1 || (trackEntries.length && state.catalog.techs?.[region.tech]?.track === 'any');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'market-target';
+      button.style.left = `${100 * region.x / layout.width}%`;
+      button.style.top = `${100 * region.y / layout.height}%`;
+      button.style.width = `${100 * width / layout.width}%`;
+      button.style.height = `${100 * region.height / layout.height}%`;
+      button.title = needsTrackChoice ? 'Choose technology track' : tracks[0].button.label;
+      button.setAttribute('aria-label', button.title);
+      button.addEventListener('click', () => {
+        if (needsTrackChoice) showTechTracks(region.tech, tracks);
+        else press(tracks[0].message.id, tracks[0].button.custom_id, button);
+      });
+      stage.appendChild(button);
+      if (needsTrackChoice) {
+        const key = tracks.map((entry) => `${entry.message.id}:${entry.button.custom_id}`).join('|');
+        if (state.techTrackPrompt !== key) {
+          state.techTrackPrompt = key;
+          showTechTracks(region.tech, tracks);
+        }
       }
-      cards.appendChild(card);
     }
-    row.appendChild(cards);
-    rows.push(row);
-  }
-  el.market.replaceChildren(...rows);
+    if (!wasChoosing) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }).catch((error) => showToast(error.message, true));
 }
 
 // ------------------------------------------------------------------- players
-function techTracksHtml(player) {
-  const rows = ['military', 'grid', 'nano'].map((track) => {
-    const techs = player.techs?.[track] || [];
-    const slots = [];
-    for (let index = 0; index < 7; index += 1) {
-      const tech = techs[index];
-      slots.push(tech
-        ? `<span class="tech-slot filled" title="${escapeHtml(tech.name)}">${
-            tech.image ? `<img src="${tech.image}" alt="${escapeHtml(tech.name)}" loading="lazy">`
-              : `<span class="initial">${escapeHtml((tech.name || '?').slice(0, 1))}</span>`}</span>`
-        : '<span class="tech-slot"></span>');
-    }
-    return `<div class="tech-row ${track}"><span class="label">${track.slice(0, 3).toUpperCase()}</span>${slots.join('')}</div>`;
-  });
-  return rows.join('');
-}
-
-function upgradeTargets(view) {
-  const ships = new Map();
-  const slots = new Map();
-  for (const message of view.pending || []) {
-    for (const button of message.buttons || []) {
-      const target = objectAction(button.custom_id || '');
-      if (!target) continue;
-      if (target.kind === 'upgrade-ship') ships.set(target.ship, { button, message });
-      if (target.kind === 'upgrade-slot') {
-        slots.set(`${target.ship}:${target.slot}`, { button, message });
-      }
-    }
-  }
-  return { ships, slots };
-}
-
-function blueprintHtml(blueprint, targets) {
-  const cls = shipClass(blueprint.ship);
-  const shipTarget = targets?.ships.get(cls);
-  const slots = blueprint.slots.map((slot) => {
-    const part = slot.part || {};
-    const target = targets?.slots.get(`${cls}:${slot.index}`);
-    const art = !part.id || part.id === 'empty' ? '<span class="slot-empty"></span>'
-      : `<span class="slot-img" title="${escapeHtml(part.name || part.id)}">${
-        part.image ? `<img src="${part.image}" alt="${escapeHtml(part.name || part.id)}" loading="lazy">` : ''}</span>`;
-    if (!target) return art;
-    return `<button type="button" class="slot target" data-custom="${escapeHtml(target.button.custom_id)}"
-      data-message="${target.message.id}" title="Replace ${escapeHtml(part.name || 'this part')}">
-      ${art}<span class="slot-mark">×</span></button>`;
-  }).join('');
-  const stats = blueprint.stats || {};
-  const bits = [
-    stats.range !== undefined ? `R${stats.range}` : null,
-    stats.speed !== undefined ? `S${stats.speed}` : null,
-    stats.energy !== undefined ? `E${stats.energy}` : null,
-    stats.computer !== undefined ? `C${stats.computer}` : null,
-    stats.hull !== undefined ? `H${stats.hull}` : null,
-  ].filter(Boolean).map((text) => `<span>${text}</span>`).join('');
-  return `<div class="ship-mini${shipTarget ? ' target' : ''}"
-    ${shipTarget ? `data-custom="${escapeHtml(shipTarget.button.custom_id)}" data-message="${shipTarget.message.id}"` : ''}
-    ${shipTarget ? 'title="Upgrade this blueprint"' : ''}>
-    <div class="ship-mini-head"><b>${escapeHtml(blueprint.ship)}</b><span>${
-      stats.cost !== undefined ? stats.cost : ''}</span></div>
-    <div class="slots">${slots}</div>
-    <div class="ship-stats">${bits}</div>
-  </div>`;
-}
-
-function playerHtml(player, targets) {
-  const actions = player.actions || {};
-  const actionRows = ['build', 'move', 'research', 'upgrade', 'explore', 'influence'].map((key) =>
-    `<span class="action-chip ${actions[key] ? 'on' : 'zero'}" title="${key}">
-       <span>${key.slice(0, 3).toUpperCase()}</span>
-       <b>${actions[key] ?? '—'}${
-         player.counters?.[key] ? `<span class="counter">·${player.counters[key]}</span>` : ''}</b>
-     </span>`).join('');
-  const portrait = player.portrait
-    ? `<img class="portrait" src="${player.portrait}" alt="${escapeHtml(player.faction_name || player.name)}">`
-    : `<span class="portrait-fallback">${escapeHtml((player.faction_name || player.name || '?').slice(0, 1))}</span>`;
-  const rep = (player.reputation || []).map((tile) => {
-    const label = typeof tile === 'string' ? tile : `#${tile}`;
-    return `<span class="rep-chip ${String(label).toLowerCase().includes('amb') ? 'amb' : ''}">${escapeHtml(String(label))}</span>`;
-  }).join('');
-  const owned = (player.owned_tiles || []).map((tile) =>
-    `<b>${escapeHtml(tile.name || tile.position)}</b>`).join(' · ');
-  const techs = player.techs || {};
-  const counts = ['military', 'grid', 'nano'].map((track) =>
-    `${track.slice(0, 3).toUpperCase()} ${(techs[track] || []).length}`).join(' · ');
-  return `<article class="player ${player.is_you ? 'you' : ''} ${player.passed ? 'passed' : ''}">
-    <div class="player-head">
-      ${portrait}
-      <div class="player-title">
-        <b>${escapeHtml(player.name)}</b>
-        <small>${escapeHtml(player.faction_name || player.color || '')} · ${escapeHtml(String(player.color || ''))}</small>
-      </div>
-      <div class="player-flags">
-        <span class="mini ${player.is_you ? 'on' : ''}">${player.is_you ? 'you' : ''}</span>
-        <span class="mini ${player.passed ? 'on' : ''}">${player.passed ? 'passed' : ''}</span>
-      </div>
-      <div class="vp" title="Public victory points">${player.points ?? '?'}</div>
-    </div>
-    <div class="resources">
-      <span class="res money"><span class="dot"></span>${player.money ?? '?'}</span>
-      <span class="res science"><span class="dot"></span>${player.science ?? '?'}</span>
-      <span class="res materials"><span class="dot"></span>${player.materials ?? '?'}</span>
-      <span class="res discs"><span class="dot"></span>${player.influence_discs ?? '?'}</span>
-      <span class="res colony"><span class="dot"></span>${player.colony_ships ?? '?'}</span>
-      ${player.disc_tiles ? `<span class="res points" title="Discovery tiles kept for points"><span class="dot"></span>${player.disc_tiles}</span>` : ''}
-    </div>
-    <div class="player-grid">
-      <div>
-        <div class="panel-label">Actions</div>
-        <div class="action-chips">${actionRows}</div>
-        <div class="panel-label" style="margin-top:7px">Income · upkeep</div>
-        <div class="note">+${player.income?.money ?? '?'}◉ +${player.income?.science ?? '?'}◈ +${player.income?.materials ?? '?'}▣ · upkeep ${player.upkeep ?? '?'}</div>
-        <div class="panel-label" style="margin-top:7px">Technology · ${counts}</div>
-        <div class="tech-tracks">${techTracksHtml(player)}</div>
-      </div>
-      <div>
-        <div class="panel-label">Blueprints</div>
-        <div class="blueprints">${(player.blueprints || []).map((blueprint) =>
-          blueprintHtml(blueprint, player.is_you ? targets : null)).join('')}</div>
-      </div>
-    </div>
-    ${rep ? `<div class="reputation">${rep}</div>` : ''}
-    ${owned ? `<div class="owned">Systems: ${owned}</div>` : ''}
-  </article>`;
+function updatePlayerBoardsToggle() {
+  const hasExpandedBoard = !!el.players.querySelector('.player-board-toggle[aria-expanded="true"]');
+  const button = document.getElementById('toggle-player-boards');
+  const label = hasExpandedBoard ? 'Collapse all player boards' : 'Expand all player boards';
+  button.textContent = hasExpandedBoard ? '▴' : '▾';
+  button.title = label;
+  button.setAttribute('aria-label', label);
 }
 
 function renderPlayers(view) {
-  const players = view.game.players || [];
-  const targets = upgradeTargets(view);
-  el.players.innerHTML = players.map((player) => playerHtml(player, targets)).join('');
-  el.playersNote.textContent = `${players.length} seats`;
-  [...el.players.querySelectorAll('[data-custom]')].forEach((node) => {
-    node.addEventListener('click', (event) => {
-      event.stopPropagation();
-      press(Number(node.dataset.message), node.dataset.custom, node);
-    });
-  });
-  [...el.players.querySelectorAll('.player')].forEach((node, index) => {
-    const head = node.querySelector('.player-head');
-    head.title = 'Open faction reference';
+  const players = [...(view.game.players || [])].sort((left, right) =>
+    Number(right.id === view.seat) - Number(left.id === view.seat));
+  el.players.replaceChildren(...players.map((player) => {
+    const article = document.createElement('article');
+    article.className = `rendered-player${player.is_you ? ' you' : ''}`;
+    const key = `${view.game.id}:${player.id}`;
+    const isExpanded = !state.collapsedBoards.has(key);
+    const header = document.createElement('div');
+    header.className = 'player-board-head';
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'ghost player-board-toggle';
+    const title = `${player.name}${player.is_you ? ' · you' : ''}${player.passed ? ' · passed' : ''}`;
+    head.textContent = `${isExpanded ? '▾' : '▸'} ${title}`;
+    head.setAttribute('aria-expanded', String(isExpanded));
+    const content = document.createElement('div');
+    content.className = `market-content${isExpanded ? '' : ' collapsed'}`;
+    content.id = `player-board-${player.id}`;
+    content.inert = !isExpanded;
+    head.setAttribute('aria-controls', content.id);
+    const body = document.createElement('div');
+    body.className = 'market-clip';
+    content.appendChild(body);
     head.addEventListener('click', () => {
-      state.factionPlayer = players[index];
+      const expanded = head.getAttribute('aria-expanded') !== 'true';
+      head.setAttribute('aria-expanded', String(expanded));
+      head.textContent = `${expanded ? '▾' : '▸'} ${title}`;
+      content.classList.toggle('collapsed', !expanded);
+      content.inert = !expanded;
+      if (expanded) state.collapsedBoards.delete(key);
+      else state.collapsedBoards.add(key);
+      updatePlayerBoardsToggle();
+    });
+    const reference = document.createElement('button');
+    reference.type = 'button';
+    reference.className = 'ghost small';
+    reference.textContent = 'Faction';
+    reference.addEventListener('click', () => {
+      state.factionPlayer = player;
       renderFaction();
       el.factionDialog.showModal();
     });
-  });
+    header.append(head, reference);
+    article.append(header, content);
+    if (player.color) {
+      body.appendChild(panelImage(view, 'player', player.id, `${player.name} — player board`));
+    } else {
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.textContent = 'Waiting for faction draft';
+      body.appendChild(note);
+    }
+    return article;
+  }));
+  el.playersNote.textContent = `${players.length} seats`;
+  updatePlayerBoardsToggle();
 }
 
 // ---------------------------------------------------------------------- dock
@@ -966,38 +973,6 @@ function freeTechChoice(customId) {
   return { tech: match[1], track: match[2] || 'any' };
 }
 
-function techChoices(message, choices) {
-  const techs = [];
-  const other = [];
-  for (const button of message.buttons || []) {
-    const target = techButton(button.custom_id || '') || freeTechChoice(button.custom_id || '');
-    if (!target) { other.push(button); continue; }
-    techs.push({ button, target });
-  }
-  if (!techs.length) return null;
-  const groups = new Map();
-  for (const entry of techs) {
-    const track = entry.target.track;
-    if (!groups.has(track)) groups.set(track, []);
-    groups.get(track).push(entry);
-  }
-  const sections = [];
-  for (const track of ['military', 'grid', 'nano', 'any']) {
-    if (!groups.has(track)) continue;
-    const cards = groups.get(track).map(({ button, target }) => {
-      const info = state.catalog.techs?.[target.tech] || { name: button.label, image: null };
-      const cost = (button.label || '').match(/\((\d+)\)/);
-      return `<button type="button" class="tech-card ${track}" data-custom="${escapeHtml(button.custom_id)}">
-        ${info.image ? `<img src="${info.image}" alt="${escapeHtml(info.name)}" loading="lazy">` : '<div class="no-art">◇</div>'}
-        <span class="name">${escapeHtml(info.name)}</span>
-        <span class="cost-line">${cost ? cost[1] : info.cost ?? ''}</span>
-      </button>`;
-    }).join('');
-    sections.push(`<div class="subgroup"><div class="subgroup-title">${trackLabel(track)}</div>
-      <div class="tech-choices">${cards}</div></div>`);
-  }
-  return { html: sections.join(''), other };
-}
 function partChoices(message) {
   const groups = new Map();
   const other = [];
@@ -1093,28 +1068,6 @@ function boardPromptHint(buttons, message) {
   return wrap;
 }
 
-function researchPrompt(html, message) {
-  const wrap = document.createElement('div');
-  wrap.className = 'object-hint';
-  const label = document.createElement('span');
-  label.className = 'hint-label';
-  label.textContent = 'Choose a technology in the tech market';
-  wrap.appendChild(label);
-  const details = document.createElement('details');
-  details.className = 'choice-fallback';
-  details.innerHTML = '<summary>Or choose from a list</summary>';
-  const holder = document.createElement('div');
-  holder.innerHTML = html;
-  details.appendChild(holder);
-  details.addEventListener('click', (event) => {
-    const node = event.target.closest('[data-custom]');
-    if (!node) return;
-    press(message.id, node.dataset.custom, node);
-  });
-  wrap.appendChild(details);
-  return wrap;
-}
-
 function upgradePrompt(buttons, message, text) {
   const wrap = document.createElement('div');
   wrap.className = 'object-hint';
@@ -1122,11 +1075,7 @@ function upgradePrompt(buttons, message, text) {
   label.className = 'hint-label';
   label.textContent = text;
   wrap.appendChild(label);
-  const details = document.createElement('details');
-  details.className = 'choice-fallback';
-  details.innerHTML = '<summary>Or choose from a list</summary>';
-  details.appendChild(genericChoices(buttons, message));
-  wrap.appendChild(details);
+  wrap.appendChild(genericChoices(buttons, message));
   return wrap;
 }
 
@@ -1338,7 +1287,9 @@ function promptCard(message, index) {
     .some((button) => objectAction(button.custom_id || '')?.kind === 'explore-place');
   const discovering = (message.buttons || []).some((button) =>
     discoveryChoice(button.custom_id || '') || /_keepDiscForPoints$/.test(button.custom_id || ''));
-  if (!previewing && !discovering) {
+  const researching = (message.buttons || []).some((button) =>
+    techButton(button.custom_id || '') || freeTechChoice(button.custom_id || ''));
+  if (!previewing && !discovering && !researching) {
     for (const attachment of message.attachments || []) {
       const image = document.createElement('img');
       image.className = 'attachment';
@@ -1359,11 +1310,13 @@ function promptCard(message, index) {
     .filter((button) => !dockSpatial(button))
     .map((button) => button.custom_id));
 
-  const tech = techChoices(message);
-  if (tech) {
-    buttons.filter((button) => !tech.other.includes(button))
-      .forEach((button) => handled.add(button.custom_id));
-    body.appendChild(researchPrompt(tech.html, message));
+  const tech = buttons.filter((button) => techButton(button.custom_id || '') || freeTechChoice(button.custom_id || ''));
+  if (tech.length) {
+    tech.forEach((button) => handled.add(button.custom_id));
+    const hint = document.createElement('p');
+    hint.className = 'note';
+    hint.textContent = 'Choose a highlighted technology in the market above Players.';
+    body.appendChild(hint);
   }
   const partButtons = buttons.map((button) => ({ button, target: partButton(button.custom_id || '') }))
     .filter((entry) => entry.target && entry.target.kind !== 'ship');
@@ -1411,11 +1364,11 @@ function promptCard(message, index) {
   const upgradeSlots = spatial.filter((button) => objectAction(button.custom_id).kind === 'upgrade-slot');
   if (upgradeShips.length) {
     body.appendChild(upgradePrompt(upgradeShips, message,
-      'Pick the ship blueprint in your player panel'));
+      'Choose a ship blueprint below'));
   }
   if (upgradeSlots.length) {
     body.appendChild(upgradePrompt(upgradeSlots, message,
-      'Pick the part slot marked on your blueprint'));
+      'Choose the part to replace below'));
   }
   const boardSpatial = spatial.filter((button) => {
     const kind = objectAction(button.custom_id).kind;
@@ -1455,6 +1408,11 @@ function waitingCard(view) {
   }
   if (!view.seat) {
     card.innerHTML = '<b>Spectator.</b> Choose a seat to play. The history records every action.';
+    return card;
+  }
+  if (view.game.setup) {
+    const drafter = view.game.players.find((player) => player.id === view.game.drafting_seat);
+    card.innerHTML = `<b>Faction draft.</b><div class="row">${escapeHtml(drafter ? drafter.name : 'The next player')} chooses next. Select their seat above to draft.</div>`;
     return card;
   }
   if (you && you.is_your_turn) {
@@ -1617,10 +1575,6 @@ function renderHistory() {
 }
 
 // -------------------------------------------------------------------- faction
-function prettifyAbility(name) {
-  return name.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 function renderFaction() {
   const view = state.view;
   if (!view) return;
@@ -1636,24 +1590,8 @@ function renderFaction() {
   const faction = player.faction;
   el.factionTitle.textContent = faction.name;
   el.factionSub.textContent = `${player.name} · ${player.color || ''}`;
-  const start = faction.start || {};
-  const facts = [
-    ['Money', start.money], ['Science', start.science], ['Materials', start.materials],
-    ['Colony ships', start.colony_ships], ['Trade', start.trade_value],
-    ['Explore', start.explore_apt], ['Research', start.research_apt], ['Build', start.build_apt],
-    ['Upgrade', start.upgrade_apt], ['Move', start.move_apt], ['Influence', start.influence_apt],
-  ].filter(([, value]) => value !== null && value !== undefined)
-    .map(([label, value]) => `<span class="fact">${label} <b>${value}</b></span>`).join('');
-  const abilities = (faction.abilities || []).map((ability) =>
-    `<div class="ability"><b>${escapeHtml(prettifyAbility(ability))}</b> — the full rule text is printed on the faction board below.</div>`).join('');
-  el.factionBody.innerHTML = `<div class="faction-hero">
-      ${faction.image ? `<img id="faction-image" src="${faction.image}" alt="${escapeHtml(faction.name)} board">` : ''}
-      <div class="faction-facts">
-        <div><div class="panel-label">Starting setup</div><div class="fact-row">${facts}</div></div>
-        <div><div class="panel-label">Abilities</div><div class="ability-list">${abilities || '<span class="note">No special abilities.</span>'}</div></div>
-        <p class="note">The faction board is the rules reference; click it to enlarge.</p>
-      </div>
-    </div>`;
+  el.factionBody.innerHTML = `<div class="faction-reference content">${bodyHtml(faction.reference)}</div>
+    ${faction.image ? `<img id="faction-image" class="rendered-panel" src="${faction.image}" alt="${escapeHtml(faction.name)} board" title="Click to enlarge">` : ''}`;
   const image = document.getElementById('faction-image');
   if (image) {
     image.addEventListener('click', () => {
@@ -1663,6 +1601,21 @@ function renderFaction() {
   }
 }
 
+async function followActiveSeat(view) {
+  if (!state.isDevMode || view.error || view.game.ended) return view;
+  const active = view.game.active || [];
+  const seat = view.game.drafting_seat || (view.game.players || [])
+    .find((player) => active.includes(player.color))?.id;
+  if (!seat || seat === state.seat) return view;
+  state.seat = seat;
+  localStorage.setItem(`eclipse-seat-${state.gameId}`, seat);
+  state.lastKey = null;
+  state.history = [];
+  state.historyLoaded = false;
+  state.factionPlayer = null;
+  return api.view(state.gameId, seat);
+}
+
 // ---------------------------------------------------------------------- press
 async function press(messageId, customId, node) {
   if (!customId || state.rendering) return;
@@ -1670,7 +1623,7 @@ async function press(messageId, customId, node) {
   if (node) node.disabled = true;
   showToast('Resolving…');
   try {
-    const view = await api.press(state.gameId, state.seat, customId, messageId);
+    const view = await followActiveSeat(await api.press(state.gameId, state.seat, customId, messageId));
     if (view.error) showToast(view.error, true);
     else el.toast.classList.remove('on');
     render(view, true);
@@ -1740,19 +1693,26 @@ function render(view, force = false) {
   if (view.error) showToast(view.error, true);
   const active = view.game.active || [];
   el.round.textContent = view.game.ended ? 'Final scores'
-    : `Round ${view.game.round ?? '?'} / ${view.game.round_max ?? 8}`;
+    : view.game.setup ? 'Setup' : `Round ${view.game.round ?? '?'} / ${view.game.round_max ?? 8}`;
   const activeNames = active.map((color) => {
     const player = (view.game.players || []).find((row) => row.color === color);
     return player ? player.name : color;
   });
   el.turn.textContent = view.game.ended ? 'Game over'
+    : view.game.setup ? `Faction draft: ${(view.game.players.find((p) => p.id === view.game.drafting_seat) || {}).name || 'finishing setup'}`
     : activeNames.length ? `Active: ${activeNames.join(', ')}` : 'No active seat';
   el.turn.classList.toggle('pass', !activeNames.length);
+  const order = document.getElementById('turn-order');
+  order.classList.toggle('hidden', view.game.setup || !active.length);
+  if (!view.game.setup && active.length) {
+    order.src = `/api/games/${encodeURIComponent(view.game.id)}/turn-order.webp?v=${encodeURIComponent(view.version)}`;
+  }
+  document.getElementById('s3-remaining').textContent = `S3: ${view.game.s3_remaining} remaining`;
   el.boardNote.classList.toggle('hidden', false);
   renderSeats(view);
   el.mirror.checked = !!view.mirror_to_discord;
   const hasPrompt = (view.pending || []).length > 0;
-  el.turnMenu.classList.toggle('hidden', view.game.ended || !(view.you && !hasPrompt));
+  el.turnMenu.classList.toggle('hidden', view.game.ended || view.game.setup || !(view.you && !hasPrompt));
   el.boardHint.textContent = view.seat
     ? `Drag to pan · scroll to zoom · highlighted worlds are choices`
     : 'Drag to pan · scroll to zoom';
@@ -1765,10 +1725,11 @@ function render(view, force = false) {
   state.lastKey = nextKey;
 }
 
-async function loadView() {
+async function loadView(shouldFollowActive = false) {
   if (!state.gameId) return;
   try {
-    const view = await api.view(state.gameId, state.seat);
+    let view = await api.view(state.gameId, state.seat);
+    if (shouldFollowActive) view = await followActiveSeat(view);
     if (view.error) { showToast(view.error, true); return; }
     render(view);
   } catch (error) {
@@ -1784,7 +1745,7 @@ async function loadGames() {
   el.game.replaceChildren(...games.map((game) => {
     const option = document.createElement('option');
     option.value = game.id;
-    option.textContent = `${game.id} · round ${game.round ?? '?'} · ${game.players.join(', ')}`;
+    option.textContent = `${game.name || game.id} (${game.id}) · round ${game.round ?? '?'} · ${game.players.join(', ')}`;
     return option;
   }));
   if (el.game.value !== state.gameId) el.game.value = state.gameId;
@@ -1793,6 +1754,59 @@ async function loadGames() {
 }
 
 function bind() {
+  document.getElementById('toggle-player-boards').addEventListener('click', () => {
+    const shouldCollapse = !!el.players.querySelector('.player-board-toggle[aria-expanded="true"]');
+    el.players.querySelectorAll('.player-board-toggle').forEach((button) => {
+      if ((button.getAttribute('aria-expanded') === 'true') === shouldCollapse) button.click();
+    });
+  });
+  document.getElementById('market-toggle').addEventListener('click', (event) => {
+    const toggle = event.currentTarget;
+    const isExpanded = toggle.getAttribute('aria-expanded') !== 'true';
+    toggle.setAttribute('aria-expanded', String(isExpanded));
+    const content = document.getElementById('market-content');
+    content.classList.toggle('collapsed', !isExpanded);
+    content.inert = !isExpanded;
+  });
+  document.querySelectorAll('[data-reference]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!state.view) return;
+      const panel = button.dataset.reference;
+      document.getElementById('reference-title').textContent = button.textContent;
+      const body = document.getElementById('reference-body');
+      if (panel === 'species' && !state.view.game.minor_species.length) {
+        body.textContent = 'No minor species remaining.';
+      } else {
+        const image = panelImage(state.view, panel, '', button.textContent);
+        if (['ai', 'species'].includes(panel)) {
+          image.style.cursor = 'default';
+        }
+        body.replaceChildren(image);
+      }
+      document.getElementById('reference-dialog').showModal();
+    });
+  });
+  document.getElementById('new-game').addEventListener('click', () => document.getElementById('new-game-dialog').showModal());
+  document.getElementById('new-game-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const button = form.querySelector('[type="submit"]');
+    button.disabled = true;
+    try {
+      const body = Object.fromEntries(new FormData(form));
+      body.players = Number(body.players);
+      form.querySelectorAll('[type="checkbox"]').forEach((input) => { body[input.name] = input.checked; });
+      const response = await fetch('/api/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not create game');
+      localStorage.setItem('eclipse-game', result.id);
+      location.href = '/?seat=1';
+    } catch (error) {
+      document.getElementById('new-game-error').textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
   el.game.addEventListener('change', async () => {
     state.gameId = el.game.value;
     state.boardVersion = null;
@@ -1882,7 +1896,7 @@ async function main() {
   await loadGames();
   const fromUrl = new URLSearchParams(location.search).get('seat');
   if (fromUrl) state.seat = fromUrl;
-  await loadView();
+  await loadView(true);
   setInterval(() => {
     if (!state.rendering) loadView();
   }, 1500);

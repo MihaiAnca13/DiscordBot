@@ -1,4 +1,5 @@
 """Dev mode lets a tester drive the active player, but never rewrites their own seat."""
+import pytest
 import config
 from helpers.PlayerHelper import PlayerHelper
 from tests.fakes import FakeChannel, players, reload
@@ -6,7 +7,8 @@ from tests.fakes import FakeChannel, players, reload
 P1, P2 = 1, 2
 
 
-def test_draft_press_before_players_have_colors(make_game, press, monkeypatch):
+@pytest.mark.parametrize("seat", [P1, str(P1)])
+def test_draft_press_before_players_have_colors(make_game, press, monkeypatch, seat):
     monkeypatch.setattr(config, "dev_mode", False)
     game = make_game({
         "players": {str(P1): {"player_name": "Blue"}, str(P2): {"player_name": "Red"}},
@@ -15,7 +17,7 @@ def test_draft_press_before_players_have_colors(make_game, press, monkeypatch):
         "bannedFactions": [],
     })
 
-    press(FakeChannel("t-actions"), P1, "draftFaction_hyd_Hydran Progress")
+    press(FakeChannel("t-actions"), seat, "draftFaction_hyd_Hydran Progress")
 
     state = reload(game).gamestate
     assert state["draftedFactions"] == [[P1, "hyd"]]

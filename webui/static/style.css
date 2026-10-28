@@ -238,13 +238,7 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
   cursor: pointer; filter: drop-shadow(0 0 14px #55d5f055);
 }
 .tile-preview img { width: 100%; height: 100%; display: block; }
-.tile-preview .tag {
-  position: absolute; left: 50%; bottom: 10%;
-  transform: translateX(-50%) scale(var(--ui, 1));
-  transform-origin: bottom center;
-  background: #071019e8; border: 1px solid var(--cyan2); border-radius: 999px;
-  padding: 2px 9px; font-size: 12px; white-space: nowrap; color: #d9f6ff;
-}
+
 .board-empty {
   position: absolute; inset: 0; display: grid; place-items: center;
   color: var(--muted); font-size: 13px; letter-spacing: .08em;
@@ -628,8 +622,8 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
   background: #0a111b;
 }
 .ability b { color: #eaf7ff; text-transform: capitalize; }
-.lightbox { width: auto; max-width: 96vw; background: transparent; border: 0; box-shadow: none; }
-.lightbox img { max-height: 88vh; border-radius: 10px; border: 1px solid var(--line2); }
+.lightbox { width: 96vw; max-width: 96vw; background: transparent; border: 0; box-shadow: none; }
+.lightbox img { display: block; width: 100%; height: 88vh; object-fit: contain; border-radius: 10px; border: 1px solid var(--line2); }
 .lightbox .close { position: fixed; right: 18px; top: 14px; }
 
 /* ---------------------------------------------------------------- toasts */
@@ -667,3 +661,80 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
   .faction-hero { grid-template-columns: 1fr; }
   .tech-choices, .part-choices, .ship-choices { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
 }
+
+.map-preview-tools {
+  position: absolute; z-index: 6; width: max-content;
+  display: flex; gap: 6px;
+  transform: translate(-50%, -100%) scale(var(--ui, 1));
+  transform-origin: bottom center;
+}
+
+.hotspot.influence-add .tag, .hotspot.influence-remove .tag { display: none; }
+
+/* Engine-rendered market and player boards. */
+.rendered-panel { display: block; width: 100%; height: auto; cursor: zoom-in; }
+.players-card { grid-column: 1 / -1; min-width: 0; }
+.players { display: flex; flex-direction: column; gap: 4px; padding: 0; }
+.rendered-player { min-width: 0; border: 1px solid var(--line); border-radius: 4px; padding: 0; overflow: hidden; }
+.rendered-player.you { border-color: var(--cyan2); }
+
+.market-card > .card-head { width: 100%; cursor: pointer; text-align: left; background: transparent; border: 0; }
+.market-card [aria-expanded="false"] h2::before { content: '▸ '; }
+.market-card [aria-expanded="true"] h2::before { content: '▾ '; }
+.market-stage { position: relative; width: 66.6667%; margin-inline: auto; }
+.market-stage .rendered-panel { width: 100%; }
+
+.turn-status { display: flex; align-items: center; gap: 8px; }
+#turn-order { display: block; width: auto; max-width: 200px; height: 32px; object-fit: contain; object-position: left; }
+#turn-order.hidden { display: none; }
+.reference-sheet { width: min(620px, 92vw); }
+#reference-body { padding: 12px; }
+
+.topbar { gap: 10px 14px; align-items: flex-start; }
+.topbar .brand { align-self: center; }
+.top-controls { flex: 1; align-items: center; }
+.top-actions { align-self: center; }
+.s3-count { font-size: 13px; color: var(--text); padding: 5px 12px; }
+
+.faction-reference { white-space: pre-wrap; line-height: 1.6; margin-bottom: 16px; }
+
+.market-content { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 180ms ease; }
+.market-content.collapsed { grid-template-rows: 0fr; }
+.market-clip { min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .market-content { transition: none; }
+}
+
+.player-board-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 2px 4px; }
+.player-board-toggle { flex: 1; text-align: left; }
+
+.players-heading { display: flex; align-items: center; gap: 8px; }
+
+.players-card > .card-head { padding: 6px 10px; }
+.player-board-head button { padding-block: 3px; }
+
+.market-card.researching { grid-column: 1 / -1; }
+.market-card.researching .market-stage { width: 100%; }
+.market-target {
+  position: absolute; padding: 0; border: 2px solid var(--cyan);
+  background: transparent; border-radius: 12%; cursor: pointer;
+  box-shadow: 0 0 8px #55d5f077;
+}
+button.market-target:hover:not(:disabled), button.market-target:focus-visible {
+  background: transparent; border-color: white;
+  box-shadow: 0 0 0 2px var(--cyan), 0 0 14px #55d5f0aa;
+}
+
+.market-card.researching .market-content { grid-template-rows: 1fr; }
+
+.tech-track-choices { display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.tech-track-choice { text-align: left; padding: 8px 12px; font-size: 13px; }
+.tech-track-choice.military { border-color: #e08585; color: #e08585; }
+.tech-track-choice.grid { border-color: #7fce9b; color: #7fce9b; }
+.tech-track-choice.nano { border-color: #86aef0; color: #86aef0; }
+
+.tech-track-sheet { width: min(320px, 90vw); max-height: 70vh; }
+.tech-track-sheet .sheet-head { padding: 10px 12px; gap: 8px; }
+.tech-track-sheet .sheet-head h2 { font-size: 14px; }
+
+.tech-track-sheet::backdrop { background: #01040a55; backdrop-filter: none; }
