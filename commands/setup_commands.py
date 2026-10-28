@@ -392,10 +392,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
         community_sheets = {}
 
         async def sendCommunitySheet(message, board_file):
-            if community_factions:
-                await factionThread.send(message, file=drawing.get_file(boardPrefix + board_file))
-            else:
-                community_sheets[board_file] = (message, board_file)
+            community_sheets[board_file] = (message, board_file)
 
         with open("data/sectors.json") as sector_file:
             sectors = json.load(sector_file)
