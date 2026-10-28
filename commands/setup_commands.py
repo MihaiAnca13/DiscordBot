@@ -9,12 +9,88 @@ from typing import Optional
 from setup.GameInit import GameInit
 from helpers.GamestateHelper import GamestateHelper
 from helpers.DrawHelper import DrawHelper
+from helpers import FactionData
 from helpers.FactionReference import faction_references
 
 
+async def faction_autocomplete(interaction: discord.Interaction, current: str):
+    """Discord caps choices at 25 per option; autocomplete keeps the whole faction list."""
+    current = current or ""
+    return [choice for choice in SetupCommands.factionChoices
+            if current.lower() in choice.name.lower()][:25]
+
+
+class CommunitySheetManager:
+    def __init__(self, channel, drawing, sheets):
+        self.channel = channel
+        self.drawing = drawing
+        self.sheets = sheets
+        self.button_message = None
+        self.lock = asyncio.Lock()
+
+    async def publish_button(self):
+        self.button_message = await self.channel.send(
+            "Need a community faction sheet?", view=CommunitySheetButtonView(self))
+
+    async def post_sheet(self, faction_key):
+        async with self.lock:
+            await self.button_message.edit(view=None)
+            message, board_file = self.sheets[faction_key]
+            board_path = "images/resources/components/factions/" + board_file
+            await self.channel.send(message, file=self.drawing.get_file(board_path))
+            await self.publish_button()
+
+
+class CommunitySheetButtonView(discord.ui.View):
+    def __init__(self, manager):
+        super().__init__(timeout=10080 * 60)
+        self.manager = manager
+
+    @discord.ui.button(label="Request community sheet", style=discord.ButtonStyle.blurple)
+    async def request_sheet(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await present_community_sheet_picker(interaction, self.manager)
+
+
+class CommunitySheetSelectView(discord.ui.View):
+    def __init__(self, manager):
+        super().__init__(timeout=180)
+        self.manager = manager
+        options = [discord.SelectOption(
+            label=message.splitlines()[0].removeprefix("# ")[:100], value=key)
+            for key, (message, _) in manager.sheets.items()]
+        select = discord.ui.Select(placeholder="Select a faction", options=options)
+        select.callback = self.select_faction
+        self.add_item(select)
+
+    async def select_faction(self, interaction: discord.Interaction):
+        faction_key = interaction.data["values"][0]
+        await interaction.response.defer(ephemeral=True)
+        await self.manager.post_sheet(faction_key)
+        await interaction.followup.send("Added the faction sheet to the reference thread.", ephemeral=True)
+
+
+async def present_community_sheet_picker(interaction, manager):
+    await interaction.response.send_message(
+        "Choose a community faction:",
+        view=CommunitySheetSelectView(manager),
+        ephemeral=True)
+
+
 class SetupCommands(commands.GroupCog, name="setup"):
+    community_sheet_managers = {}
+
     def __init__(self, bot):
         self.bot = bot
+
+    @app_commands.command(name="faction_sheet")
+    async def faction_sheet(self, interaction: discord.Interaction):
+        manager = self.community_sheet_managers.get(interaction.channel_id)
+        if manager is None:
+            await interaction.response.send_message(
+                "Community faction sheets are available from the Faction Reference thread.",
+                ephemeral=True)
+            return
+        await present_community_sheet_picker(interaction, manager)
     ai_choices = [app_commands.Choice(name="Default", value="def"),
                   app_commands.Choice(name="Advanced", value="adv"),
                   app_commands.Choice(name="Worlds Apart", value="wa"),
@@ -51,7 +127,12 @@ class SetupCommands(commands.GroupCog, name="setup"):
                       app_commands.Choice(name="Kurita Prefecture", value="kur"),
                       app_commands.Choice(name="Turtugan", value="tur"),
                       app_commands.Choice(name="The Wulfen", value="wul"),
-                      app_commands.Choice(name="The Wraith", value="wra")]
+                      app_commands.Choice(name="The Wraith", value="wra"),
+                      app_commands.Choice(name="Children of Cog", value="cog"),
+                      app_commands.Choice(name="Legion of Midas", value="mid"),
+                      app_commands.Choice(name="The Horde", value="hor"),
+                      app_commands.Choice(name="Vorlons", value="vor"),
+                      app_commands.Choice(name="Hegemony of the Highest Cushion", value="heg")]
     
     @app_commands.choices(ai_ship_type=ai_choices2)
     @app_commands.choices(ai_ship=ai_ship_choices)
@@ -65,18 +146,21 @@ class SetupCommands(commands.GroupCog, name="setup"):
     
 
     @app_commands.command(name="game")
-    @app_commands.choices(faction1=factionChoices, faction2=factionChoices, faction3=factionChoices,
-                          faction4=factionChoices, faction5=factionChoices, faction6=factionChoices,faction7=factionChoices,faction8=factionChoices,faction9=factionChoices)
+    @app_commands.autocomplete(faction1=faction_autocomplete, faction2=faction_autocomplete,
+                               faction3=faction_autocomplete, faction4=faction_autocomplete,
+                               faction5=faction_autocomplete, faction6=faction_autocomplete,
+                               faction7=faction_autocomplete, faction8=faction_autocomplete,
+                               faction9=faction_autocomplete)
     async def game(self, interaction: discord.Interaction,
-                   player1: discord.Member, faction1: app_commands.Choice[str],
-                   player2: discord.Member, faction2: app_commands.Choice[str],
-                   player3: Optional[discord.Member] = None, faction3: Optional[app_commands.Choice[str]] = None,
-                   player4: Optional[discord.Member] = None, faction4: Optional[app_commands.Choice[str]] = None,
-                   player5: Optional[discord.Member] = None, faction5: Optional[app_commands.Choice[str]] = None,
-                   player6: Optional[discord.Member] = None, faction6: Optional[app_commands.Choice[str]] = None,
-                   player7: Optional[discord.Member] = None, faction7: Optional[app_commands.Choice[str]] = None,
-                   player8: Optional[discord.Member] = None, faction8: Optional[app_commands.Choice[str]] = None,
-                   player9: Optional[discord.Member] = None, faction9: Optional[app_commands.Choice[str]] = None,):
+                   player1: discord.Member, faction1: str,
+                   player2: discord.Member, faction2: str,
+                   player3: Optional[discord.Member] = None, faction3: Optional[str] = None,
+                   player4: Optional[discord.Member] = None, faction4: Optional[str] = None,
+                   player5: Optional[discord.Member] = None, faction5: Optional[str] = None,
+                   player6: Optional[discord.Member] = None, faction6: Optional[str] = None,
+                   player7: Optional[discord.Member] = None, faction7: Optional[str] = None,
+                   player8: Optional[discord.Member] = None, faction8: Optional[str] = None,
+                   player9: Optional[discord.Member] = None, faction9: Optional[str] = None,):
 
         temp_player_list = [player1, player2, player3, player4, player5, player6,player7, player8,player9]
         temp_playerID_list = []
@@ -87,7 +171,10 @@ class SetupCommands(commands.GroupCog, name="setup"):
         temp_faction_list = [faction1, faction2, faction3, faction4, faction5, faction6, faction7, faction8, faction9]
         for faction in temp_faction_list:
             if faction is not None:
-                temp_factionID_list.append(faction.value)
+                if faction not in FactionData.FACTIONS:
+                    await interaction.response.send_message("Unknown faction.", ephemeral=True)
+                    return
+                temp_factionID_list.append(faction)
         game = GamestateHelper(interaction.channel)
         await DraftButtons.generalSetup(interaction, game, temp_playerID_list, temp_factionID_list)
 
@@ -303,9 +390,14 @@ class SetupCommands(commands.GroupCog, name="setup"):
 
         factionThread = await actions.create_thread(name="Faction Reference", auto_archive_duration=10080)
         boardPrefix = "images/resources/components/factions/"
+        community_sheets = {}
 
+        standard_boards = {board for _, board in faction_references(False)}
         for message, board_file in faction_references(community_factions):
-            await factionThread.send(message, file=drawing.get_file(boardPrefix + board_file))
+            if board_file in standard_boards:
+                await factionThread.send(message, file=drawing.get_file(boardPrefix + board_file))
+            else:
+                community_sheets[board_file] = (message, board_file)
 
         message = "\n".join(["Rift Reference"])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "Rift_Reference.png"))
@@ -316,6 +408,10 @@ class SetupCommands(commands.GroupCog, name="setup"):
         message = "\n".join(["Discovery Reference"])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "Discovery_Reference.png"))
         await factionThread.send(role.mention + " pinging you here, which contains all the faction sheets")
+        if community_sheets:
+            sheet_manager = CommunitySheetManager(factionThread, drawing, community_sheets)
+            self.community_sheet_managers[factionThread.id] = sheet_manager
+            await sheet_manager.publish_button()
         await interaction.followup.send("\n".join(["New game created! Here are the channels:",
                                                    tabletalk.jump_url, actions.jump_url]))
         if isinstance(interaction.channel, discord.Thread):

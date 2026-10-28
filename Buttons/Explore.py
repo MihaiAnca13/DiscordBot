@@ -110,7 +110,7 @@ class ExploreButtons:
                              custom_id=f"FCID{player['color']}_restartTurn"))
         await interaction.channel.send(f"{player['player_name']} select the tile you would like to explore",
                                        view=view)
-        if player["explore_apt"] > 1 and "2" not in buttonID:
+        if FactionData.action_apt(player, "explore") > 1 and "2" not in buttonID:
             view2 = View()
             view2.add_item(Button(label="Start 2nd explore", style=discord.ButtonStyle.green,
                                   custom_id=f"FCID{player['color']}_startExplore2"))

@@ -149,9 +149,12 @@ def test_harvester_money_counts_before_bankruptcy(make_game):
     assert helper.checkBankrupt() is False
 
 
-def test_harvester_placement_stores_the_planet_and_produces_at_upkeep(start_game, run, press):
+def test_harvester_placement_stores_the_planet_and_produces_at_upkeep(start_game, press):
     game, channel = start_game(factions=["tur", "eri"])
-    press(channel, 1, "FCIDblue_startPlaceHarvester")
+    for player in game.gamestate["players"].values():
+        player["passed"] = True
+    game.update()
+    press(channel, 1, "runUpkeep")
     assert any(cid == "FCIDblue_harvesterSector_201" for cid in buttons(channel))
     press(channel, 1, "FCIDblue_harvesterSector_201")
     press(channel, 1, "FCIDblue_placeHarvester_201_scienceadv_0_science")
@@ -165,15 +168,18 @@ def test_harvester_placement_stores_the_planet_and_produces_at_upkeep(start_game
     science_before = state.get_player(1)["science"]
     science_income = state.get_player(1)["population_track"][state.get_player(1)["science_pop_cubes"] - 1]
     game = reload(game)
-    run(game.upkeep(FakeInteraction(channel)))
+    press(channel, 1, "runUpkeep")
     assert reload(game).get_player(1)["science"] == science_before + science_income + 1
 
 
 def test_harvester_blocks_settling_its_planet(start_game, press):
     game, channel = start_game(factions=["tur", "eri"])
+    for player in game.gamestate["players"].values():
+        player["passed"] = True
+    game.update()
     game.get_player(1)["nano_tech"].append("adl")
     game.update()
-    press(channel, 1, "FCIDblue_startPlaceHarvester")
+    press(channel, 1, "runUpkeep")
     press(channel, 1, "FCIDblue_harvesterSector_201")
     press(channel, 1, "FCIDblue_placeHarvester_201_scienceadv_0_science")
     state = reload(game)
@@ -214,6 +220,8 @@ def test_a_grey_planet_asks_for_the_resource(make_game, run):
                       "board": {"202": dict(board_tile(["blue-sb"], sector=202)["202"],
                                             neutraladv_pop=[0])}})
     player = game.get_player(1)
+    player["harvester_upkeep_started_round"] = game.gamestate.get("roundNum", 0)
+    game.update()
     channel = FakeChannel("t-actions")
     interaction = FakeInteraction(channel)
     run(HarvesterButtons.place(game, player, interaction, "placeHarvester_202_neutraladv_0"))

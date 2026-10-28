@@ -153,11 +153,8 @@ def faction_references(community_factions=True):
                          "  - **Dreadnought**: -1⬛"])
     references.append((message, "rho_board.png"))
 
-    message = "\n".join(["# Terrans", *[
-        f"- **{FactionData.FACTIONS[key]['name']}**: "
-        + FactionData.starting_sector_line(key, sectors).removeprefix("- ")
-        for key in ("ter1", "ter2", "ter3", "ter4", "ter5", "ter6")
-    ]])
+    message = "\n".join(["# Terrans",
+                         FactionData.starting_sector_line("ter2", sectors)])
     references.append((message, "terran_conglomerate_board.png"))
 
     message = "\n".join(["# Atlantians",
@@ -287,5 +284,77 @@ def faction_references(community_factions=True):
                          "- The board prints home sector 226; the bot uses the free sector 254"
                          " (225 is the Terran Union home and 226 is the Planta home)."])
     send_community_sheet(message, "wraith_board.png")
+
+    message = "\n".join(["# Children of Cog",
+                         FactionData.starting_sector_line("cog", sectors),
+                         "- Start with Nanorobots in the Nano Tech track.",
+                         "- **Mechanical Mind:** Alternative tech board, prioritising breadth over depth.",
+                         "- **Infinite Possibilities:** Upgrade 3. Gain an additional upgrade activation as the"
+                         " first or last activation when you perform a Build or Move action.",
+                         "- **Adaptive Transformation:** Using an upgrade activation, replace two Interceptors"
+                         " with a Cruiser gaining 1 Material; or two Cruisers with a Dreadnought gaining"
+                         " 2 Materials. Using an upgrade activation and 1 Material, replace a Cruiser with two"
+                         " Interceptors; or for 2 Materials replace a Dreadnought with two Cruisers. All ships"
+                         " must be in the same sector.",
+                         "- The board prints home sector 254; the bot uses the free sector 256"
+                         " (254 is the Wraith home)."])
+    send_community_sheet(message, "cog_board.png")
+
+    message = "\n".join(["# Legion of Midas",
+                         FactionData.starting_sector_line("mid", sectors),
+                         "- Start with Advanced Economy in the Grid Tech track.",
+                         "- **Midas Touch:** Before you perform an action, you can spend money to perform an"
+                         " additional activation of the same type: Explore 4, Research 3, Upgrade 1, Build 1,"
+                         " Move 1, Influence 1 (an additional action disk). With 7 or fewer action disks left,"
+                         " each cost is 1 higher.",
+                         "- **Money is Power:** During game setup, place a Population Cube in the Advanced"
+                         " Money Population Square on your Starting Sector.",
+                         "- **All That Glitters:** Midas earn 1 Money instead of 2 when passing first."])
+    send_community_sheet(message, "midas_board.png")
+
+    message = "\n".join(["# The Horde",
+                         FactionData.starting_sector_line("hor", sectors),
+                         "- Start with Neutron Bombs in the Military Tech track and Nanorobots in the Nano"
+                         " Tech track.",
+                         "- **Built for War:** +1 damage when you hit with an unmodified 6. Does not apply to"
+                         " Rift weapons.",
+                         "- **Reduced Initiative:** Interceptors, Cruisers and Starbases have 1 less initiative.",
+                         "- **Raid:** Move actions include a Build activation.",
+                         "- **Call To Arms:** Gain Materials when your ships are destroyed in a sector you do"
+                         " not control: Interceptor 1, Cruiser 2, Dreadnought 3.",
+                         "- **Battle Focus:** Upgrade activations must be spent on different ship classes.",
+                         "- **Alternative Tech Board:** 4 slots per track, with discounts -1, -3, -5.",
+                         "- The board prints home sector 255; the bot uses the free sector 288"
+                         " (255 is the Remnants of Ra home)."])
+    send_community_sheet(message, "horde_board.png")
+
+    message = "\n".join(["# Vorlons",
+                         FactionData.starting_sector_line("vor", sectors),
+                         "- Start with Regenerative Hull in the Nano Tech track.",
+                         "- **Tech Masters:** For an increased Science cost, you may put a Tech in the wrong"
+                         " Tech Tray. The extra cost is 2 the first time, then 1 more each subsequent time"
+                         " (3 the second, 4 the third). This extra cost cannot be reduced by discounts.",
+                         "- **Organic Tech:** Whenever you research a new Tech, you may have 1 free Upgrade"
+                         " activation for that Tech only.",
+                         "- **Few in Number:** Only flip back 1 Colony Ship on an Influence action.",
+                         "- **Regenerative Hull:** All ships start with it. Heal does not work against Ancients,"
+                         " but does against Guardians and the GCDS.",
+                         "- **Research Discounts are all 1 more.**",
+                         "- **Centre Bonus:** 2 VP if you or an Ally control the Centre.",
+                         "- Trade 4:1. Four reputation slots."])
+    send_community_sheet(message, "vorlons_board.png")
+
+    message = "\n".join(["# Hegemony of the Highest Cushion",
+                         FactionData.starting_sector_line("heg", sectors),
+                         "- Start with Fusion Drive in the Nano Tech track.",
+                         "- **Nine Lives:** You may flip a Colony Ship to make an attacker reroll a Damage dice.",
+                         "- **Pounce:** +1 to Hit in the first engagement round (not the Missile round) if you shoot first.",
+                         "- **Solitary Hunter:** +1 Initiative and +1 to Hit if there is only 1 Hegemony ship in the battle"
+                         " (attacking or defending).",
+                         "- **Pride:** +2 Bonus VPs if you control the Centre at the end of the game.",
+                         "- Start with 2 Materials / 3 Science / 3 Money, 3 Colony Ships,"
+                         " standard ships and standard trade (3:1). Four reputation slots.",
+                         "- Home system The Cattery (#276)."])
+    send_community_sheet(message, "hegemony_board.png")
 
     return references

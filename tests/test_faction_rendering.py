@@ -143,6 +143,8 @@ def test_faction_rendering(start_game, monkeypatch, faction):
     for ship in ships:
         path = f"images/resources/components/layouts/blueprints/classes/{class_art}_{ship}_class.png"
         assert path in loaded
+        if faction == "heg":
+            assert drawing.use_image(path).getchannel("A").getextrema()[1] > 0
 
     if faction in ("hyd", "ter3"):
         assert_alliance_layout(drawing, player, image)
@@ -181,7 +183,7 @@ def test_faction_rendering(start_game, monkeypatch, faction):
             alpha = ambassador.convert("RGBA").getchannel("A")
             assert alpha.getpixel((0, 0)) == 0
             assert alpha.getpixel((256, 256)) >= 250
-            if faction in ("atl", "ra", "tm", "her", "kur", "wra"):
+            if faction in ("atl", "ra", "tm", "her", "heg"):
                 assert all(alpha.getpixel(corner) == 0
                            for corner in ((511, 0), (0, 511), (511, 511)))
     if faction in ("tur", "wra"):

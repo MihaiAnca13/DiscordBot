@@ -151,7 +151,7 @@ class InfluenceButtons:
     @staticmethod
     async def startInfluence(game: GamestateHelper, p1, interaction: discord.Interaction):
         view = View()
-        apt = p1.get("influence_apt", 2)
+        apt = FactionData.action_apt(p1, "influence", 2)
         if not p1.get("influenceActionActive"):
             p1["influenceActionActive"] = True
             p1["influenceActionUsed"] = 0
@@ -197,7 +197,7 @@ class InfluenceButtons:
         from helpers.CombatHelper import Combat
         tileLoc = buttonID.split("_")[1]
         if (p1.get("influenceActionActive")
-                and p1.get("influenceActionUsed", 0) >= p1.get("influence_apt", 2)):
+                and p1.get("influenceActionUsed", 0) >= FactionData.action_apt(p1, "influence", 2)):
             await interaction.channel.send(f"{p1['player_name']} has no Influence Activations left this action.")
             return
         if p1["influence_discs"] < 1:
@@ -262,7 +262,7 @@ class InfluenceButtons:
                                     buttonID: str, delete: bool, player=None):
         tileLoc = buttonID.split("_")[1]
         if (player is not None and delete and player.get("influenceActionActive")
-                and player.get("influenceActionUsed", 0) >= player.get("influence_apt", 2)):
+                and player.get("influenceActionUsed", 0) >= FactionData.action_apt(player, "influence", 2)):
             await interaction.channel.send(f"{player['player_name']} has no Influence Activations left this action.")
             return
         owner = game.gamestate["board"][tileLoc]["owner"]
