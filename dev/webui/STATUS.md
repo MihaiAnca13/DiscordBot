@@ -163,8 +163,9 @@ Cold board render takes a few seconds; wait for `#board.naturalWidth > 0`.
 - Direct-interaction pass (`31a042c`): board pieces, ship/planet targets, tile
   preview, build and discovery cards, blueprint slots, market research; audit in
   `INTERACTIONS.md`, checks in `direct_checks.py`.
-- The preview after the last check sits on the explored tile/influence prompt. Reset
-  before baseline checks: `seed` → `up` → `smoke`/`browser_checks`.
+- `852ab87` drag movement and keyboard tile rotation checks.
+- The sandbox is left freshly seeded at Blue's turn menu (round 1).
+  Reset before baseline checks: `seed` → `up` → `smoke`/`browser_checks`.
 
 ## Evidence images
 
