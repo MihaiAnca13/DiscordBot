@@ -169,6 +169,8 @@ before clicking or taking evidence screenshots.
   preview, build and discovery cards, blueprint slots, market research; audit in
   `INTERACTIONS.md`, checks in `direct_checks.py`.
 - `852ab87` drag movement and keyboard tile rotation checks.
+- `ac992ea` retreat, Atlantian two-choice discovery, bankruptcy resolution and
+  Nebula subsector targets; `direct_checks` now covers all 16 flows.
 - The sandbox is left freshly seeded at Blue's turn menu (round 1).
   Reset before baseline checks: `seed` → `up` → `smoke`/`browser_checks`.
 
