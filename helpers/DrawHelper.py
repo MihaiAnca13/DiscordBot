@@ -1060,7 +1060,7 @@ class DrawHelper:
                 context.paste(tile, (origin[0] + int((136 + 348 * step * index) * scale) - 1,
                                      origin[1] + int((30 + 386 * row) * scale) - 1), mask=tile)
 
-    def player_area(self, player):
+    def player_area(self, player, regions=None):
         
         faction = FactionData.artwork_name(player["name"])
         context = Image.new("RGBA", (5000, 800), (0, 0, 0, 255))
@@ -1358,6 +1358,9 @@ class DrawHelper:
                 if ship == "orb":
                     mod = -389
             layout = blueprint_slots.get(PlayerHelper.blueprint_key(ship))
+            if regions is not None:
+                regions.append({"ship": shipFullName, "kind": "header", "x": 2250 + 550 * slot + mod,
+                                "y": 70, "width": ship_blueprint.width, "height": 83})
             if layout:
                 # keep the stat header, draw the faction's own slot shape below it
                 ship_blueprint = ship_blueprint.crop((0, 0, ship_blueprint.width, 83))
@@ -1435,11 +1438,33 @@ class DrawHelper:
         with open("data/parts.json", "r") as f:
             part_data = json.load(f)
 
-        def process_parts(parts, coords, refX, square_size, shipType, cells=None):
+        def process_parts(parts, coords, refX, square_size, shipType, cells=None, indices=None):
             muon_count = 0
             for counter, part in enumerate(parts):
                 is_phase_module = counter in PlayerHelper.get_phase_module_slots(
                     player, "dread" if shipType == "dreadnought" else shipType)
+                if part != "mus":
+                    if cells:
+                        slot_x, slot_y = cells[counter]
+                    else:
+                        x, y = coords[counter]
+                        if shipType == "interceptor":
+                            x -= 5
+                            y += 8
+                        elif shipType == "cruiser":
+                            x += 35
+                        elif shipType == "dreadnought":
+                            x += 47
+                        else:
+                            x += 78
+                            y += 8
+                        slot_x = refX + int(x * square_size / 58)
+                        slot_y = int(y * square_size / 58) + 50
+                    if regions is not None:
+                        regions.append({"ship": shipType, "kind": "slot",
+                                        "slot": indices[counter] if indices else counter,
+                                        "x": slot_x, "y": slot_y,
+                                        "width": square_size, "height": square_size + 8})
                 if part == "empty" and not is_phase_module:
                     continue
                 part_details = part_data.get(part)
@@ -1460,27 +1485,7 @@ class DrawHelper:
                                   mask=part_image)
                     muon_count += 1
                     continue
-                if cells:
-                    context.paste(part_image, cells[counter], mask=part_image)
-                    continue
-
-                # Scale coordinates based on square size, original square was 58
-                x, y = coords[counter]  
-                if shipType == "interceptor":
-                    y+=8
-                    x-=5
-                elif shipType == "cruiser":
-                    x+= 35
-                elif shipType == "dreadnought":
-                    x += 47
-                else:
-                    x +=78
-                    y+=8
-                scaled_x = refX + int(x * square_size / 58)  
-                scaled_y = int(y * square_size / 58)  
-                
-                # Paste the image  
-                context.paste(part_image, (scaled_x, scaled_y+50), mask=part_image)  
+                context.paste(part_image, (slot_x, slot_y), mask=part_image)
         referenceX = 2220
         sizeOfSquare = 137
         if player.get("interceptor_parts"):
@@ -1488,12 +1493,16 @@ class DrawHelper:
                           slot_cells.get("int"))
         cruiser_parts = player["cruiser_parts"]
         dread_parts = player["dread_parts"]
+        cruiser_indices = None
+        dread_indices = None
         if faction in ("cog", "midas", "horde") and player.get("blueprint_slots"):
             # Existing saves stored parts in the temporary custom-layout order.
-            cruiser_parts = [cruiser_parts[index] for index in (1, 0, 5, 3, 2, 4)]
-            dread_parts = [dread_parts[index] for index in (2, 0, 1, 7, 5, 3, 4, 6)]
-        process_parts(cruiser_parts, cruiserCoord,referenceX,sizeOfSquare,"cruiser", slot_cells.get("cru"))
-        process_parts(dread_parts, dreadCoord,referenceX,sizeOfSquare,"dreadnought", slot_cells.get("drd"))
+            cruiser_indices = (1, 0, 5, 3, 2, 4)
+            dread_indices = (2, 0, 1, 7, 5, 3, 4, 6)
+            cruiser_parts = [cruiser_parts[index] for index in cruiser_indices]
+            dread_parts = [dread_parts[index] for index in dread_indices]
+        process_parts(cruiser_parts, cruiserCoord,referenceX,sizeOfSquare,"cruiser", slot_cells.get("cru"), cruiser_indices)
+        process_parts(dread_parts, dreadCoord,referenceX,sizeOfSquare,"dreadnought", slot_cells.get("drd"), dread_indices)
         if faction == "exile":
             process_parts(player["orb_parts"], orbCoord,referenceX,sizeOfSquare,"orbital")
         else:

@@ -804,7 +804,9 @@ class WebApp:
         game_id = request.match_info["game_id"]
         panel = request.match_info["panel"]
         seat = request.query.get("seat", "")
-        if panel not in ("market", "player", "turn-order", "ai", "species", "parts") or (panel == "player" and not seat.isdigit()):
+        blueprint_panels = tuple(f"blueprint-{ship}" for ship in (*SHIPS, "orbital"))
+        if (panel not in ("market", "player", "turn-order", "ai", "species", "parts", *blueprint_panels)
+                or ((panel == "player" or panel in blueprint_panels) and not seat.isdigit())):
             return web.json_response({"error": "unknown panel"}, status=400)
         try:
             async with game_lock(game_id):
@@ -813,6 +815,8 @@ class WebApp:
             return web.json_response({"error": "unknown game"}, status=404)
         if path is None:
             return web.json_response({"error": "player has not drafted a faction"}, status=404)
+        if panel in blueprint_panels and request.query.get("layout") == "1":
+            return web.FileResponse(f"{path}.json", headers={"Cache-Control": "no-cache"})
         response = web.FileResponse(path)
         response.headers["Cache-Control"] = "no-cache"
         return response

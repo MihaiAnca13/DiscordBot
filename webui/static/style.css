@@ -110,6 +110,23 @@ button.good { border-color: #2f6b4b; background: #173428; color: #d5ffe7; }
 }
 .left { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .right { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.battle-index { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; scroll-margin-top: 150px; }
+.battle-index a {
+  color: var(--muted); text-decoration: none; padding: 6px 10px;
+  border: 1px solid var(--line2); border-radius: 8px; background: var(--panel2);
+}
+.battle-index a:hover, .battle-index a:focus-visible { color: var(--text); border-color: var(--cyan); }
+.battle-index a.your-battle { color: var(--text); border-left: 4px solid var(--seat-color); }
+.battle-room { scroll-margin-top: 150px; }
+.battle-index a[aria-current="page"] { background: #1d3546; border-color: var(--cyan); color: var(--text); }
+.combat-notice { border-color: #6d3535; overflow: hidden; }
+.combat-notice h2 {
+  padding: 10px 14px; background: #421c23; color: #ffb3b3; font-size: 14px;
+}
+.combat-notice .battle-index { padding: 12px; }
+.table.room-layout { grid-template-columns: minmax(0, 1fr); max-width: 1100px; margin: 0 auto; }
+.room-layout > .left, .room-layout > .players-card, .room-layout .market-card { display: none; }
+.room-layout > .right { display: flex; }
 
 .card {
   background: linear-gradient(180deg, #111826, #0d131d);
@@ -241,6 +258,9 @@ button.piece:is(.move-from, .move-ship):focus-visible { background: transparent;
 }
 .piece.combat-hit, .piece.combat-remove { border-color: #ff7b7b; color: #ff9a9a; --ring: #ff7b7b; }
 .piece.planet { animation: none; border-style: dotted; }
+button.piece.planet,
+button.piece.planet:hover:not(:disabled),
+button.piece.planet:focus-visible { background: transparent; }
 .piece.planet .glyph { font-size: 18px; }
 @keyframes piece-pulse {
   0%, 100% { box-shadow: 0 0 0 2px #04070bcc, 0 0 12px var(--ring, #8fd8ff); }
@@ -480,6 +500,11 @@ button.piece:is(.move-from, .move-ship):focus-visible { background: transparent;
 }
 .battle-room > header b { display: block; font-size: 13px; color: #ffd6d6; letter-spacing: .03em; }
 .battle-room > header small { color: #c79494; font-size: 10px; }
+.battle-back {
+  margin-left: auto; padding: 2px 9px; border-radius: 7px;
+  color: var(--text); text-decoration: none; font-size: 20px;
+}
+.battle-back:hover, .battle-back:focus-visible { background: #ffffff14; }
 .battle-mark { font-size: 18px; color: #ff8d8d; }
 .battle-room .prompt { border-radius: 0; border: 0; border-top: 1px solid #542b2e; box-shadow: none; background: #171014; }
 .battle-room .prompt-head { background: #1c1013; }
@@ -666,6 +691,7 @@ button.battle-image-zoom, button.battle-image-zoom:hover:not(:disabled) {
   .left, .right { display: contents; }
   .board-card { order: 1; }
   .action-dock { order: 2; }
+  .battle-index { order: 0; }
   .market-card { order: 3; }
   .players-card { order: 4; }
   .board-viewport { height: 56vh; }
@@ -738,6 +764,15 @@ button.battle-image-zoom, button.battle-image-zoom:hover:not(:disabled) {
 .player-board-head button { padding-block: 3px; }
 
 .market-card.researching { grid-column: 1 / -1; }
+.market-card.expanded-market { grid-column: 1 / -1; }
+.upgrade-blueprint { width: min(100%, 560px); margin: 12px auto; }
+.upgrade-blueprint > img { display: block; width: 100%; height: auto; }
+.upgrade-parts { list-style: none; padding: 0; margin: 12px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px; }
+.part-option {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px;
+  text-align: left; background: transparent; border-color: transparent; border-radius: 4px;
+}
+.part-option img { width: 88px; height: 88px; object-fit: contain; }
 .market-card.researching .market-stage { width: 100%; }
 .market-target {
   position: absolute; padding: 0; border: 2px solid var(--cyan);

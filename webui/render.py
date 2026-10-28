@@ -210,12 +210,13 @@ def render_panel(games_path, game_id, panel, seat, cache_dir):
     key = state_version(games_path, game_id)
     folder = os.path.join(cache_dir, game_id, "panels")
     os.makedirs(folder, exist_ok=True)
-    name = f"{panel}-{seat}" if panel == "player" else panel
+    is_blueprint = panel.startswith("blueprint-")
+    name = f"{panel}-{seat}" if panel == "player" or is_blueprint else panel
     if panel == "turn-order":
         name = "turn-order-compact"
     target = os.path.join(folder, f"{key}.{name}.webp")
     layout_path = f"{target}.json"
-    if not os.path.exists(target) or (panel == "market" and not os.path.exists(layout_path)):
+    if not os.path.exists(target) or ((panel == "market" or is_blueprint) and not os.path.exists(layout_path)):
         game = GamestateHelper(None, game_id)
         drawing = DrawHelper(game.gamestate)
         if panel == "market":
@@ -237,7 +238,22 @@ def render_panel(games_path, game_id, panel, seat, cache_dir):
             player = game.gamestate["players"].get(seat)
             if player is None or not player.get("color"):
                 return None
-            image = drawing.player_area(player)
+            regions = [] if is_blueprint else None
+            image = drawing.player_area(player, regions)
+            if is_blueprint:
+                ship = panel.removeprefix("blueprint-")
+                regions = [region for region in regions if region["ship"] == ship]
+                if not regions:
+                    return None
+                left = min(region["x"] for region in regions) - 8
+                top = min(region["y"] for region in regions) - 8
+                right = max(region["x"] + region["width"] for region in regions) + 8
+                bottom = max(region["y"] + region["height"] for region in regions) + 8
+                image = image.crop((left, top, right, bottom))
+                slots = [{**region, "x": region["x"] - left, "y": region["y"] - top}
+                         for region in regions if region["kind"] == "slot"]
+                with open(layout_path, "w") as handle:
+                    json.dump({"width": image.width, "height": image.height, "regions": slots}, handle)
         temporary = f"{target}.tmp"
         image.save(temporary, format="WEBP", quality=92, method=1)
         os.replace(temporary, target)

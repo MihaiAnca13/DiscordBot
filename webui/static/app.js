@@ -139,6 +139,11 @@ function roomName(room) {
   return room.replace(/^aeb\d+-?/, '').replace(/-actions$/, '') || 'table';
 }
 
+function selectedBattle(view) {
+  return (view.battles || []).find((battle) =>
+    location.hash === `#room=${encodeURIComponent(battle.room)}`);
+}
+
 function isCombat(message) {
   return /combat|battle|bombing/i.test(message.room || '');
 }
@@ -895,8 +900,12 @@ function renderMarket(view) {
     document.getElementById('market-toggle').setAttribute('aria-expanded', 'true');
     document.getElementById('market-content').classList.remove('collapsed');
     document.getElementById('market-content').inert = false;
-  } else if (wasChoosing) {
-    document.querySelector('.right').appendChild(card);
+  } else {
+    const expanded = document.getElementById('market-toggle').getAttribute('aria-expanded') === 'true';
+    const wide = expanded && !(view.battles || []).length;
+    card.classList.toggle('expanded-market', wide);
+    if (wide) document.querySelector('.table').insertBefore(card, document.querySelector('.players-card'));
+    else if (card.parentElement !== document.querySelector('.right')) document.querySelector('.right').appendChild(card);
   }
   const stage = document.createElement('div');
   stage.className = 'market-stage';
@@ -1024,56 +1033,21 @@ function freeTechChoice(customId) {
 }
 
 function partChoices(message) {
-  const groups = new Map();
-  const other = [];
-  let count = 0;
-  for (const button of message.buttons || []) {
-    const target = partButton(button.custom_id || '');
-    if (!target) { other.push(button); continue; }
-    count += 1;
-    if (target.kind === 'ship') {
-      // The ship itself is the target: it is the blueprint in the player panel.
-      other.push(button);
-      continue;
-    }
-    const part = state.catalog.parts?.[target.part] || { name: target.part, image: null };
-    const title = target.kind === 'old' ? `Slot ${target.slot} · replace ${part.name}`
-      : `Install ${part.name}`;
-    if (!groups.has(target.ship)) groups.set(target.ship, []);
-    groups.get(target.ship).push({ button, target, part, title });
-  }
-  if (!count) return null;
-  if (!groups.size) return null;
-  const sections = [];
-  for (const [group, entries] of groups) {
-    const cards = entries.map(({ button, target, part, title }) => {
-      if (target.kind === 'ship') {
-        return `<button type="button" class="ship-card" data-custom="${escapeHtml(button.custom_id)}">
-          <span class="name">${escapeHtml(button.label || target.ship)}</span>
-          <span class="meta">blueprint</span></button>`;
-      }
-      const info = part || {};
-      const bits = [
-        info.nrg_src ? `⚡+${info.nrg_src}` : null,
-        info.nrg_use ? `⚡−${info.nrg_use}` : null,
-        info.range ? `R${info.range}` : null,
-        info.speed ? `S${info.speed}` : null,
-        info.comp ? `C${info.comp}` : null,
-        info.shield ? `Sh${info.shield}` : null,
-        info.hull ? `H${info.hull}` : null,
-      ].filter(Boolean).map((text) => `<b>${text}</b>`).join(' ');
-      return `<button type="button" class="part-card" data-custom="${escapeHtml(button.custom_id)}"
-        title="${escapeHtml([title, info.description].filter(Boolean).join(' — '))}">
-        ${info.image ? `<img src="${info.image}" alt="${escapeHtml(info.name)}" loading="lazy">` : '<div class="no-art">◇</div>'}
-        <span class="name">${escapeHtml(info.name || target.part)}</span>
-        <span class="meta">${target.kind === 'old' ? `slot ${target.slot}` : 'install'}</span>
-        <span class="statline">${bits}</span>
-      </button>`;
-    }).join('');
-    sections.push(`<div class="subgroup"><div class="subgroup-title">${escapeHtml(group)}</div>
-      <div class="part-choices">${cards}</div></div>`);
-  }
-  return { html: sections.join(''), other };
+  const entries = (message.buttons || []).map((button) =>
+    ({ button, target: partButton(button.custom_id || '') }))
+    .filter((entry) => entry.target?.kind === 'new');
+  if (!entries.length) return null;
+  const cards = entries.map(({ button, target }) => {
+    const part = state.catalog.parts?.[target.part];
+    return `<li><button type="button" class="part-option" data-custom="${escapeHtml(button.custom_id)}"
+      ${button.disabled ? 'disabled' : ''} title="${escapeHtml(part?.description || button.label)}">
+      ${part?.image ? `<img src="${part.image}" alt="" loading="lazy">` : ''}
+      <span>${escapeHtml(button.label || part?.name || target.part)}</span>
+    </button></li>`;
+  }).join('');
+  const ids = new Set(entries.map((entry) => entry.button.custom_id));
+  return { html: `<ul class="upgrade-parts">${cards}</ul>`,
+    other: (message.buttons || []).filter((button) => !ids.has(button.custom_id)) };
 }
 
 function genericChoices(buttons, message) {
@@ -1118,14 +1092,45 @@ function boardPromptHint(buttons, message) {
   return wrap;
 }
 
-function upgradePrompt(buttons, message, text) {
+function upgradeBlueprint(message, choices) {
   const wrap = document.createElement('div');
-  wrap.className = 'object-hint';
-  const label = document.createElement('span');
-  label.className = 'hint-label';
-  label.textContent = text;
-  wrap.appendChild(label);
-  wrap.appendChild(genericChoices(buttons, message));
+  wrap.className = 'upgrade-blueprint market-stage';
+  const first = choices[0];
+  const ship = SHIP_NAMES[shipClass(first.target.ship)];
+  const view = state.view;
+  const url = `/api/games/${encodeURIComponent(view.game.id)}/blueprint-${ship}.webp`
+    + `?seat=${encodeURIComponent(view.seat)}&v=${encodeURIComponent(view.version)}`;
+  const image = document.createElement('img');
+  image.alt = `${ship} blueprint`;
+  image.src = url;
+  wrap.appendChild(image);
+  fetch(`${url}&layout=1`).then(async (response) => {
+    if (!response.ok) throw new Error('Could not load blueprint slots');
+    const layout = await response.json();
+    if (!wrap.isConnected) return;
+    image.width = layout.width;
+    image.height = layout.height;
+    wrap.style.aspectRatio = `${layout.width} / ${layout.height}`;
+    for (const region of layout.regions) {
+      const entry = choices.find((choice) => choice.target.slot === region.slot);
+      if (!entry) continue;
+      const isChoice = entry.target.kind !== 'new';
+      const target = document.createElement(isChoice ? 'button' : 'span');
+      target.className = 'market-target';
+      target.style.left = `${100 * region.x / layout.width}%`;
+      target.style.top = `${100 * region.y / layout.height}%`;
+      target.style.width = `${100 * region.width / layout.width}%`;
+      target.style.height = `${100 * region.height / layout.height}%`;
+      if (isChoice) {
+        target.type = 'button';
+        target.title = entry.button.label;
+        target.setAttribute('aria-label', `Slot ${region.slot + 1}: ${entry.button.label}`);
+        target.disabled = !!entry.button.disabled;
+        target.addEventListener('click', () => press(message.id, entry.button.custom_id, target));
+      }
+      wrap.appendChild(target);
+    }
+  }).catch((error) => showToast(error.message, true));
   return wrap;
 }
 
@@ -1307,7 +1312,8 @@ function promptCard(message, index) {
   }
 
   const buttons = message.buttons || [];
-  const spatial = buttons.filter((button) => objectAction(button.custom_id || ''));
+  const spatial = isCombat(message) ? []
+    : buttons.filter((button) => objectAction(button.custom_id || ''));
   const dockSpatial = (button) => {
     const target = objectAction(button.custom_id);
     return target.kind === 'combat-roll' || (target.kind === 'population' && target.cube);
@@ -1326,9 +1332,9 @@ function promptCard(message, index) {
   }
   const partButtons = buttons.map((button) => ({ button, target: partButton(button.custom_id || '') }))
     .filter((entry) => entry.target && entry.target.kind !== 'ship');
-  const oldPartsOnly = partButtons.length > 0
-    && partButtons.every((entry) => entry.target.kind === 'old');
-  const parts = oldPartsOnly ? null : partChoices(message);
+  const parts = partChoices(message);
+  const upgradeParts = partButtons.filter((entry) => entry.target.kind === 'new');
+  if (upgradeParts.length) body.appendChild(upgradeBlueprint(message, upgradeParts));
   if (parts) {
     buttons.filter((button) => !parts.other.includes(button))
       .forEach((button) => handled.add(button.custom_id));
@@ -1371,12 +1377,11 @@ function promptCard(message, index) {
   const upgradeShips = spatial.filter((button) => objectAction(button.custom_id).kind === 'upgrade-ship');
   const upgradeSlots = spatial.filter((button) => objectAction(button.custom_id).kind === 'upgrade-slot');
   if (upgradeShips.length) {
-    body.appendChild(upgradePrompt(upgradeShips, message,
-      'Choose a ship blueprint below'));
+    body.appendChild(genericChoices(upgradeShips, message));
   }
   if (upgradeSlots.length) {
-    body.appendChild(upgradePrompt(upgradeSlots, message,
-      'Choose the part to replace below'));
+    body.appendChild(upgradeBlueprint(message, upgradeSlots.map((button) =>
+      ({ button, target: objectAction(button.custom_id) }))));
   }
   const boardSpatial = spatial.filter((button) => {
     const kind = objectAction(button.custom_id).kind;
@@ -1458,12 +1463,20 @@ function isChoicePrompt(message) {
 function battlePanel(battle, messages, view) {
   const section = document.createElement('section');
   section.className = 'battle-room';
+  section.id = `battle-${battle.room.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
   const playerName = (color) => color === 'ai' ? 'Guardians / AI'
     : (view.game.players.find((player) => player.color === color)?.name || color);
   const sideName = (side) => side.colors.map(playerName).join(' + ') || side.role;
   const header = document.createElement('header');
   header.innerHTML = `<span class="battle-mark">⚔</span><div><b>${escapeHtml(
     battle.room.replace(/^aeb\d+-/, ''))}</b></div>`;
+  const backToIndex = document.createElement('a');
+  backToIndex.className = 'battle-back';
+  backToIndex.href = '#table';
+  backToIndex.textContent = '↑';
+  backToIndex.title = 'Back to Galaxy view';
+  backToIndex.setAttribute('aria-label', 'Back to Galaxy view');
+  header.appendChild(backToIndex);
   section.appendChild(header);
   const sides = document.createElement('div');
   sides.className = 'battle-sides';
@@ -1513,13 +1526,16 @@ function battlePanel(battle, messages, view) {
 }
 
 function renderDock(view) {
+  const pageScroll = { left: window.scrollX, top: window.scrollY };
   const scrolls = new Map([...el.dock.querySelectorAll('.battle-chat')].map((chat) =>
     [chat.dataset.room, { top: chat.scrollTop,
       followsLatest: chat.scrollHeight - chat.scrollTop - chat.clientHeight < 32 }]));
-  el.dock.replaceChildren();
+  const dockContent = document.createDocumentFragment();
+  const battle = selectedBattle(view);
+  const visibleBattles = battle ? [battle] : [];
   const pending = [...(view.pending || [])];
   if (!pending.length && !(view.battles || []).length) {
-    el.dock.appendChild(waitingCard(view));
+    el.dock.replaceChildren(waitingCard(view));
     return;
   }
   // The engine sometimes offers the same menu twice (a second research pick, for
@@ -1541,9 +1557,28 @@ function renderDock(view) {
     if (!rooms.has(message.room)) rooms.set(message.room, []);
     rooms.get(message.room).push(message);
   }
-  for (const battle of view.battles || []) {
+  for (const battle of visibleBattles) {
     const panel = battlePanel(battle, rooms.get(battle.room) || [], view);
-    el.dock.appendChild(panel);
+    dockContent.appendChild(panel);
+  }
+  const table = unique.filter((message) => !isCombat(message));
+  const primary = table.filter(isChoicePrompt).sort((a, b) => b.id - a.id);
+  const secondary = table.filter((message) => !isChoicePrompt(message)).sort((a, b) => b.id - a.id);
+  if (!battle) {
+    if ((view.battles || []).length) {
+      const notice = document.createElement('section');
+      notice.className = 'card combat-notice';
+      const heading = document.createElement('h2');
+      heading.textContent = 'Resolve all combat before continuing';
+      notice.append(heading, document.getElementById('battle-index'));
+      dockContent.appendChild(notice);
+    }
+    [...primary, ...secondary].forEach((message, index) => dockContent.appendChild(promptCard(message, index)));
+    if (!dockContent.childNodes.length) dockContent.appendChild(waitingCard(view));
+  }
+  el.dock.replaceChildren(dockContent);
+  for (const battle of visibleBattles) {
+    const panel = document.getElementById(`battle-${battle.room.replace(/[^a-zA-Z0-9_-]/g, '-')}`);
     const chat = panel.querySelector('.battle-chat');
     const previous = scrolls.get(battle.room);
     let followsLatest = !previous || previous.followsLatest;
@@ -1558,10 +1593,7 @@ function renderDock(view) {
       if (followsLatest) chat.scrollTop = chat.scrollHeight;
     }, { once: true }));
   }
-  const table = unique.filter((message) => !isCombat(message));
-  const primary = table.filter(isChoicePrompt).sort((a, b) => b.id - a.id);
-  const secondary = table.filter((message) => !isChoicePrompt(message)).sort((a, b) => b.id - a.id);
-  [...primary, ...secondary].forEach((message, index) => el.dock.appendChild(promptCard(message, index)));
+  if (battle) window.scrollTo({ ...pageScroll, behavior: 'instant' });
 }
 
 // -------------------------------------------------------------------- history
@@ -1782,7 +1814,48 @@ function render(view, force = false) {
     ? `Drag to pan · scroll to zoom · highlighted worlds are choices`
     : 'Drag to pan · scroll to zoom';
 
-  renderBoard(view);
+  const table = document.querySelector('.table');
+  const inCombat = (view.battles || []).length > 0;
+  const combatKey = inCombat ? `${view.game.id}:${view.game.round}` : '';
+  const wasInCombat = !!table.dataset.combat;
+  const combatChanged = table.dataset.combat !== combatKey;
+  table.dataset.combat = combatKey;
+  const room = selectedBattle(view);
+  table.classList.toggle('room-layout', !!room);
+  const index = document.getElementById('battle-index');
+  table.prepend(index);
+  index.classList.toggle('hidden', !inCombat);
+  index.replaceChildren(...(view.battles || []).map((battle) => {
+    const link = document.createElement('a');
+    const tile = battle.room.match(/Tile (\d+[a-z]?)/)?.[1];
+    const hasShips = !!view.you && (view.pieces || []).some((piece) =>
+      piece.kind === 'ship' && piece.position === tile && piece.color === view.you.color);
+    link.href = `#room=${encodeURIComponent(battle.room)}`;
+    if (battle === room) link.setAttribute('aria-current', 'page');
+    link.textContent = battle.room.replace(/^aeb\d+-/, '') + (hasShips ? ' · Your ships' : '');
+    link.classList.toggle('your-battle', hasShips);
+    if (hasShips) link.style.setProperty('--seat-color', PIECE_COLORS[view.you.color]);
+    return link;
+  }));
+  if (inCombat) {
+    const tableLink = document.createElement('a');
+    tableLink.href = '#table';
+    tableLink.textContent = 'Galaxy view';
+    if (!room) tableLink.setAttribute('aria-current', 'page');
+    index.prepend(tableLink);
+  }
+  if (inCombat !== wasInCombat) {
+    const toggle = document.getElementById('market-toggle');
+    if (inCombat) table.dataset.marketExpanded = toggle.getAttribute('aria-expanded');
+    const expanded = !inCombat && table.dataset.marketExpanded !== 'false';
+    toggle.setAttribute('aria-expanded', String(expanded));
+    document.getElementById('market-content').classList.toggle('collapsed', !expanded);
+    document.getElementById('market-content').inert = !expanded;
+  }
+  if (!room) {
+    renderBoard(view);
+    if (combatChanged && state.boardLoaded) fitBoard();
+  }
   renderMarket(view);
   renderPlayers(view);
   renderDock(view);
@@ -1832,6 +1905,7 @@ function bind() {
     const content = document.getElementById('market-content');
     content.classList.toggle('collapsed', !isExpanded);
     content.inert = !isExpanded;
+    if (state.view) render(state.view, true);
   });
   document.querySelectorAll('[data-reference]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -1934,6 +2008,12 @@ function bind() {
 
   window.addEventListener('resize', () => {
     if (state.fitPending) fitBoard();
+  });
+  window.addEventListener('hashchange', () => {
+    if (!state.view) return;
+    render(state.view, true);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    if (!selectedBattle(state.view) && state.boardLoaded) fitBoard();
   });
   window.addEventListener('keydown', (event) => {
     if (!state.previewKey || event.target.closest('input,select,textarea')) return;
