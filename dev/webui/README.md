@@ -56,8 +56,8 @@ docker compose -f compose.webui.yaml exec -T webui python -m dev.webui.playthrou
 ```
 
 `combat`, `movement`, `movement-stack`, `influence`, `population`,
-`population-neutral`, `discovery`, `upkeep`, `scoring`, `bankrupt` and `recovery`
-are available.
+`population-neutral`, `discovery`, `atlantian-discovery`, `nebula`, `retreat`,
+`upkeep`, `scoring`, `bankrupt` and `recovery` are available.
 `python -m dev.webui.playthrough round|movement|full|combat` drives the prepared game
 through the live HTTP surface; `full` plays a pass-only game from round 1 to the final
 score screen. `python -m dev.webui.shot <url> <name>` saves desktop and narrow
@@ -79,7 +79,8 @@ docker compose -f compose.webui.yaml exec -T webui python -m dev.webui.direct_ch
 ```
 
 Flows: `movement`, `movement-drag`, `movement-stack`, `explore`, `build`, `upgrade`,
-`influence`, `population`, `population-neutral`, `discovery`, `research`, `combat`.
+`influence`, `population`, `population-neutral`, `discovery`, `atlantian-discovery`,
+`nebula`, `retreat`, `bankrupt`, `research`, `combat`.
 Use `seed` for the setup-less flows. `combat` drives both seats and needs a hit
 prompt; the check reports `skipped` when the rolled dice never offered a choice.
 

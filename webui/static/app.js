@@ -203,20 +203,20 @@ function shipClass(name) {
 // owns legality: the object only carries the button it was offered.
 function objectAction(customId) {
   let match;
-  if ((match = customId.match(/_moveFrom_(\d{3})/))) {
+  if ((match = customId.match(/_moveFrom_(\d{3}[a-z]?)/))) {
     return { kind: 'move-from', tile: match[1] };
   }
-  if ((match = customId.match(/_moveThisShip_(\d{3})_([a-z]+)_/))) {
+  if ((match = customId.match(/_moveThisShip_(\d{3}[a-z]?)_([a-z]+)_/))) {
     return { kind: 'move-ship', tile: match[1], ship: shipClass(match[2]) };
   }
-  if ((match = customId.match(/_moveTo_(\d{3})_([a-z]+)_(\d{3})/))) {
+  if ((match = customId.match(/_moveTo_(\d{3}[a-z]?)_([a-z]+)_(\d{3}[a-z]?)/))) {
     return { kind: 'move-dest', from: match[1], ship: shipClass(match[2]), tile: match[3] };
   }
-  if ((match = customId.match(/_moveQueueContinue_(\d{3})_([a-z]+)_(\d{3})_/))) {
+  if ((match = customId.match(/_moveQueueContinue_(\d{3}[a-z]?)_([a-z]+)_(\d{3}[a-z]?)_/))) {
     return { kind: 'move-dest', from: match[1], ship: shipClass(match[2]), tile: match[3],
              queue: true };
   }
-  if ((match = customId.match(/_moveQueue(?:Add|Reset|Done)_(\d{3})_([a-z]+)/))) {
+  if ((match = customId.match(/_moveQueue(?:Add|Reset|Done)_(\d{3}[a-z]?)_([a-z]+)/))) {
     return { kind: 'move-queue', tile: match[1], ship: shipClass(match[2]) };
   }
   if ((match = customId.match(/_exploreTile_(\d{3})/))) {
@@ -253,19 +253,22 @@ function objectAction(customId) {
   if ((match = customId.match(/_selectOldPart_(\d+)_([a-z]+)_([a-z0-9]+)_([^_]+)_(\d+)/))) {
     return { kind: 'upgrade-slot', ship: shipClass(match[2]), slot: Number(match[5]) };
   }
-  if ((match = customId.match(/_assignHitTo_(\d{3})_([a-z]+)_([a-z0-9-]+)_(\d+)_(\d+)/))) {
+  if ((match = customId.match(/_assignHitTo_(\d{3}[a-z]?)_([a-z]+)_([a-z0-9-]+)_(\d+)_(\d+)/))) {
     return { kind: 'combat-hit', tile: match[1], unit: match[3] };
   }
-  if ((match = customId.match(/_removeThisUnit_(\d{3})_([a-z0-9-]+)/))) {
+  if ((match = customId.match(/_removeThisUnit_(\d{3}[a-z]?)_([a-z0-9-]+)/))) {
     return { kind: 'combat-remove', tile: match[1], unit: match[2] };
   }
-  if ((match = customId.match(/_rollDice_(\d{3})_/))) {
+  if ((match = customId.match(/_rollDice_(\d{3}[a-z]?)_/))) {
     return { kind: 'combat-roll', tile: match[1] };
   }
-  if ((match = customId.match(/_ghostsRetreatTo_(\d{3})_/))) {
+  if ((match = customId.match(/_ghostsRetreatTo_\d{3}[a-z]?_[a-z]+_\d+_(\d{3}[a-z]?)/))) {
     return { kind: 'retreat', tile: match[1] };
   }
-  if ((match = customId.match(/_phaseBombing_(\d{3})_/))) {
+  if ((match = customId.match(/_finishRetreatingUnits_\d{3}[a-z]?_[a-z]+_\d+_(\d{3}[a-z]?)/))) {
+    return { kind: 'retreat', tile: match[1] };
+  }
+  if ((match = customId.match(/_phaseBombing_(\d{3}[a-z]?)_/))) {
     return { kind: 'combat-roll', tile: match[1] };
   }
   return null;
@@ -401,6 +404,9 @@ function renderOverlay(view) {
   el.overlay.replaceChildren();
   if (!meta || !meta.tiles) return;
   const tiles = new Map(meta.tiles.map((tile) => [tile.position, tile]));
+  const subsectors = new Map((meta.subsectors || []).map((tile) => [tile.position, tile]));
+  const targetTile = (position) => tiles.get(position) || subsectors.get(position);
+  const hitBox = (tile) => tile.hit || { x: tile.x + 36, y: tile.y + 28, width: 273, height: 244 };
   // Unexplored ring slots: the board's shape stays readable between real tiles.
   for (const tile of meta.tiles) {
     if (!tile.empty) continue;
@@ -462,19 +468,20 @@ function renderOverlay(view) {
   }
 
   for (const [position, choices] of tileActions) {
-    const tile = tiles.get(position);
+    const tile = targetTile(position);
     if (!tile) continue;
     const action = choices.sort((left, right) =>
       TILE_PRIORITY.indexOf(left.kind) - TILE_PRIORITY.indexOf(right.kind))[0];
+    const box = hitBox(tile);
     const hotspot = document.createElement('button');
     hotspot.type = 'button';
     hotspot.className = `hotspot ${action.kind}${tile.empty ? ' empty' : ''}`;
     hotspot.title = `${tileLabel(tile)}: ${action.button.label || action.kind}`;
     hotspot.setAttribute('aria-label', `${tileLabel(tile)}: ${OBJECT_LABEL[action.kind]?.(tile) || action.kind}`);
-    hotspot.style.left = `${tile.x + 36}px`;
-    hotspot.style.top = `${tile.y + 28}px`;
-    hotspot.style.width = '273px';
-    hotspot.style.height = '244px';
+    hotspot.style.left = `${box.x}px`;
+    hotspot.style.top = `${box.y}px`;
+    hotspot.style.width = `${box.width}px`;
+    hotspot.style.height = `${box.height}px`;
     const tag = document.createElement('span');
     tag.className = 'tag';
     tag.textContent = OBJECT_LABEL[action.kind]?.(tile) || action.button.label || action.kind;
@@ -486,14 +493,15 @@ function renderOverlay(view) {
   // A chosen build system keeps a marker while its unit tray is open.
   for (const position of new Set(actions.filter((action) => action.kind === 'build-unit')
     .map((action) => action.tile))) {
-    const tile = tiles.get(position);
+    const tile = targetTile(position);
     if (!tile) continue;
+    const box = hitBox(tile);
     const marker = document.createElement('div');
     marker.className = 'hotspot building';
-    marker.style.left = `${tile.x + 36}px`;
-    marker.style.top = `${tile.y + 28}px`;
-    marker.style.width = '273px';
-    marker.style.height = '244px';
+    marker.style.left = `${box.x}px`;
+    marker.style.top = `${box.y}px`;
+    marker.style.width = `${box.width}px`;
+    marker.style.height = `${box.height}px`;
     const tag = document.createElement('span');
     tag.className = 'tag';
     tag.textContent = `Building in ${tile.label || position}`;
@@ -502,14 +510,15 @@ function renderOverlay(view) {
   }
   for (const position of new Set(actions.filter((action) => action.kind === 'combat-roll')
     .map((action) => action.tile))) {
-    const tile = tiles.get(position);
+    const tile = targetTile(position);
     if (!tile) continue;
+    const box = hitBox(tile);
     const marker = document.createElement('div');
     marker.className = 'hotspot battle';
-    marker.style.left = `${tile.x + 36}px`;
-    marker.style.top = `${tile.y + 28}px`;
-    marker.style.width = '273px';
-    marker.style.height = '244px';
+    marker.style.left = `${box.x}px`;
+    marker.style.top = `${box.y}px`;
+    marker.style.width = `${box.width}px`;
+    marker.style.height = `${box.height}px`;
     const tag = document.createElement('span');
     tag.className = 'tag';
     tag.textContent = `Battle in ${tile.label || position}`;
@@ -520,6 +529,7 @@ function renderOverlay(view) {
   for (const { piece, action } of shipTargets) {
     const tile = tiles.get(piece.tile);
     if (!tile) continue;
+    const where = subsectors.get(piece.position) || tile;
     const size = piece.kind === 'planet' ? 46 : 56;
     const node = document.createElement('button');
     node.type = 'button';
@@ -530,8 +540,8 @@ function renderOverlay(view) {
     node.style.height = `${size}px`;
     node.style.setProperty('--ring', PIECE_COLORS[piece.color] || '#8fd8ff');
     const what = piece.kind === 'ship'
-      ? `${piece.color} ${piece.class} in ${tileLabel(tile)}`
-      : `${piece.square} square in ${tileLabel(tile)}`;
+      ? `${piece.color} ${piece.class} in ${tileLabel(where)}`
+      : `${piece.square} square in ${tileLabel(where)}`;
     node.title = `${what}: ${action.button.label || action.kind}`;
     node.setAttribute('aria-label', `${what}: ${OBJECT_LABEL[action.kind]?.() || action.button.label}`);
     const glyph = document.createElement('span');
@@ -559,7 +569,7 @@ function renderOverlay(view) {
   }
 
   renderTilePreview(actions, tiles);
-  renderDragToken(actions, tiles, pieces);
+  renderDragToken(actions, targetTile, pieces);
 }
 
 function previewOptions(actions) {
@@ -629,11 +639,11 @@ function placePreview() {
   if (action) press(action.message.id, action.button.custom_id, null);
 }
 
-function renderDragToken(actions, tiles, pieces) {
+function renderDragToken(actions, targetTile, pieces) {
   const destinations = actions.filter((action) => action.kind === 'move-dest');
   if (!destinations.length) return;
   const origin = destinations[0].from;
-  const tile = tiles.get(origin);
+  const tile = targetTile(origin);
   if (!tile) return;
   const ship = (pieces.get(origin) || []).find((piece) =>
     piece.kind === 'ship' && piece.class === destinations[0].ship);

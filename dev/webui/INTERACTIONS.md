@@ -21,7 +21,7 @@ object carries that button.
 | Build | Dock tile button, then unit buttons, then resource-spend buttons | Owned system; then the ship/unit slots in that system | Buildable systems are only listed as text; units are text prices; no cost/affordability cue |
 | Influence | Dock tile buttons for add/remove; a tile hotspot exists only when that tile offers exactly one choice | Empty world (place disc), own disc (remove) | Discs cannot be clicked; legal worlds are not marked as "place disc" |
 | Population | Dock "Money (tile 201)" text buttons | Empty planet square / orbital slot on the map | Empty planet squares are invisible and not clickable |
-| Discoveries | Generic buttons; card art only in the message attachment for the draw | The discovery card and its diamond on the tile | Card choices are plain buttons; diamond not clickable |
+| Discoveries | Generic buttons; card art only in the message attachment for the draw | The discovery card and its diamond on the tile | Atlantians' two draws were one button list over one attachment |
 | Combat | Roll / assign-hit buttons in the battle room; separated rooms are good | Contested system, enemy ships, retreat destinations | Hits cannot be assigned by clicking the enemy ship; retreat is a text list |
 | Turn / pass / upkeep | Dock buttons | None (action choice, not an object) | Acceptable as-is; improve labels/counters only |
 | Diplomacy, minor species, trade, bankruptcy | Dock buttons | None / player panel | Acceptable; may reuse player panel later |
@@ -30,7 +30,8 @@ object carries that button.
 
 - A button naming a board position becomes a marked object on the board: a whole
   tile, a ship token on its actual snap point, an empty planet square, or the
-  discovery diamond.
+  discovery diamond. Nebula A/B/C target the wedge label the engine paints, so
+  sibling subsectors never share a hotspot.
 - A button naming a ship (origin, type, hit target, retreat) attaches to that ship's
   token; clicking the token presses it. Drag uses the same token.
 - Tile rotations (`placeTile_*`) become a preview of the real tile image at the
@@ -86,12 +87,14 @@ Verified with `python -m dev.webui.direct_checks <flow>` inside the container:
 | population-neutral | grey planet + cube type choice | neutral planet holds the chosen cube |
 | research | tech-market card | science spent, tech owned |
 | discovery | discovery card art | `disc_tiles_for_points` incremented |
+| atlantian-discovery | two drawn cards, then Use/Keep | the chosen ability's science gain is saved |
+| nebula | subsector B ship, then the A/C wedge label | the ship is in exactly 207c; A and C targets do not overlap |
+| retreat | controlled neighbour in a mid-retreat prompt | the retreating ship left the battle for 201; a replay moves nothing |
+| bankrupt | bankruptcy prompt's trade, then Run Upkeep | money covers the shortfall, upkeep runs into round 2 |
 | combat | enemy ship token in the hit prompt | the hit target was accepted by the engine |
 
 Choices with no visible object (roll dice, trade, pass, end turn, quantity) stay in
 the dock; they are not forced into the board.
 
-Not scripted here: the Atlantian two-choice discovery card layout (the card grid is
-implemented), Ghosts' retreat-destination click (parsed and marked with the same tile
-hotspot), and resolving bankruptcy through trade or disc removal. The engine pieces
-for all three exist; they need their own fabricated saves to verify end to end.
+Not scripted here: the Ghosts' immediate `Retreat Now` variant and resolving
+bankruptcy by removing a sector. Both use the same destination/removal objects.

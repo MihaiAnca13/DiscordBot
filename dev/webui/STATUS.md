@@ -26,10 +26,13 @@ same canonical message id.
   remain cards.
 - Research: the tech market is the only research surface; offered cards are
   highlighted, others dimmed. The dock keeps a collapsed accessible list.
-- Discoveries: the drawn tile is shown as its card with Use / Keep.
+- Discoveries: the drawn tile is shown as its card with Use / Keep; the
+  Atlantians' two draws are two separate art cards.
 - Combat: an enemy ship in the hit prompt is clickable; the battle room and log are
   unchanged, and roll/trade/pass buttons stay in the dock because they have no board
-  object.
+  object. Retreat destinations are the controlled neighbouring worlds.
+- Nebula sectors: A/B/C are separate targets on the wedge labels the engine paints,
+  including when the hex is rotated, so a click cannot land in the wrong subsector.
 - Every spatial prompt keeps a collapsed "choose from a list" fallback and the board
   objects are real buttons, so clicking is also the keyboard/touch alternative to
   dragging.
@@ -38,17 +41,17 @@ same canonical message id.
 
 | Check | Result |
 |---|---|
-| `pytest tests -m 'not render' -q` | **627 passed**, 25 deselected |
-| `pytest tests -m render -q` | **25 passed**, 627 deselected |
+| `pytest tests -m 'not render' -q` | **630 passed**, 25 deselected |
+| `pytest tests -m render -q` | **25 passed**, 630 deselected |
 | `python -m dev.webui.smoke` | passed; desktop screenshot, Build menu, hotspots |
 | `python -m dev.webui.browser_checks` | **18/18 passed** (real Chromium, HTTP, two seats) |
-| `python -m dev.webui.direct_checks <flow>` | **12/12 flows passed**: movement, movement-drag, movement-stack, explore (click + keyboard), build, upgrade, influence, population, population-neutral, discovery, research, combat |
+| `python -m dev.webui.direct_checks <flow>` | **16/16 flows passed**: movement, movement-drag, movement-stack, explore (click + keyboard), build, upgrade, influence, population, population-neutral, discovery, atlantian-discovery, nebula, retreat, bankrupt, research, combat |
 | `python -m dev.webui.playthrough round` | passed: build, explore, discovery, influence, passing, upkeep → round 2 |
 | `python -m dev.webui.playthrough movement` | passed: click-move 201 → 101 → 201 |
 | `python -m dev.webui.playthrough full` | passed: pass-only game from round 1 to final scores (round 9) |
 | `python -m dev.webui.playthrough combat` | passed: two-sided combat to destruction + reputation draw |
 | scoring scenario + browser | passed: round 8 upkeep → Declare Winner → final scoreboard |
-| bankruptcy scenario | passed: upkeep blocks with trade/remove-control choices |
+| bankruptcy scenario | passed: upkeep blocks, one trade covers the shortfall, Run Upkeep starts round 2 |
 
 All commands ran through `compose.webui.yaml`; screenshots and result JSON are in
 `dev/webui/artifacts/` (Git-ignored).
@@ -84,9 +87,10 @@ All commands ran through `compose.webui.yaml`; screenshots and result JSON are i
   roll button is retired after that colour rolls; other research menus lose owned or
   unaffordable techs.
 - **Sandbox tools** (`dev/webui/`): `seed`, `scenarios` (combat, movement,
-  movement-stack, influence, population, population-neutral, discovery, upkeep,
-  scoring, bankrupt, recovery), `smoke`, `shot`, `browser_checks`, `direct_checks`,
-  `playthrough`. Fixed seed / rule setup comes from the existing test setup.
+  movement-stack, influence, population, population-neutral, discovery,
+  atlantian-discovery, nebula, retreat, upkeep, scoring, bankrupt, recovery),
+  `smoke`, `shot`, `browser_checks`, `direct_checks`, `playthrough`. Fixed seed /
+  rule setup comes from the existing test setup.
 
 ## Evidence for specific requirements
 
@@ -121,7 +125,8 @@ docker compose -f compose.webui.yaml exec -T webui python -m dev.webui.direct_ch
 ```
 
 Reset before smoke/browser checks; each scenario also wipes both development volumes.
-Cold board render takes a few seconds; wait for `#board.naturalWidth > 0`.
+Cold board render takes a few seconds; the browser waits for `#board-note` to clear
+before clicking or taking evidence screenshots.
 
 ## Known limits (not implemented)
 
@@ -136,21 +141,21 @@ Cold board render takes a few seconds; wait for `#board.naturalWidth > 0`.
   destination is the touch/keyboard path, and the board pans with one finger.
 - Faction ability names come from `data/factions.json`; full rule text lives on the
   faction-board image rather than extracted HTML.
-- Bankruptcy prompts are displayed and tested, but resolving a bankruptcy through
-  trade/removal end-to-end was not scripted.
+- Bankruptcy prompts are displayed and resolved through trade end to end; removing a
+  control to resolve one is offered by the engine but not scripted.
 - Combat auto-assigns a hit when the engine finds only one legal target; the enemy
   ship click is verified only when the engine actually posts a choice. Rolls, trade
   and pass have no board object and stay as dock buttons.
-- Space-scoped choices on the far side of a nebula subsector are placed at the
-  parent's painted position; the engine still resolves the subsector id.
+- Nebula wedge targets are the size of the painted label so they cannot overlap;
+  zoom in when clicking one on a tightly fitted map.
 
 ## Next task
 
 1. Authentication and remote-host deployment (TLS reverse proxy, WireGuard bind,
    seat tokens) before exposing the UI.
 2. One live Discord session to verify the mirror and cross-surface prompt retirement.
-3. Optional polish: richer faction ability text, bankruptcy resolution script,
-   touch pinch zoom, a scripted retreat/two-choice discovery case.
+3. Optional polish: richer faction ability text, touch pinch zoom, bankruptcy
+   resolution by removing a sector, Ghosts retreat variants.
 
 ## Checkpoints
 
@@ -173,4 +178,6 @@ Cold board render takes a few seconds; wait for `#board.naturalWidth > 0`.
 `final-table.png`, `final-narrow.png`, `final-explore-preview.png`,
 `final-upgrade-slots.png`, `direct-movement-*.png`, `direct-build-*.png`,
 `direct-influence-*.png`, `direct-population-*.png`, `direct-discovery-card.png`,
+`direct-atlantian-discovery-choices.png`, `direct-nebula-targets.png`,
+`direct-retreat-target.png`, `direct-bankrupt-prompt.png`,
 `direct-combat-hit-*.png`. All were opened and inspected.

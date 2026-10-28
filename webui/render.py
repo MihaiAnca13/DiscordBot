@@ -4,6 +4,7 @@ Rendering is the slow part (seconds), so the URL carries a version taken from th
 save file's mtime and size: the browser keeps the image until the state changes.
 """
 import json
+import math
 import os
 
 from PIL import Image
@@ -15,6 +16,33 @@ from helpers.GamestateHelper import GamestateHelper
 def state_version(games_path, game_id):
     stat = os.stat(os.path.join(games_path, f"{game_id}.json"))
     return f"{stat.st_mtime_ns}-{stat.st_size}"
+
+
+TILE_W, TILE_H = 345, 300
+SOURCE_W, SOURCE_H = 1024, 890
+NEBULA_LABELS = {"": (865, 445), "b": (335, 139), "c": (335, 751)}
+NEBULA_HIT = 90
+
+
+def rotate_tile_point(x, y, orientation):
+    """Where the engine paints a 1024-pixel tile point after rotating the art."""
+    angle = math.radians(orientation)
+    dx, dy = x - SOURCE_W / 2, y - SOURCE_H / 2
+    return (SOURCE_W / 2 + dx * math.cos(angle) + dy * math.sin(angle),
+            SOURCE_H / 2 - dx * math.sin(angle) + dy * math.cos(angle))
+
+
+def nebula_anchor(parent, orientation, suffix):
+    """The painted label anchor of one Nebula subsector, in board pixels."""
+    x, y = rotate_tile_point(*NEBULA_LABELS[suffix], orientation)
+    return round(x * TILE_W / SOURCE_W, 1), round(y * TILE_H / SOURCE_H, 1)
+
+
+def _nebula_hit(point, left=0, top=0):
+    x, y = point
+    return {"x": round(left + x - NEBULA_HIT / 2, 1),
+            "y": round(top + y - NEBULA_HIT / 2, 1),
+            "width": NEBULA_HIT, "height": NEBULA_HIT}
 
 
 def _board_bounds(gamestate):
@@ -129,7 +157,12 @@ def render_board(games_path, game_id, cache_dir, keep=3):
 
 
 def board_meta(games_path, game_id):
-    """JSON-friendly geometry: image size plus each tile's top-left offset."""
+    """JSON-friendly geometry: image size plus each clickable tile or subsector.
+
+    Nebula sectors paint three subsectors inside one hex, so their targets sit on
+    the wedge labels the engine draws. Separate wedges never overlap: a shared
+    whole-tile hotspot would let the wrong subsector take the click.
+    """
     geometry = board_geometry(game_id)
     with open(os.path.join(games_path, f"{game_id}.json")) as save:
         gamestate = json.load(save)
@@ -140,7 +173,32 @@ def board_meta(games_path, game_id):
             label = "Unexplored"
         labels[position] = label
     for tile in geometry["tiles"]:
+        state = gamestate["board"][tile["position"]]
         tile["label"] = labels.get(tile["position"], tile["position"])
-        tile["owner"] = gamestate["board"][tile["position"]].get("owner")
-        tile["orientation"] = gamestate["board"][tile["position"]].get("orientation", 0)
+        tile["owner"] = state.get("owner")
+        tile["orientation"] = state.get("orientation", 0)
+        if state.get("type") == "nebula":
+            tile["label"] = f"{tile['position']}-A"
+            tile["hit"] = _nebula_hit(nebula_anchor(tile["position"], tile["orientation"], ""),
+                                      tile["x"], tile["y"])
+        else:
+            tile["hit"] = {"x": tile["x"] + 36, "y": tile["y"] + 28,
+                           "width": 273, "height": 244}
+    subsectors = []
+    for position, state in gamestate["board"].items():
+        parent = state.get("nebula_parent")
+        if parent is None:
+            continue
+        parent_tile = next(tile for tile in geometry["tiles"] if tile["position"] == parent)
+        suffix = position[len(parent):]
+        subsectors.append({
+            "position": position, "parent": parent,
+            "label": f"{parent}-{suffix.upper()}",
+            "x": parent_tile["x"], "y": parent_tile["y"],
+            "owner": state.get("owner"),
+            "orientation": state.get("orientation", 0),
+            "hit": _nebula_hit(nebula_anchor(parent, parent_tile["orientation"], suffix),
+                               parent_tile["x"], parent_tile["y"]),
+        })
+    geometry["subsectors"] = subsectors
     return geometry

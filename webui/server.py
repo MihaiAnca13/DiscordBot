@@ -24,7 +24,8 @@ from helpers.PlayerHelper import PlayerHelper
 from helpers.ShipHelper import PlayerShip
 from listeners.ButtonListener import ButtonListener
 from webui import catalog
-from webui.render import board_meta, render_board, render_tile_preview
+from webui.render import (SOURCE_H, SOURCE_W, TILE_H, TILE_W, board_meta, render_board,
+                          render_tile_preview, rotate_tile_point)
 from webui.store import FeedStore
 from webui.transport import Surface, WebInteraction
 
@@ -215,19 +216,32 @@ def _is_phase_prompt(message):
 
 
 def _is_standing(message):
-    """A private reaction-pass offer sits beside the turn menu, not instead of it."""
+    """A prompt that stays beside newer prompts instead of being replaced by them.
+
+    The private reaction-pass offer sits beside the turn menu, and a bankruptcy
+    prompt needs the older Run Upkeep button to stay reachable so the resolved
+    upkeep can be started again.
+    """
+    content = (message["content"] or "").lower()
     return any((button.get("custom_id") or "") == "permanentlyPass"
-               for button in message["buttons"])
+               for button in message["buttons"]) \
+        or "would be bankrupt" in content
 
 
-def _snap_point(point, width=345, height=300):
-    """Save snapshots use a 1024-wide tile; the board paints tiles at 345x300."""
+def _snap_point(point, rotation=0):
+    """Save snapshots use the engine's 1024x890 tile; the board paints 345x300.
+
+    Nebula art is rotated after its ships are drawn, so those points rotate too.
+    """
     if not point or len(point) < 2:
         return None
-    return {"x": round(point[0] * width / 1024, 1), "y": round(point[1] * height / 1024, 1)}
+    x, y = point[0], point[1]
+    if rotation:
+        x, y = rotate_tile_point(x, y, rotation)
+    return {"x": round(x * TILE_W / SOURCE_W, 1), "y": round(y * TILE_H / SOURCE_H, 1)}
 
 
-def _tile_pieces(tile, drawn_on, position):
+def _tile_pieces(tile, drawn_on, position, rotation=0):
     """The clickable objects the engine's own tile image already shows.
 
     A ship token sits on the snap point the engine draws it at, so the browser can
@@ -242,7 +256,8 @@ def _tile_pieces(tile, drawn_on, position):
         kind = kind.replace("adv", "")
         if kind not in PIECE_SHIPS:
             continue
-        anchor = _snap_point(tile.get(f"{'ai' if kind in ('anc', 'gcds', 'grd') else kind}_snap"))
+        anchor = _snap_point(tile.get(f"{'ai' if kind in ('anc', 'gcds', 'grd') else kind}_snap"),
+                             rotation)
         if anchor is None:
             continue
         entry = ships.setdefault(unit, {"kind": "ship", "name": unit, "color": color,
@@ -256,7 +271,7 @@ def _tile_pieces(tile, drawn_on, position):
             continue
         for index, value in enumerate(populations):
             key = "orb" if kind == "orbital" else f"{kind}{index + 1}"
-            anchor = _snap_point(tile.get(f"{key}_snap"))
+            anchor = _snap_point(tile.get(f"{key}_snap"), rotation)
             if anchor is None:
                 continue
             planets.append({"kind": "planet", "square": kind, "index": index,
@@ -272,11 +287,12 @@ def _board_pieces(game):
     for position, tile in game.gamestate["board"].items():
         if "nebula_parent" in tile:
             continue  # painted inside the parent's image
-        pieces.extend(_tile_pieces(tile, position, position))
+        rotation = tile.get("orientation", 0) if tile.get("type") == "nebula" else 0
+        pieces.extend(_tile_pieces(tile, position, position, rotation))
         for sibling in tile.get("nebula_internal", []):
             sub = game.gamestate["board"].get(sibling)
             if sub:
-                pieces.extend(_tile_pieces(sub, position, sibling))
+                pieces.extend(_tile_pieces(sub, position, sibling, rotation))
     return pieces
 
 

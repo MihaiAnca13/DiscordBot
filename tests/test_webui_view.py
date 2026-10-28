@@ -3,6 +3,7 @@ import pytest
 from PIL import Image
 
 from Buttons.Turn import TurnButtons
+from webui.render import rotate_tile_point
 from webui.server import build
 from webui.store import FeedStore
 from webui.transport import Surface
@@ -110,6 +111,25 @@ def test_a_new_phase_hides_the_previous_turn_menu(start_game, store, app, run):
     assert [message["content"] for message in view["pending"]] == ["all players have passed"]
 
 
+def test_a_bankruptcy_prompt_keeps_the_run_upkeep_button(start_game, store, app, run):
+    game, _channel = start_game()
+    turn_menu(run, store, game, "1", "blue")
+    store.record("aeb1", "aeb1-actions", content="all players have passed", buttons=[
+        {"label": "Run Upkeep", "custom_id": "runUpkeep",
+         "style": 1, "disabled": False, "url": None}])
+    store.record("aeb1", "aeb1-actions",
+                 content="It appears that Blue would be bankrupt (negative money).", buttons=[
+                     {"label": "Done Resolving", "custom_id": "FCIDblue_deleteMsg",
+                      "style": 4, "disabled": False, "url": None}])
+
+    view = app.snapshot("aeb1", "1")
+
+    labels = [button["label"] for message in view["pending"] for button in message["buttons"]]
+    assert "Run Upkeep" in labels, labels
+    assert any("bankrupt" in (message["content"] or "").lower()
+               for message in view["pending"])
+
+
 def test_combat_overview_stops_offering_a_rolled_colour(store, app):
     blue = store.record("aeb1", "aeb1-Round 1, Tile 102, Combat", content="Combat",
                         buttons=[
@@ -152,13 +172,58 @@ def test_board_pieces_sit_on_the_drawn_ship_and_planet_snaps(start_game, store, 
                 if piece["kind"] == "ship" and piece["position"] == "201")
     assert ship["name"] == "blue-int" and ship["class"] == "int"
     assert abs(ship["x"] - tile["int_snap"][0] * 345 / 1024) < 0.2
-    assert abs(ship["y"] - tile["int_snap"][1] * 300 / 1024) < 0.2
+    assert abs(ship["y"] - tile["int_snap"][1] * 300 / 890) < 0.2
 
     planet = next(piece for piece in pieces
                   if piece["kind"] == "planet" and piece["position"] == "201"
                   and piece["square"] == "money")
     assert planet["pop"] == tile["money_pop"][0]
     assert abs(planet["x"] - tile["money1_snap"][0] * 345 / 1024) < 0.2
+
+
+def boxes_overlap(left, right):
+    return not (left["x"] + left["width"] <= right["x"]
+                or right["x"] + right["width"] <= left["x"]
+                or left["y"] + left["height"] <= right["y"]
+                or right["y"] + right["height"] <= left["y"])
+
+
+def test_nebula_subsector_targets_sit_on_distinct_wedges(start_game, store, app):
+    game, _channel = start_game()
+    game.add_tile("207", 120, "295")
+    game.update()
+
+    meta = app.snapshot("aeb1", "1")["board_meta"]
+    by_position = {tile["position"]: tile for tile in meta["tiles"]}
+    subsectors = {tile["position"]: tile for tile in meta["subsectors"]}
+
+    assert by_position["207"]["label"] == "207-A"
+    assert subsectors["207b"]["label"] == "207-B"
+    assert subsectors["207c"]["label"] == "207-C"
+    targets = [by_position["207"], subsectors["207b"], subsectors["207c"]]
+    for tile in targets:
+        assert tile["hit"]["x"] >= tile["x"], tile["hit"]
+        assert tile["hit"]["y"] >= tile["y"], tile["hit"]
+        assert tile["hit"]["x"] + tile["hit"]["width"] <= tile["x"] + 345, tile["hit"]
+        assert tile["hit"]["y"] + tile["hit"]["height"] <= tile["y"] + 300, tile["hit"]
+    for index, left in enumerate(targets):
+        for right in targets[index + 1:]:
+            assert not boxes_overlap(left["hit"], right["hit"]), (left["hit"], right["hit"])
+
+
+def test_nebula_pieces_follow_the_rotated_art(start_game, store, app):
+    game, _channel = start_game()
+    game.add_tile("207", 120, "295")
+    board = game.gamestate["board"]
+    board["207b"]["player_ships"] = ["blue-int"]
+    game.update()
+
+    pieces = app.snapshot("aeb1", "1")["pieces"]
+    piece = next(piece for piece in pieces
+                 if piece["kind"] == "ship" and piece["position"] == "207b")
+    expected = rotate_tile_point(*board["207b"]["int_snap"], 120)
+    assert abs(piece["x"] - expected[0] * 345 / 1024) < 0.2
+    assert abs(piece["y"] - expected[1] * 300 / 890) < 0.2
 
 
 @pytest.mark.render

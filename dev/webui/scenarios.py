@@ -13,6 +13,7 @@ import sys
 import discord
 from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Population import PopulationButtons
+from helpers import FactionData
 from helpers.CombatHelper import Combat
 from webui.transport import WebInteraction
 
@@ -93,6 +94,49 @@ async def scenario_discovery(game, store):
     await asyncio.sleep(0.5)  # the options are posted from a background task
 
 
+async def scenario_atlantian_discovery(game, store):
+    """Atlantians draw two cards and must resolve one of them."""
+    player = game.gamestate["players"]["1"]
+    player.update({"name": "Atlantians", "artwork": "atlantians",
+                   "abilities": FactionData.FACTIONS["atl"]["abilities"],
+                   "player_name": "Atlantians"})
+    # drawDiscoveryChoices pops from the end: Money Gain then Science Gain.
+    game.gamestate["discTiles"] = ["mat", "cru", "sci", "mog"]
+    game.gamestate["board"]["000"]["disctile"] = 1
+    game.update()
+    interaction = WebInteraction(store, "aeb1", "1", members=members(game))
+    await DiscoveryTileButtons.exploreDiscoveryTile(game, "000", interaction, game.get_player(1))
+    await asyncio.sleep(0.5)
+
+
+async def scenario_nebula(game, store):
+    """A ship in subsector B: A and C are both legal destinations in the same hex."""
+    game.add_tile("207", 120, "295")
+    game.add_units(["blue-int"], "207b")
+
+
+async def scenario_retreat(game, store):
+    """The moment after Blue announced a retreat: only the destination is left.
+
+    The engine reloads the save between presses, so the prompt is posted from a
+    fresh read; that is what turns the announced retreat into destination buttons.
+    """
+    from helpers.GamestateHelper import GamestateHelper
+    from helpers.ShipHelper import PlayerShip
+    speed = PlayerShip(game.get_player(1), "int").speed
+    game.add_tile("101", 0, "307")
+    game.add_units(["blue-int"], "101")
+    game.add_units(["red-int"], "101")
+    game.noteUnitEntry("red", "101")
+    game.setAttackerAndDefender(["red"], ["blue"], "101")
+    game.setCurrentSpeed(speed, "101")
+    game.setCurrentRoller("red", "101")
+    game.setRetreatingUnits((speed, "blue"), "101")
+    interaction = WebInteraction(store, "aeb1", "1", members=members(game))
+    await Combat.promptNextSpeed(GamestateHelper(None, "aeb1"), "101", interaction.channel, False)
+    await asyncio.sleep(0.5)
+
+
 async def scenario_upkeep(game, store):
     for player in game.gamestate["players"].values():
         player["passed"] = True
@@ -115,8 +159,13 @@ async def scenario_recovery(game, store):
 
 
 async def scenario_bankrupt(game, store):
-    game.gamestate["players"]["1"]["influence_discs"] = 2
-    game.gamestate["players"]["1"]["money"] = 0
+    """One money short after income: a single trade or disc removal resolves it."""
+    player = game.gamestate["players"]["1"]
+    player["influence_discs"] = 2
+    player["money"] = 17
+    player["materials"] = 3
+    player["science"] = 3
+    game.update()
     await scenario_upkeep(game, store)
 
 
@@ -128,6 +177,9 @@ SCENARIOS = {
     "population": scenario_population,
     "population-neutral": scenario_population_neutral,
     "discovery": scenario_discovery,
+    "atlantian-discovery": scenario_atlantian_discovery,
+    "nebula": scenario_nebula,
+    "retreat": scenario_retreat,
     "upkeep": scenario_upkeep,
     "scoring": scenario_scoring,
     "recovery": scenario_recovery,

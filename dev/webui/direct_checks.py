@@ -46,6 +46,23 @@ def ships(seat="1"):
             if piece["kind"] == "ship"]
 
 
+def ship_piece(position, name, seat="1"):
+    return next((piece for piece in view(seat)["pieces"]
+                 if piece["kind"] == "ship" and piece["position"] == position
+                 and piece["name"] == name), {})
+
+
+def money(seat="1"):
+    return view(seat)["you"]["money"]
+
+
+def boxes_overlap(left, right):
+    return not (left["x"] + left["width"] <= right["x"]
+                or right["x"] + right["width"] <= left["x"]
+                or left["y"] + left["height"] <= right["y"]
+                or right["y"] + right["height"] <= left["y"])
+
+
 def open_page(browser, seat="1", errors=None, viewport=None, prompt=True):
     page = browser.new_page(viewport=viewport or {"width": 1600, "height": 1000})
     page.set_default_timeout(25000)
@@ -54,7 +71,9 @@ def open_page(browser, seat="1", errors=None, viewport=None, prompt=True):
         page.on("response", lambda response: errors.append(
             f"HTTP {response.status}: {response.url}") if response.status >= 500 else None)
     page.goto(f"{BASE}/?seat={seat}", wait_until="networkidle")
-    page.wait_for_function("document.querySelector('#board').naturalWidth > 0", timeout=120000)
+    page.wait_for_function(
+        "document.querySelector('#board').naturalWidth > 0"
+        " && document.querySelector('#board-note').textContent === ''", timeout=120000)
     if prompt:
         page.wait_for_selector("#action-dock .prompt")
     else:
@@ -64,6 +83,9 @@ def open_page(browser, seat="1", errors=None, viewport=None, prompt=True):
 
 
 def shot(page, name):
+    page.wait_for_function("document.querySelector('#board-note').textContent === ''",
+                           timeout=90000)
+    page.wait_for_timeout(300)
     page.screenshot(path=str(ARTIFACTS / f"direct-{name}.png"), full_page=True)
 
 
@@ -323,6 +345,114 @@ def flow_discovery(page):
     check("keeping the discovery is saved for points", after == before + 1, f"{before}→{after}")
 
 
+def flow_atlantian_discovery(page):
+    page.wait_for_selector(".discovery-card")
+    page.wait_for_function(
+        "document.querySelectorAll('.discovery-choice').length === 2", timeout=30000)
+    names = [node.inner_text().strip() for node in page.locator(".discovery-choice").all()]
+    check("both drawn tiles are separate cards", len(names) == 2, str(names))
+    check("each drawn card has its own art",
+          page.locator(".discovery-choice img").count() == 2)
+    shot(page, "atlantian-discovery-choices")
+
+    before = view("1")["you"]["science"]
+    page.locator(".discovery-choice", has_text="Science Gain").click()
+    page.wait_for_timeout(1800)
+    page.wait_for_selector(".discovery-card")
+    check("the chosen tile asks to use it or keep it",
+          page.get_by_role("button", name="Use it for its ability").count() > 0)
+    page.get_by_role("button", name="Use it for its ability").first.click()
+    page.wait_for_timeout(2200)
+    after = view("1")["you"]["science"]
+    check("using the chosen ability is saved", after == before + 5, f"{before}→{after}")
+
+
+def flow_nebula(page):
+    click_choice(page, "Move (2)")
+    page.wait_for_selector(".piece.move-from")
+    origin = page.locator('.piece.move-from[aria-label*="207-B"]')
+    check("the ship in subsector B is the move origin",
+          origin.count() == 1,
+          origin.first.get_attribute("aria-label") if origin.count() else "missing")
+    origin.first.click()
+    page.wait_for_selector('.piece.move-ship[aria-label*="207-B"]')
+    page.locator('.piece.move-ship[aria-label*="207-B"]').first.click()
+    page.wait_for_selector(".hotspot.move-dest")
+    targets = page.locator(".hotspot.move-dest")
+    positions = [node.get_attribute("data-position") for node in targets.all()]
+    check("both subsectors are offered as destinations",
+          {"207", "207c"}.issubset(set(positions)), str(positions))
+    parent = page.locator('.hotspot.move-dest[data-position="207"]')
+    sibling = page.locator('.hotspot.move-dest[data-position="207c"]')
+    check("the subsector targets do not overlap",
+          not boxes_overlap(parent.bounding_box(), sibling.bounding_box()),
+          f"{parent.bounding_box()} {sibling.bounding_box()}")
+    check("the subsector target is labelled, not the whole hex",
+          "207-C" in (sibling.get_attribute("aria-label") or ""),
+          sibling.get_attribute("aria-label"))
+    shot(page, "nebula-targets")
+    sibling.click()
+    page.wait_for_timeout(2200)
+    moved = ship_piece("207c", "blue-int")
+    check("clicking subsector C moved the ship into C",
+          moved.get("count") == 1, str(moved))
+    check("the ship did not land in another subsector",
+          not ship_piece("207", "blue-int"), str(ship_piece("207", "blue-int")))
+    shot(page, "nebula-moved")
+
+
+def flow_retreat(page):
+    page.wait_for_selector(".hotspot.retreat")
+    targets = [node.get_attribute("data-position")
+               for node in page.locator(".hotspot.retreat").all()]
+    check("the controlled neighbour is the retreat destination",
+          targets == ["201"], str(targets))
+    label = page.locator(".hotspot.retreat").first.get_attribute("aria-label") or ""
+    check("the retreat target is labelled", "Retreat here" in label, label)
+    before = ship_piece("201", "blue-int").get("count", 0)
+    shot(page, "retreat-target")
+    message_id = page.locator(".hotspot.retreat").first.get_attribute("data-message-id")
+    custom_id = page.locator(".hotspot.retreat").first.get_attribute("data-custom-id")
+    page.locator(".hotspot.retreat").first.click()
+    page.wait_for_timeout(2200)
+    after = ship_piece("201", "blue-int").get("count", 0)
+    check("clicking the destination retreated the ship", after == before + 1,
+          f"{before}→{after}")
+    check("the ship left the contested system",
+          not ship_piece("101", "blue-int"), str(ship_piece("101", "blue-int")))
+    api("/api/games/aeb1/press", {"seat": "1", "custom_id": custom_id,
+                                  "message_id": int(message_id)})
+    check("replaying the used retreat does not move another ship",
+          ship_piece("201", "blue-int").get("count", 0) == after)
+
+
+def flow_bankrupt(page):
+    click_choice(page, "Run Upkeep")
+    page.wait_for_timeout(1600)
+    check("upkeep blocks on the bankruptcy prompt",
+          "would be bankrupt" in " ".join(
+              node.inner_text() for node in page.locator(".prompt").all()),
+          page.locator(".prompt").first.inner_text()[:120])
+    shot(page, "bankrupt-prompt")
+    before = money()
+    click_choice(page, "Trade 3 Materials")
+    page.wait_for_timeout(1500)
+    check("trading materials covers the shortfall", money() == before + 1,
+          f"{before}→{money()}")
+    click_choice(page, "Done Resolving")
+    page.wait_for_timeout(1500)
+    check("Run Upkeep stays reachable after resolving",
+          page.get_by_role("button", name="Run Upkeep").count() > 0)
+    page.get_by_role("button", name="Run Upkeep").first.click()
+    page.wait_for_timeout(2600)
+    final = view("1")
+    check("the resolved upkeep starts round 2", final["game"]["round"] == 2,
+          str(final["game"]["round"]))
+    check("the upkeep charged the shortfall", final["you"]["money"] == 0,
+          str(final["you"]["money"]))
+    shot(page, "bankrupt-resolved")
+
+
 def flow_research(page):
     click_choice(page, "Research (2)")
     page.wait_for_timeout(1200)
@@ -388,6 +518,10 @@ FLOWS = {
     "population": flow_population,
     "population-neutral": flow_population_neutral,
     "discovery": flow_discovery,
+    "atlantian-discovery": flow_atlantian_discovery,
+    "nebula": flow_nebula,
+    "retreat": flow_retreat,
+    "bankrupt": flow_bankrupt,
     "research": flow_research,
 }
 
