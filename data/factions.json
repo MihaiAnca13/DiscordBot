@@ -3826,12 +3826,13 @@
                 "abilities": [
                         "midas_touch",
                         "money_is_power",
-                        "all_that_glitters"
+                        "all_that_glitters",
+                        "midas_neutral_pop"
                 ],
                 "materials": 2,
                 "science": 3,
                 "money": 4,
-                "colony_ships": 3,
+                "colony_ships": 4,
                 "base_colony_ships": 3,
                 "home_planet": "277",
                 "owned_tiles": [],

@@ -7,9 +7,9 @@ def test_midas_faction_stats_match_printed_card():
     assert mid["artwork"] == "midas"
     assert mid["setup_color"] == "yellow"
     assert mid["community"] is True
-    assert mid["abilities"] == ["midas_touch", "money_is_power", "all_that_glitters"]
+    assert mid["abilities"] == ["midas_touch", "money_is_power", "all_that_glitters", "midas_neutral_pop"]
     assert (mid["materials"], mid["science"], mid["money"]) == (2, 3, 4)
-    assert (mid["colony_ships"], mid["base_colony_ships"]) == (3, 3)
+    assert (mid["colony_ships"], mid["base_colony_ships"]) == (4, 3)
     assert mid["home_planet"] == "277"
     assert mid["military_tech"] == [] and mid["grid_tech"] == ["ade"] and mid["nano_tech"] == []
     assert [mid[key] for key in ("explore_apt", "research_apt", "upgrade_apt",

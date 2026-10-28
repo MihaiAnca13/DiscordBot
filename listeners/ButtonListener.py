@@ -45,7 +45,7 @@ ANSWER_BUTTONS = ("selectDiscTile", "exploreDiscoveryTile", "keepDiscForPoints",
                   "ancientsCube", "setupTech", "reservedTile", "carapaceDone", "carapaceMissile",
                   "wolfPack", "phaseModuleDone", "phaseModuleNone", "phaseBombing", "nineLives",
                   "lyraReroll", "lyraDecline",
-                  "preGameOrbital", "declineSetupTech", "saveDiscoveryPart", "gain3resource",
+                  "preGameOrbital", "midasNeutralPop", "declineSetupTech", "saveDiscoveryPart", "gain3resource",
                   "finishSetupResources")
 
 
@@ -418,6 +418,8 @@ class ButtonListener(commands.Cog):
             task_result = await PopulationButtons.placeAncientsCube(game, player, interaction, customID)
         elif customID.startswith("preGameOrbital"):
             task_result = await PreGameButtons.placeExilesOrbital(game, player, interaction, customID)
+        elif customID.startswith("midasNeutralPop"):
+            task_result = await PreGameButtons.placeMidasNeutralPlanet(game, player, interaction, customID)
         elif customID.startswith("startInfluence"):
             game.updateSaveFile()
             await InfluenceButtons.startInfluence(game, player, interaction)
