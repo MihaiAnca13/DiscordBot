@@ -28,3 +28,5 @@ def test_every_faction_has_a_single_starting_sector_line():
         "- Starting sector planets: 1 🟡 Money, "
         "1 🟣 Advanced Science, 1 🟤 Advanced Materials"
     )
+    assert len({FactionData.starting_sector_line(key, sectors)
+                for key in ("ter1", "ter2", "ter3", "ter4", "ter5", "ter6")}) == 1

@@ -534,11 +534,8 @@ class SetupCommands(commands.GroupCog, name="setup"):
                              "  - **Dreadnought**: -1⬛"])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "rho_board.png"))
 
-        message = "\n".join(["# Terrans", *[
-            f"- **{FactionData.FACTIONS[key]['name']}**: "
-            + FactionData.starting_sector_line(key, sectors).removeprefix("- ")
-            for key in ("ter1", "ter2", "ter3", "ter4", "ter5", "ter6")
-        ]])
+        message = "\n".join(["# Terrans",
+                             FactionData.starting_sector_line("ter2", sectors)])
         await factionThread.send(message, file=drawing.get_file(boardPrefix + "terran_conglomerate_board.png"))
 
         message = "\n".join(["# Atlantians",
