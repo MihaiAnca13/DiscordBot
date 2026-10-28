@@ -347,7 +347,16 @@ function bindBoardPan() {
   const end = () => { panning = null; el.viewport.classList.remove('grabbing'); };
   el.viewport.addEventListener('pointerup', end);
   el.viewport.addEventListener('pointercancel', end);
+  let lastWheelTime = -Infinity;
+  let isMapScroll = false;
+  document.addEventListener('wheel', (event) => {
+    const now = performance.now();
+    // Keep a page scroll on the page when it brings the map under the pointer.
+    if (now - lastWheelTime > 250) isMapScroll = el.viewport.contains(event.target);
+    lastWheelTime = now;
+  }, { capture: true, passive: true });
   el.viewport.addEventListener('wheel', (event) => {
+    if (!isMapScroll) return;
     event.preventDefault();
     zoomAt(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
   }, { passive: false });
