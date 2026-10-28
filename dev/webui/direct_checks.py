@@ -114,6 +114,24 @@ def flow_movement(page):
     other.close()
 
 
+def flow_movement_drag(page):
+    click_choice(page, "Move (2)")
+    page.wait_for_selector(".piece.move-from")
+    page.locator(".piece.move-from").first.click()
+    page.wait_for_selector(".piece.move-ship")
+    page.locator(".piece.move-ship").first.click()
+    page.wait_for_selector(".hotspot.move-dest")
+    token = page.locator(".drag-token").bounding_box()
+    target = page.locator(".hotspot.move-dest").first.bounding_box()
+    page.mouse.move(token["x"] + token["width"] / 2, token["y"] + token["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(target["x"] + target["width"] / 2, target["y"] + target["height"] / 2, steps=12)
+    page.mouse.up()
+    page.wait_for_timeout(2400)
+    check("dragging the ship token onto a world moves it",
+          ("101", "blue-int") in ships(), str(ships()))
+
+
 def flow_movement_stack(page):
     click_choice(page, "Move (2)")
     page.wait_for_selector(".piece.move-from")
@@ -167,6 +185,10 @@ def flow_explore(page):
         page.wait_for_timeout(400)
         after = page.evaluate("state.previewRotation")
         check("clicking the preview rotates it", after != before, f"{before}°→{after}°")
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(300)
+        keyed = page.evaluate("state.previewRotation")
+        check("arrow keys rotate the preview", keyed != after, f"{after}°→{keyed}°")
     shot(page, "explore-preview")
     chosen_rotation = page.evaluate("state.previewRotation")
     click_choice(page, "Place tile here")
@@ -357,6 +379,7 @@ def flow_combat(browser, errors):
 
 FLOWS = {
     "movement": flow_movement,
+    "movement-drag": flow_movement_drag,
     "movement-stack": flow_movement_stack,
     "explore": flow_explore,
     "build": flow_build,

@@ -42,7 +42,7 @@ same canonical message id.
 | `pytest tests -m render -q` | **25 passed**, 627 deselected |
 | `python -m dev.webui.smoke` | passed; desktop screenshot, Build menu, hotspots |
 | `python -m dev.webui.browser_checks` | **18/18 passed** (real Chromium, HTTP, two seats) |
-| `python -m dev.webui.direct_checks <flow>` | **11/11 flows passed**: movement, movement-stack, explore, build, upgrade, influence, population, population-neutral, discovery, research, combat |
+| `python -m dev.webui.direct_checks <flow>` | **12/12 flows passed**: movement, movement-drag, movement-stack, explore (click + keyboard), build, upgrade, influence, population, population-neutral, discovery, research, combat |
 | `python -m dev.webui.playthrough round` | passed: build, explore, discovery, influence, passing, upkeep → round 2 |
 | `python -m dev.webui.playthrough movement` | passed: click-move 201 → 101 → 201 |
 | `python -m dev.webui.playthrough full` | passed: pass-only game from round 1 to final scores (round 9) |

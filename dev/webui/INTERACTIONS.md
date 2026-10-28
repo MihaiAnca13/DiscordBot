@@ -76,8 +76,9 @@ Verified with `python -m dev.webui.direct_checks <flow>` inside the container:
 | Flow | Object the player uses | Saved outcome asserted |
 |---|---|---|
 | movement | ship token, then destination world | ship in 101; refresh and second seat agree; a replayed move changes nothing |
+| movement-drag | drag the real ship token onto the world | ship in 101 |
 | movement-stack | ship token + stack stepper | two interceptors moved |
-| explore | ring slot + rotated tile preview | the engine's sector is on the board in the chosen rotation |
+| explore | ring slot + rotated tile preview + arrow keys | the engine's sector is on the board in the chosen rotation |
 | build | system marker + unit picture cards | the second interceptor is in the save |
 | upgrade | blueprint ship + slot + part card | the installed part changed |
 | influence | world click adds, own disc click removes | owner blue → 0 |
@@ -89,3 +90,8 @@ Verified with `python -m dev.webui.direct_checks <flow>` inside the container:
 
 Choices with no visible object (roll dice, trade, pass, end turn, quantity) stay in
 the dock; they are not forced into the board.
+
+Not scripted here: the Atlantian two-choice discovery card layout (the card grid is
+implemented), Ghosts' retreat-destination click (parsed and marked with the same tile
+hotspot), and resolving bankruptcy through trade or disc removal. The engine pieces
+for all three exist; they need their own fabricated saves to verify end to end.

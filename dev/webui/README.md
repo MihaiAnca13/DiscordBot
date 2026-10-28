@@ -78,10 +78,10 @@ docker compose -f compose.webui.yaml up -d --wait webui
 docker compose -f compose.webui.yaml exec -T webui python -m dev.webui.direct_checks movement
 ```
 
-Flows: `movement`, `movement-stack`, `explore`, `build`, `upgrade`, `influence`,
-`population`, `population-neutral`, `discovery`, `research`, `combat`. Use `seed`
-for the setup-less flows. `combat` drives both seats and needs a hit prompt; the
-check reports `skipped` when the rolled dice never offered a choice.
+Flows: `movement`, `movement-drag`, `movement-stack`, `explore`, `build`, `upgrade`,
+`influence`, `population`, `population-neutral`, `discovery`, `research`, `combat`.
+Use `seed` for the setup-less flows. `combat` drives both seats and needs a hit
+prompt; the check reports `skipped` when the rolled dice never offered a choice.
 
 ## Inspecting references
 

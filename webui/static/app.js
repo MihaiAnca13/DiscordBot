@@ -1847,14 +1847,14 @@ function bind() {
     if (state.fitPending) fitBoard();
   });
   window.addEventListener('keydown', (event) => {
-    if (!state.previewKey || event.target.closest('input,select,textarea,button,a,summary')) return;
+    if (!state.previewKey || event.target.closest('input,select,textarea')) return;
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
       rotatePreview(-1);
     } else if (event.key === 'ArrowRight') {
       event.preventDefault();
       rotatePreview(1);
-    } else if (event.key === 'Enter') {
+    } else if (event.key === 'Enter' && !event.target.closest('button,a,summary')) {
       event.preventDefault();
       placePreview();
     }
