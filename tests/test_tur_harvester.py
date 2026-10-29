@@ -178,6 +178,7 @@ def test_harvester_blocks_settling_its_planet(start_game, press):
         player["passed"] = True
     game.update()
     press(channel, 1, "runUpkeep")
+    game = reload(game)  # the press wrote its upkeep state to disk; edit that copy
     game.get_player(1)["nano_tech"].append("adl")
     game.update()
     press(channel, 1, "FCIDblue_harvesterSector_201")
@@ -216,6 +217,7 @@ def test_a_second_placement_replaces_the_first_in_the_same_sector(start_game):
 
 def test_a_grey_planet_asks_for_the_resource(make_game, run):
     stats = player_stats("tur", color="blue")
+    stats["harvester_upkeep_started_round"] = 0  # this test skips upkeep, so its allocation is current
     game = make_game({"players": {"1": stats},
                       "board": {"202": dict(board_tile(["blue-sb"], sector=202)["202"],
                                             neutraladv_pop=[0])}})
