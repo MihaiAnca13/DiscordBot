@@ -181,3 +181,4 @@ cython_debug/
 # web ui runtime data (feed, media, rendered boards)
 webui/data/
 dev/webui/artifacts/
+output/
