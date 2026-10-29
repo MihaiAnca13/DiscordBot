@@ -545,9 +545,7 @@ class GamestateHelper:
         if self.gamestate.get("communityMode",False):
             for player in self.gamestate["players"]:
                 shortFaction = FactionData.artwork_name(self.gamestate["players"][player]["name"])
-                if "terran" in shortFaction:
-                    shortFaction += "_"
-                emoji = Emoji.getEmojiByName(f"{shortFaction}token")
+                emoji = Emoji.getEmojiByName(Emoji.token_name(shortFaction))
                 role = discord.utils.get(interaction.guild.roles, name=self.gamestate["players"][player]["color"])
                 if role != None:
                     self.gamestate["players"][player]["player_name"] = f"{role.mention} {emoji}"
@@ -1040,9 +1038,7 @@ class GamestateHelper:
 
     def getPlayerEmoji(self, player):
         shortFaction = FactionData.artwork_name(player["name"])
-        if "terran" in shortFaction:
-            shortFaction += "_"
-        emoji = Emoji.getEmojiByName(f"{shortFaction}token")
+        emoji = Emoji.getEmojiByName(Emoji.token_name(shortFaction))
         return emoji
 
     def createRoundNum(self):
@@ -1063,9 +1059,7 @@ class GamestateHelper:
         self.gamestate["players"][str(player_id)].update({"perma_passed": False})
         name = self.gamestate["players"][str(player_id)]["player_name"]
         shortFaction = FactionData.artwork_name(self.gamestate["players"][str(player_id)]["name"])
-        if "terran" in shortFaction:
-            shortFaction += "_"
-        emoji = Emoji.getEmojiByName(f"{shortFaction}token")
+        emoji = Emoji.getEmojiByName(Emoji.token_name(shortFaction))
         self.gamestate["players"][str(player_id)]["player_name"] = f"{name} {emoji}"
         if self.gamestate.get("communityMode",False):
              role = discord.utils.get(interaction.guild.roles, name=self.gamestate["players"][str(player_id)]["color"])
