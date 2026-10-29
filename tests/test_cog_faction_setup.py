@@ -13,6 +13,7 @@ def test_cog_setup_loads_its_data(start_game):
     tile = state.gamestate["board"]["201"]
     assert tile["sector"] == "256"
     assert tile["moneyadv_pop"] == [0]
-    assert tile["scienceadv_pop"] == [0] and tile["material_pop"] == [1, 1]
+    assert tile["scienceadv_pop"] == [0]
+    assert tile["material_pop"] == [1] and tile["materialadv_pop"] == [0]
     assert tile["player_ships"] == ["blue-int"]
     assert (player["money_pop_cubes"], player["material_pop_cubes"], player["science_pop_cubes"]) == (12, 10, 12)
