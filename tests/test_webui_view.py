@@ -320,3 +320,21 @@ def test_combat_chat_keeps_resolved_allied_events_beyond_recent_history(start_ga
         "defender", "defender", "attacker"]
     assert all(message["deleted"] for message in battle["messages"])
     assert not set(ids).intersection(message["id"] for message in view["history"])
+
+
+def test_inactive_seat_has_no_turn_menu(start_game, store, app, run):
+    game, channel = start_game()
+    game.gamestate["activePlayerColor"] = ["red"]
+    game.update()
+    menu = turn_menu(run, store, game, "1", "blue")
+    assert all(message["id"] != menu.id for message in app.snapshot(game.game_id, "1")["pending"])
+
+
+def test_ended_game_is_hidden_from_list(start_game, app, run):
+    game, channel = start_game()
+    game.gamestate["setup_finished"] = False
+    game.update()
+    assert any(row["id"] == game.game_id for row in json.loads(run(app.api_games(None)).text)["games"])
+    game.gamestate["gameEnded"] = True
+    game.update()
+    assert all(row["id"] != game.game_id for row in json.loads(run(app.api_games(None)).text)["games"])

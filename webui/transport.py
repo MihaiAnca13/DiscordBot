@@ -279,22 +279,20 @@ class Surface:
         attachments = save_media(self.media_dir, message_id, payload) if self.media_dir else []
         if attachments:
             self.store.update(message_id, attachments=attachments)
-        if payload and self._mirrors() and ephemeral_to is None:
-            mirrored = await self.mirror.send(self.game_id, room, content, view, payload)
-            if mirrored:
-                self.store.attach_discord(message_id, mirrored["discord_id"], room)
-                if mirrored.get("attachments"):
-                    self.store.update(message_id, attachments=mirrored["attachments"])
+        if self._mirrors() and ephemeral_to is None:
+            self.mirror.enqueue("send", self.game_id, message_id, room,
+                                content=content, view=view, attachments=attachments)
         return WebMessage(self, message_id)
 
     async def mirror_delete(self, row):
-        if row["discord_id"] and self._mirrors():
-            await self.mirror.delete(row["room"], row["discord_id"])
+        if self._mirrors() and not row["ephemeral_to"]:
+            self.mirror.enqueue("delete", self.game_id, row["id"], row["room"])
 
     async def mirror_edit(self, message_id, content, view):
         row = self.store.get(message_id)
-        if row and row["discord_id"] and self._mirrors():
-            await self.mirror.edit(row["room"], row["discord_id"], content, view)
+        if row and self._mirrors() and not row["ephemeral_to"]:
+            self.mirror.enqueue("edit", self.game_id, message_id, row["room"],
+                                content=content, view=view)
 
     async def thread(self, name):
         """Threads are feed rooms on the web; Discord threads are not mirrored in day 1."""
@@ -359,7 +357,9 @@ class RecordingChannel:
         return getattr(self._real, name)
 
     async def send(self, content=None, view=None, file=None, files=None, **kwargs):
-        real = await self._real.send(content=content, view=view, file=file, files=files, **kwargs)
+        kwargs.update({name: value for name, value in
+                       (("view", view), ("file", file), ("files", files)) if value is not None})
+        real = await self._real.send(content=content, **kwargs)
         attachments = [{"name": a.filename, "url": a.url} for a in getattr(real, "attachments", [])]
         room = getattr(self._real, "name", "discord")
         buttons = buttons_from_view(view) if view is not None else []
@@ -378,7 +378,8 @@ class RecordingChannel:
         row = self.surface.store.get(int(message_id))
         if row is None or row["deleted"]:
             raise not_found()
-        return RecordingMessage(SimpleNamespace(id=message_id), self.surface, int(message_id))
+        real = await self._real.fetch_message(int(row["discord_id"]))
+        return RecordingMessage(real, self.surface, int(message_id))
 
 
 class RecordingResponder:
@@ -394,8 +395,10 @@ class RecordingResponder:
         return await self._real.defer(*args, **kwargs)
 
     async def send(self, content=None, view=None, file=None, files=None, ephemeral=False, **kwargs):
-        real = await self._real.send(content=content, view=view, file=file, files=files,
-                                     ephemeral=ephemeral, **kwargs)
+        kwargs.update({name: value for name, value in
+                       (("view", view), ("file", file), ("files", files)) if value is not None})
+        send = self._real.send if self.ephemeral else self._real.send_message
+        real = await send(content=content, ephemeral=ephemeral, **kwargs)
         attachments = [{"name": a.filename, "url": a.url} for a in getattr(real, "attachments", [])]
         self.surface.ephemeral_to = self.surface.seat if (ephemeral or self.ephemeral) else None
         self.surface.store.record(

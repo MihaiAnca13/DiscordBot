@@ -40,6 +40,14 @@ def record(interaction):
     return RecordingInteraction(interaction, store, game_id, mirror=mirror)
 
 
+def record_channel(channel, game_id):
+    """Record setup prompts created before the first Discord button interaction."""
+    if store is None:
+        return channel
+    from webui.transport import RecordingChannel, Surface
+    return RecordingChannel(channel, Surface(store, game_id))
+
+
 async def start_webui(bot):
     global store, mirror
     port = getattr(config, "webui_port", 0)
@@ -47,7 +55,8 @@ async def start_webui(bot):
         return
     from webui.server import start
     store = FeedStore(os.path.join(ROOT, "data", "webui.sqlite3"))
-    mirror = DiscordMirror(bot, getattr(config, "guild_id", 0))
+    mirror = DiscordMirror(bot, getattr(config, "guild_id", 0), store, os.path.join(ROOT, "data", "media"))
+    mirror.start()
     runner = await start(port, store=store, mirror=mirror,
                          host=getattr(config, "webui_host", "127.0.0.1"))
     _runners.append(runner)
@@ -58,3 +67,5 @@ async def stop_webui():
     for runner in _runners:
         await runner.cleanup()
     _runners.clear()
+    if mirror is not None:
+        await mirror.close()

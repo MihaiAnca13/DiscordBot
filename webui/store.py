@@ -8,12 +8,25 @@ helpers/ knows which surface it is serving.
 A record id is the canonical message id. Discord's own id is kept beside it so a
 press arriving from either side compares the same `lastButtonMessage`.
 """
+import hashlib
 import json
 import os
 import sqlite3
 import time
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mirror_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id TEXT NOT NULL,
+    message_id INTEGER NOT NULL,
+    operation TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS games (
     game_id TEXT PRIMARY KEY,
     mirror_to_discord INTEGER NOT NULL DEFAULT 1,
@@ -67,6 +80,30 @@ class FeedStore:
     def close(self):
         self.conn.close()
 
+    def save_session(self, token, user_id, expires_at):
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        with self.conn:
+            self.conn.execute("DELETE FROM sessions WHERE expires_at <= ?", (time.time(),))
+            self.conn.execute("INSERT INTO sessions VALUES (?, ?, ?)",
+                              (token_hash, user_id, expires_at))
+
+    def session_user(self, token):
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        row = self.conn.execute(
+            "SELECT user_id FROM sessions WHERE token_hash = ? AND expires_at > ?",
+            (token_hash, time.time())).fetchone()
+        if row is None:
+            return None
+        with self.conn:
+            self.conn.execute("UPDATE sessions SET expires_at = ? WHERE token_hash = ?",
+                              (time.time() + 604800, token_hash))
+        return row["user_id"]
+
+    def delete_session(self, token):
+        with self.conn:
+            self.conn.execute("DELETE FROM sessions WHERE token_hash = ?",
+                              (hashlib.sha256(token.encode()).hexdigest(),))
+
     # -- games ------------------------------------------------------------
     def ensure_game(self, game_id, mirror_to_discord=1):
         self.conn.execute(
@@ -89,6 +126,20 @@ class FeedStore:
 
     def mirrors(self, game_id):
         return bool(self.game(game_id)["mirror_to_discord"])
+
+    def enqueue_mirror(self, game_id, message_id, operation, payload):
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO mirror_jobs (game_id, message_id, operation, payload) VALUES (?, ?, ?, ?)",
+                (game_id, message_id, operation, json.dumps(payload)))
+
+    def next_mirror_job(self):
+        row = self.conn.execute("SELECT * FROM mirror_jobs ORDER BY id LIMIT 1").fetchone()
+        return dict(row) if row else None
+
+    def finish_mirror_job(self, job_id):
+        with self.conn:
+            self.conn.execute("DELETE FROM mirror_jobs WHERE id = ?", (job_id,))
 
     # -- messages ---------------------------------------------------------
     def _next_rev(self):

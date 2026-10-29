@@ -18,7 +18,6 @@ from setup.GameInit import GameInit
 import config
 from Buttons.Research import ResearchButtons
 from Buttons.Move import MoveButtons
-from Buttons.Turn import TurnButtons
 from helpers.DrawHelper import DrawHelper
 from helpers.CombatHelper import Combat
 from helpers.GamestateHelper import GamestateHelper
@@ -29,10 +28,11 @@ from helpers.PlayerHelper import PlayerHelper
 from helpers.ShipHelper import PlayerShip
 from listeners.ButtonListener import ButtonListener
 from webui import catalog
+from webui.auth import install_auth
 from webui.render import (SOURCE_H, SOURCE_W, TILE_H, TILE_W, board_meta, render_board,
                           render_tile_preview, render_panel, rotate_tile_point)
 from webui.store import FeedStore, buttons_from_view
-from webui.transport import Surface, WebInteraction, combat_context
+from webui.transport import WebInteraction, combat_context
 
 LOG = logging.getLogger(__name__)
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -413,6 +413,8 @@ class WebApp:
                 (button.get("custom_id") or "").startswith("draftFaction_")
                 for button in message["buttons"])]
         pending = _current_prompts(pending, turn_menus)
+        pending = [message for message in pending
+                   if not _is_turn_menu(message) or you_color in active]
         for message in pending:
             for button in list(message["buttons"]):
                 match = re.fullmatch(r"FCID([^_]+)_startMove_(\d+)", button.get("custom_id") or "")
@@ -610,7 +612,7 @@ class WebApp:
     async def api_create_game(self, request):
         if self.games_path != "/sandbox/games":
             return web.json_response({"error": "Game creation is restricted to the dev sandbox"}, status=403)
-        body = await request.json()
+        body = getattr(request, "authenticated_body", None) or await request.json()
         name = body.get("name", "")
         count = body.get("players")
         ai = body.get("ai", "def")
@@ -650,7 +652,7 @@ class WebApp:
                 game = self.game(game_id)
             except (OSError, ValueError):
                 continue
-            if game_id not in active_ids and game.gamestate.get("setup_finished"):
+            if game.gamestate.get("gameEnded") or (game_id not in active_ids and game.gamestate.get("setup_finished")):
                 continue
             names, _colors = self._parts(game_id, game)
             games.append({
@@ -695,7 +697,7 @@ class WebApp:
     async def api_press(self, request):
         game_id = request.match_info["game_id"]
         try:
-            body = await request.json()
+            body = getattr(request, "authenticated_body", None) or await request.json()
         except json.JSONDecodeError:
             return web.json_response({"error": "invalid json"}, status=400)
         seat = str(body.get("seat") or "")
@@ -754,26 +756,9 @@ class WebApp:
         payload["error"] = error
         return web.json_response(payload)
 
-    async def api_turn_menu(self, request):
-        """Recovery: post the start-of-turn buttons when a player has no prompt open."""
-        game_id = request.match_info["game_id"]
-        seat = str(request.query.get("seat") or "")
-        async with game_lock(game_id):
-            game = self.game(game_id)
-            session, player = self._seat_player(game, seat)
-            if player is None:
-                return web.json_response({"error": "not a player in this game"}, status=403)
-            view = TurnButtons.getStartTurnButtons(game, player, player["color"])
-            names, colors = self._parts(game_id, game)
-            surface = Surface(self.store, game_id, seat=seat, mirror=self.mirror,
-                              media_dir=self.media_dir)
-            await surface.channel.send(f"{names.get(seat, player['color'])}, use buttons to do your turn",
-                                       view=view)
-        return web.json_response(await asyncio.to_thread(self.snapshot, game_id, seat))
-
     async def api_mirror(self, request):
         game_id = request.match_info["game_id"]
-        body = await request.json()
+        body = getattr(request, "authenticated_body", None) or await request.json()
         self.store.set_mirror(game_id, bool(body.get("mirror_to_discord")))
         return web.json_response(await asyncio.to_thread(
             self.snapshot, game_id, str(body.get("seat") or "")))
@@ -860,6 +845,7 @@ class WebApp:
     # -- wiring ----------------------------------------------------------
     def create_app(self):
         app = web.Application()
+        install_auth(app, self)
         app.on_startup.append(prepare_images)
         app.router.add_get("/", self.index)
         app.router.add_get("/api/games", self.api_games)
@@ -868,7 +854,6 @@ class WebApp:
         app.router.add_get("/api/games/{game_id}/history", self.api_history)
         app.router.add_get("/api/catalog", self.api_catalog)
         app.router.add_post("/api/games/{game_id}/press", self.api_press)
-        app.router.add_post("/api/games/{game_id}/turn-menu", self.api_turn_menu)
         app.router.add_post("/api/games/{game_id}/mirror", self.api_mirror)
         app.router.add_get("/api/games/{game_id}/board.webp", self.api_board)
         app.router.add_get("/api/games/{game_id}/tile.webp", self.api_tile)

@@ -57,6 +57,8 @@ class ButtonListener(commands.Cog):
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type == discord.InteractionType.component:
+            if interaction.data.get("custom_id", "").startswith("community_sheet:"):
+                return
             # One feed for both surfaces: a Discord press records the prompts it posts.
             interaction = runtime.record(interaction)
             start = datetime.now()
@@ -231,6 +233,12 @@ class ButtonListener(commands.Cog):
         if player is None:
             return
         if not await PreGameButtons.canResolve(game, interaction, player, customID):
+            return
+        if (customID.split("_", 1)[0] in {"startExplore", "startResearch", "startBuild", "startUpgrade",
+                         "startMove", "startInfluence", "passForRound"}
+                and (game.gamestate.get("gameEnded")
+                     or player["color"] not in game.gamestate.get("activePlayerColor", []))):
+            await interaction.followup.send("It is not your turn.", ephemeral=True)
             return
         task_result = False
         # The guard above compares this against the raw custom id, FCID prefix included.

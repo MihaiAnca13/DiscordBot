@@ -105,3 +105,16 @@ def test_discovery_points_remove_choices_and_cannot_be_claimed_again(start_game,
     press(run, store, game, "1", "FCIDblue_showReputation", menu.id)
     press(run, store, game, "1", "FCIDblue_keepDiscForPoints", message["id"])
     assert GamestateHelper(None, "aeb1").get_player(1)["disc_tiles_for_points"] == 1
+
+
+@pytest.mark.parametrize("action", ["startBuild", "startExplore", "startResearch", "startUpgrade", "startMove", "startInfluence", "passForRound"])
+def test_turn_actions_refuse_inactive_player(start_game, store, run, action):
+    game, channel = start_game()
+    game.gamestate["activePlayerColor"] = ["red"]
+    game.update()
+    before = GamestateHelper(None, game.game_id).gamestate
+    menu = turn_menu(run, store, game, "1", "blue")
+    press(run, store, game, "1", f"FCIDblue_{action}", menu.id)
+    assert GamestateHelper(None, game.game_id).gamestate == before
+    notices = store.visible_history(game.game_id, "1")
+    assert any("not your turn" in (message["content"] or "") for message in notices)

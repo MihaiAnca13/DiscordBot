@@ -60,7 +60,6 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
 | `GET /api/games/{id}/view?seat=` | one seat's table state: board geometry, players, market, pending choices, first history page |
 | `GET /api/games/{id}/history?seat=&before=` | paged feed, including used prompts and their canonical ids |
 | `POST /api/games/{id}/press` | `{seat, custom_id, message_id}` — the Discord press |
-| `POST /api/games/{id}/turn-menu?seat=` | recovery: re-post the start-of-turn buttons |
 | `POST /api/games/{id}/mirror` | web-only (`false`) vs cross-play (`true`); default true |
 | `GET /api/games/{id}/board.webp` | rendered map, cached by save-file version |
 | `GET /api/games/{id}/tile.webp?sector=&rot=` | one explored sector at an offered rotation, for the on-board preview |
@@ -93,6 +92,14 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
   colour has rolled.
 - **History.** Used prompts, private replies and resolved actions stay readable in
   a paged dialog; hiding history never deletes the feed records.
+- **Discord delivery.** Web actions write their save and feed immediately; public
+  sends, edits and deletes go through a persistent SQLite queue in order. Discord
+  delays do not hold the game lock. Unsent deleted prompts are skipped; stale
+  deleted prompts are rejected even while their Discord messages remain visible.
+  Failures are logged and retried, and pending work survives bot restarts.
+  Private replies remain browser-only. Artwork rendering still runs before the
+  web action completes. Discord nonce deduplication covers short retries; an
+  ambiguous send after a long outage may need manual inspection.
 - **Cross-play guards.** A press binds its canonical feed id, the room it came from
   and the shared game lock. Two browser seats pressing the same menu produce one
   action; a stale replay awards nothing. A second research menu drops techs already
@@ -112,10 +119,14 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
 
 ## Not done (deliberately)
 
-- **Login.** `seat` is a query parameter or local storage. Moving into OBG replaces
-  this with the Django session + `Profile.discord_id`; a seat token is the fallback.
-  Until then, bind the API to loopback or the WireGuard address, never a public
-  interface: anyone who can reach it can choose a seat.
+- **Login.** For a public deployment set `webui_require_login: true`,
+  `discord_client_id`, `discord_client_secret` and `webui_origin` (the HTTPS origin)
+  in the private `config.json`. Register `<webui_origin>/auth/callback` in the
+  Discord application's OAuth2 redirects. Login requests only `identify`; the API
+  binds seats to that Discord ID and limits games/media to their players.
+  Sessions expire after one week of inactivity and persist across restarts in SQLite. POST `/auth/logout`
+  clears the session. Keep the backend on loopback behind Caddy. Login-disabled
+  mode is for isolated development only.
 - **Discord mirror is written but never sent live** (no bot token here). The recording
   side is tested with fakes; `DiscordMirror.send/edit/delete` needs one real session.
   It only mirrors public prompts and only when `mirror_to_discord` is on. Feed-side

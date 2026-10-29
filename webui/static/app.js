@@ -34,11 +34,6 @@ const api = {
     });
     return response.json();
   },
-  async turnMenu(gameId, seat) {
-    const response = await fetch(`/api/games/${gameId}/turn-menu?seat=${encodeURIComponent(seat)}`,
-      { method: 'POST' });
-    return response.json();
-  },
   async mirror(gameId, seat, on) {
     const response = await fetch(`/api/games/${gameId}/mirror`, {
       method: 'POST',
@@ -55,7 +50,6 @@ const el = {
   round: document.getElementById('round'),
   turn: document.getElementById('turn'),
   mirror: document.getElementById('mirror'),
-  turnMenu: document.getElementById('turn-menu'),
   board: document.getElementById('board'),
   stage: document.getElementById('board-stage'),
   viewport: document.getElementById('board-viewport'),
@@ -1425,20 +1419,16 @@ function waitingCard(view) {
   }
   if (view.game.setup) {
     const drafter = view.game.players.find((player) => player.id === view.game.drafting_seat);
-    card.innerHTML = `<b>Faction draft.</b><div class="row">${escapeHtml(drafter ? drafter.name : 'The next player')} chooses next. Select their seat above to draft.</div>`;
+    const instruction = view.authenticated
+      ? (view.seat === view.game.drafting_seat
+        ? 'It is your turn to choose a faction. Waiting for the draft choices.'
+        : 'Waiting for the next player to choose a faction.')
+      : `${escapeHtml(drafter ? drafter.name : 'The next player')} chooses next. Select their seat above to draft.`;
+    card.innerHTML = `<b>Faction draft.</b><div class="row">${instruction}</div>`;
     return card;
   }
   if (you && you.is_your_turn) {
-    card.innerHTML = '<b>Your move.</b> Pick an action from your turn menu.';
-    const row = document.createElement('div');
-    row.className = 'row';
-    const menu = document.createElement('button');
-    menu.type = 'button';
-    menu.className = 'primary';
-    menu.textContent = 'Show my turn menu';
-    menu.addEventListener('click', () => openTurnMenu());
-    row.appendChild(menu);
-    card.appendChild(row);
+    card.innerHTML = '<b>Your move.</b><div class="row">Waiting for your next game prompt. Existing Discord prompts remain usable in Discord.</div>';
     return card;
   }
   card.innerHTML = `<b>${names.length ? `${escapeHtml(names.join(', '))} ${names.length === 1 ? 'is' : 'are'}` : 'Nobody is'} acting.</b>
@@ -1660,7 +1650,7 @@ function renderHistory() {
     + ' · unresolved prompts stay in the action dock';
   el.historyMore.classList.toggle('hidden', !state.historyHasMore);
   if (!state.history.length) {
-    el.historyList.innerHTML = '<p class="note">No history yet.</p>';
+    el.historyList.innerHTML = '<p class="note">No recorded history yet. Messages from Discord before the Web UI was enabled are not imported.</p>';
   }
 }
 
@@ -1732,21 +1722,12 @@ async function press(messageId, customId, node) {
   }
 }
 
-async function openTurnMenu() {
-  if (!state.seat) return;
-  try {
-    const view = await api.turnMenu(state.gameId, state.seat);
-    if (view.error) showToast(view.error, true);
-    render(view, true);
-  } catch (error) {
-    showToast(`cannot open turn menu: ${error}`, true);
-  }
-}
-
 // ---------------------------------------------------------------------- seats
 function renderSeats(view) {
-  const options = view.game.players || [];
-  const wanted = [['', 'Spectator'], ...options.map((player) => [player.id,
+  const options = (view.game.players || []).filter((player) => !view.authenticated || player.id === view.seat);
+  el.seat.disabled = !!view.authenticated;
+  if (view.authenticated) state.seat = view.seat;
+  const wanted = [...(view.authenticated ? [] : [['', 'Spectator']]), ...options.map((player) => [player.id,
     `${player.name}${player.color ? ` (${player.color})` : ''}`])];
   const current = viewedSeat(view);
   const key = options.map((player) => player.id).join(',');
@@ -1808,8 +1789,6 @@ function render(view, force = false) {
   el.boardNote.classList.toggle('hidden', false);
   renderSeats(view);
   el.mirror.checked = !!view.mirror_to_discord;
-  const hasPrompt = (view.pending || []).length > 0;
-  el.turnMenu.classList.toggle('hidden', view.game.ended || view.game.setup || !(view.you && !hasPrompt));
   el.boardHint.textContent = view.seat
     ? `Drag to pan · scroll to zoom · highlighted worlds are choices`
     : 'Drag to pan · scroll to zoom';
@@ -1968,8 +1947,6 @@ function bind() {
     state.factionPlayer = null;
     await loadView();
   });
-
-  el.turnMenu.addEventListener('click', openTurnMenu);
 
   el.mirror.addEventListener('change', async () => {
     try {

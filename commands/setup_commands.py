@@ -11,6 +11,7 @@ from helpers.GamestateHelper import GamestateHelper
 from helpers.DrawHelper import DrawHelper
 from helpers import FactionData
 from helpers.FactionReference import faction_references
+from webui import runtime
 
 
 async def faction_autocomplete(interaction: discord.Interaction, current: str):
@@ -46,7 +47,8 @@ class CommunitySheetButtonView(discord.ui.View):
         super().__init__(timeout=10080 * 60)
         self.manager = manager
 
-    @discord.ui.button(label="Request community sheet", style=discord.ButtonStyle.blurple)
+    @discord.ui.button(label="Request community sheet", style=discord.ButtonStyle.blurple,
+                       custom_id="community_sheet:request")
     async def request_sheet(self, interaction: discord.Interaction, button: discord.ui.Button):
         await present_community_sheet_picker(interaction, self.manager)
 
@@ -58,7 +60,8 @@ class CommunitySheetSelectView(discord.ui.View):
         options = [discord.SelectOption(
             label=message.splitlines()[0].removeprefix("# ")[:100], value=key)
             for key, (message, _) in manager.sheets.items()]
-        select = discord.ui.Select(placeholder="Select a faction", options=options)
+        select = discord.ui.Select(placeholder="Select a faction", options=options,
+                                   custom_id="community_sheet:select")
         select.callback = self.select_faction
         self.add_item(select)
 
@@ -284,6 +287,11 @@ class SetupCommands(commands.GroupCog, name="setup"):
         new_game = GameInit(game_name, player_list, ai_ships, rift_cannon, turn_order_variant,
                             community_parts, community_rep_mod, community_factions=community_factions)
         new_game.create_game()
+        game = GamestateHelper(None, new_game.gamestate["game_id"])
+        for member in temp_player_list:
+            if member is not None:
+                game.gamestate["players"][str(member.id)]["username"] = member.display_name
+        game.update()
 
         async def get_or_create_category(guild: discord.Guild, category_name):
             """Get an existing category or create a new one."""
@@ -333,7 +341,6 @@ class SetupCommands(commands.GroupCog, name="setup"):
         thread_name = f'aeb{config.game_number}-bot-map-updates'
         thread = await actions.create_thread(name=thread_name, auto_archive_duration=10080,type=discord.ChannelType.public_thread)
         new_game.update_num()
-        game = GamestateHelper(actions)
         if player_count < 2:
             player_count = 2
         if player_count > 9:
@@ -386,7 +393,8 @@ class SetupCommands(commands.GroupCog, name="setup"):
                            file=drawing.show_minor_species())
         file = await asyncio.to_thread(drawing.show_AI_stats)
         await actions.send("AI stats look like this", file=file)
-        await DraftButtons.startDraft(game, player_list, interaction, actions, ban_factions)
+        await DraftButtons.startDraft(game, player_list, interaction,
+                                     runtime.record_channel(actions, game.game_id), ban_factions)
 
         factionThread = await actions.create_thread(name="Faction Reference", auto_archive_duration=10080)
         boardPrefix = "images/resources/components/factions/"

@@ -1,7 +1,13 @@
 """The setup command's faction list is split across Discord messages."""
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
 from Buttons.Draft import DraftButtons
 from commands.setup_commands import SetupCommands, faction_autocomplete
 from helpers import FactionData
+from helpers.GamestateHelper import GamestateHelper
 from tests.fakes import FakeGame, FakeInteraction
 
 
@@ -70,3 +76,17 @@ def test_faction_autocomplete_filters_and_caps_at_25(run):
     assert len(everything) == 25
     filtered = run(faction_autocomplete(FakeInteraction(), "vor"))
     assert [choice.value for choice in filtered] == ["vor"]
+
+
+def test_new_discord_game_saves_display_names_before_draft(games_dir, run):
+    interaction = FakeInteraction()
+    interaction.guild = SimpleNamespace(
+        categories=[], default_role=object(),
+        create_category=AsyncMock(side_effect=RuntimeError("stop before creating Discord channels")))
+    member = SimpleNamespace(id=42, display_name="Mihai")
+    command = SetupCommands.create_new_game.callback
+    with pytest.raises(RuntimeError, match="stop before creating Discord channels"):
+        run(command(SetupCommands(None), interaction, "Display names", member, 2))
+    player = GamestateHelper(None, "aeb1").gamestate["players"]["42"]
+    assert player["username"] == "Mihai"
+    assert player["player_name"] == "<@42>"
