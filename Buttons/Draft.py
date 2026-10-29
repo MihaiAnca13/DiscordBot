@@ -118,9 +118,7 @@ class DraftButtons:
             if "(" in faction:
                 shorterName = shorterName[:(faction.find("(")-1)]
             shortFaction = FactionData.artwork_name(shorterName)
-            if "terran" in shortFaction:
-                shortFaction += "_"
-            emoji = Emoji.getEmojiByName(shortFaction + "token")
+            emoji = Emoji.getEmojiByName(Emoji.token_name(shortFaction))
             view.add_item(Button(label=f"{faction}", emoji=emoji, style=discord.ButtonStyle.gray,
                                  custom_id=f"draftFaction_{key}_{faction}"))
         return view

@@ -1,3 +1,9 @@
+import io
+
+from PIL import Image
+
+from helpers import FactionData
+
 EMOJI_MARKUP_LIST = ["<:morph_shield:1301315782407356527>",
                      "<:tachyon_drive:1301315477812940905>",
                      "<:tachyon_source:1301314865058680972>",
@@ -160,6 +166,27 @@ class Emoji:
     @staticmethod
     def load(application_emojis):
         Emoji._app = {emoji.name: str(emoji) for emoji in application_emojis}
+
+    @staticmethod
+    def token_name(artwork):
+        """The application emoji name of a faction token; Terran tokens carry an underscore."""
+        return artwork + ("_" if "terran" in artwork else "") + "token"
+
+    @staticmethod
+    async def upload_missing_tokens(client, application_emojis):
+        """Give each community faction its token emoji from the local icon when the application lacks it."""
+        existing = {emoji.name for emoji in application_emojis}
+        for faction in FactionData.FACTIONS.values():
+            name = Emoji.token_name(faction["artwork"])
+            if not faction.get("community") or name in existing:
+                continue
+            path = f"images/resources/components/layouts/factionImages/{faction['artwork']}_image.png"
+            with Image.open(path) as icon:
+                buffer = io.BytesIO()
+                icon.resize((128, 128), Image.BOX).save(buffer, "PNG")
+            application_emojis.append(await client.create_application_emoji(
+                name=name, image=buffer.getvalue()))
+        return application_emojis
 
     @staticmethod
     def getEmojiByName(name: str):
