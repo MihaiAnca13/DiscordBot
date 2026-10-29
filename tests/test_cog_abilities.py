@@ -1,6 +1,7 @@
 """Children of Cog: Infinite Possibilities and Adaptive Transformation."""
 import pytest
 
+from Buttons.Pulsar import PulsarButtons
 from Buttons.Upgrade import UpgradeButtons
 from helpers.DrawHelper import DrawHelper
 from tests.fakes import FakeInteraction, buttons, player_helper, reload
@@ -74,6 +75,42 @@ def test_infinite_possibilities_can_be_the_last_activation_of_a_partial_build(st
     _press_edited(press, channel, inter, "FCIDblue_finishSpendForBuild_")
 
     assert "FCIDblue_infiniteUpgrade_finish" in buttons(channel)
+
+
+def test_pulsar_build_does_not_earn_the_extra_upgrade(start_game, press, run):
+    game, channel = start_game(factions=["cog", "eri"])
+    state = reload(game)
+    state.gamestate["board"]["201"]["currentAction"] = "upgrade"
+    state.get_player(1)["materials"] = 8
+    state.update()
+
+    run(PulsarButtons.pulsarAction(state, state.get_player(1), FakeInteraction(channel),
+                                    player_helper(state, "blue"), "pulsarAction_201_build"))
+    press(channel, 1, "FCIDblue_buildIn_201")
+    inter = press(channel, 1, next(cid for cid in buttons(channel)
+                                   if cid.startswith("FCIDblue_buildShip_") and "Interceptor" in cid))
+    inter = _press_edited(press, channel, inter, "FCIDblue_finishBuild_")
+    inter = press(channel, 1, next(cid for cid in buttons(channel)
+                                   if cid.startswith("FCIDblue_spendMaterial_")))
+    _press_edited(press, channel, inter, "FCIDblue_finishSpendForBuild_")
+
+    menu = buttons(channel)
+    assert "FCIDblue_finishAction" in menu
+    assert not any(cid.startswith("FCIDblue_infiniteUpgrade") for cid in menu)
+
+
+def test_pulsar_upgrade_still_allows_adaptive_transformation(start_game, run):
+    game, channel = start_game(factions=["cog", "eri"])
+    state = reload(game)
+    state.gamestate["board"]["201"]["currentAction"] = "build"
+    state.update()
+
+    run(PulsarButtons.pulsarAction(state, state.get_player(1), FakeInteraction(channel),
+                                    player_helper(state, "blue"), "pulsarAction_201_upgrade"))
+
+    menu = buttons(channel)
+    assert any(cid.startswith("FCIDblue_adaptiveStart_1_dummy") for cid in menu)
+    assert not any(cid.startswith("FCIDblue_infiniteUpgrade") for cid in menu)
 
 
 def test_adaptive_swaps_need_two_ships_in_one_sector():

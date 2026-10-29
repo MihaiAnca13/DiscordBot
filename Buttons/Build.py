@@ -322,7 +322,9 @@ class BuildButtons:
                 and not pulsar_build and not player.get("herCrossUsed")):
             view2.add_item(Button(label="Move Activation (1)", style=discord.ButtonStyle.green,
                                   custom_id=f"FCID{player['color']}_herRegroupMove_after"))
-        UpgradeButtons.addInfinitePossibilitiesButton(view2, game, player, "finish")
+        # a Pulsar build is not a Build action, so it earns no extra upgrade activation
+        if not pulsar_build:
+            UpgradeButtons.addInfinitePossibilitiesButton(view2, game, player, "finish")
         if FactionData.has(player, "phase_technology"):
             player_helper.stats["phaseBuildsThisAction"] = (
                 player_helper.stats.get("phaseBuildsThisAction", 0) + len(build))
