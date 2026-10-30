@@ -965,7 +965,10 @@ class Combat:
                 next_damage = damage.copy()
                 next_destroyed = destroyed.copy()
                 if target is not None:
-                    next_damage[target] += dice[die_index][1]
+                    owner, ship_type = target.split("-", 1)
+                    ship_class = models[target].ship_type if owner != "ai" else ship_type.replace("adv", "")
+                    next_damage[target] += Carapace.incoming_damage(
+                        game, pos, owner, ship_class, colorOrAI, dice[die_index][1])
                     if next_damage[target] > models[target].hull:
                         next_destroyed[target] += 1
                         next_damage[target] = 0
@@ -2146,6 +2149,9 @@ class Combat:
         if len(Combat.currentPairing(game, pos)) != 2:
             return
         if Combat.technoMagicPending(game, pos):
+            return
+        tile = game.gamestate["board"][pos]
+        if tile.get("phaseModuleColors") and not tile.get("phaseModulePrompted"):
             return
         if (Carapace.has_pending_missiles(game, pos) or Combat.has_pending_nine_lives(game, pos)
                 or game.gamestate["board"].get(pos, {}).get("lyraRerollPending")):
