@@ -40,14 +40,18 @@ def test_community5_factions_setup_and_first_round(games_dir, run, press):
         player = state["players"][str(pid)]
         assert player["name"].startswith(NAMES[key])
         assert player["home_planet"] == HOMES[key]
+    midas = FACTIONS.index("mid") + 1
+    midas_color = colors[midas]
+    assert state["pre_game"]["tasks"] == [[str(midas), "neutral_pop"]]
+    press(channel, midas, find_button(channel, f"FCID{midas_color}_midasNeutralPop_money"))
+    state = reload(game).gamestate
     assert state["pre_game"]["tasks"] == []
     assert state["activePlayerColor"] == [colors[1]]
 
-    midas = FACTIONS.index("mid") + 1
-    midas_color = colors[midas]
     midas_tile = next(tile for tile in state["board"].values() if tile.get("owner") == midas_color)
+    assert midas_tile["neutral_pop"] == [1]
     assert midas_tile["moneyadv_pop"] == [1]
-    assert state["players"][str(midas)]["money_pop_cubes"] == 11
+    assert state["players"][str(midas)]["money_pop_cubes"] == 10
 
     explored = []
     for pid, key in enumerate(FACTIONS, 1):
