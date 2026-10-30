@@ -14,7 +14,51 @@ from webui.transport import Surface
 
 def bot_for(channel):
     return SimpleNamespace(wait_until_ready=AsyncMock(),
-                           get_guild=lambda guild_id: SimpleNamespace(channels=[channel]))
+                           get_guild=lambda guild_id: SimpleNamespace(channels=[channel], threads=[]))
+
+
+def test_combat_mirroring_uses_the_thread_for_sends_edits_and_deletes(tmp_path):
+    async def check():
+        store = FeedStore(str(tmp_path / "feed.sqlite3"))
+        message = SimpleNamespace(id=123, attachments=[], edit=AsyncMock(), delete=AsyncMock())
+        actions = SimpleNamespace(name="aeb1-actions", send=AsyncMock())
+        thread = SimpleNamespace(name="aeb1-Round 1, Tile 101, Combat",
+                                 send=AsyncMock(return_value=message),
+                                 fetch_message=AsyncMock(return_value=message))
+        guild = SimpleNamespace(channels=[actions], threads=[thread])
+        bot = SimpleNamespace(get_guild=lambda guild_id: guild)
+        mirror = DiscordMirror(bot, 1, store, tmp_path)
+        sent = await mirror.send("aeb1", thread.name, "battle", None, [])
+        await mirror.edit(thread.name, sent["discord_id"], "updated", None)
+        await mirror.delete(thread.name, sent["discord_id"])
+
+        actions.send.assert_not_awaited()
+        thread.send.assert_awaited_once()
+        message.edit.assert_awaited_once_with(content="updated", view=None)
+        message.delete.assert_awaited_once()
+        store.close()
+    asyncio.run(check())
+
+
+def test_web_created_battle_room_creates_one_discord_thread(tmp_path):
+    async def check():
+        store = FeedStore(str(tmp_path / "feed.sqlite3"))
+        thread = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=123, attachments=[])))
+        actions = SimpleNamespace(name="aeb1-actions", create_thread=AsyncMock(return_value=thread),
+                                  send=AsyncMock())
+        mirror = DiscordMirror(bot_for(actions), 1, store, tmp_path)
+        room = "aeb1-Round 1, Tile 101, Combat"
+        await mirror.send("aeb1", room, "battle", None, [])
+        await mirror.send("aeb1", room, "roll", None, [])
+
+        actions.create_thread.assert_awaited_once_with(
+            name=room, auto_archive_duration=10080, type=discord.ChannelType.public_thread)
+        assert thread.send.await_count == 2
+        actions.send.assert_not_awaited()
+        with pytest.raises(RuntimeError, match="Discord channel unavailable"):
+            await mirror.send("aeb1", "missing-room", "battle", None, [])
+        store.close()
+    asyncio.run(check())
 
 
 def test_slow_discord_does_not_block_web_and_preserves_order(tmp_path):

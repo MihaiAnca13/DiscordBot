@@ -11,7 +11,8 @@ import re
 import traceback
 
 from aiohttp import web
-from discord.ui import View
+from discord import ButtonStyle
+from discord.ui import Button, View
 from Buttons.Draft import DraftButtons
 from setup.GameInit import GameInit
 
@@ -545,7 +546,7 @@ class WebApp:
         self._snapshots[cache_key] = (stamp, payload)
         return payload
 
-    def _retire_combat_rolls(self, game_id, room, color):
+    def _retire_combat_rolls(self, game_id, room, color, before_id):
         """A combat overview keeps offering rolls after that player rolled.
 
         The engine answers a roll with a newer prompt; the old roll button must
@@ -556,6 +557,8 @@ class WebApp:
                          and "bombing" not in (room or "").lower()):
             return
         for row in self.store.prompts_in_room(game_id, room):
+            if row["id"] > before_id:
+                continue
             kept = []
             changed = False
             for button in row["buttons"]:
@@ -568,6 +571,12 @@ class WebApp:
                 kept.append(button)
             if changed:
                 self.store.set_buttons(row["id"], kept)
+                if self.mirror is not None and self.store.mirrors(game_id):
+                    view = View()
+                    for button in kept:
+                        view.add_item(Button(**{**button, "style": ButtonStyle(button["style"])}))
+                    self.mirror.enqueue("edit", game_id, row["id"], room,
+                                        content=row["content"], view=view)
 
     def _prune_research_options(self, game, room, color, game_id):
         """Other research menus were priced before this purchase.
@@ -747,9 +756,11 @@ class WebApp:
                     self.store, game_id, seat, custom_id=custom_id, message_id=int(message_id),
                     members={"names": names, "colors": colors}, display_name=names.get(seat),
                     mirror=self.mirror, media_dir=self.media_dir, channel_name=room)
+                before_id = max((message["id"] for message in
+                                 self.store.prompts_in_room(game_id, room)), default=0)
                 await ButtonListener(None).resolveButton(interaction)
                 pressed_color = _button_color({"custom_id": custom_id})
-                self._retire_combat_rolls(game_id, room, pressed_color)
+                self._retire_combat_rolls(game_id, room, pressed_color, before_id)
                 self._prune_research_options(game, room, pressed_color, game_id)
             except Exception as exc:  # the Discord cog reports these to #bot-log; we answer the browser
                 LOG.error("press failed: %s\n%s", exc, traceback.format_exc())

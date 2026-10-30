@@ -1,11 +1,14 @@
 """The read side of the web ui: one seat's choices, independent of history."""
+import asyncio
 import json
 from types import SimpleNamespace
 
 import pytest
 
 from Buttons.Turn import TurnButtons
+from helpers.CombatHelper import Combat
 from webui.render import rotate_tile_point
+from webui.mirror import DiscordMirror
 from webui.server import build
 from webui.store import FeedStore
 from webui.transport import Surface, WebInteraction
@@ -185,7 +188,7 @@ def test_a_bankruptcy_prompt_keeps_the_run_upkeep_button(start_game, store, app,
                for message in view["pending"])
 
 
-def test_combat_overview_stops_offering_a_rolled_colour(store, app):
+def test_combat_overview_stops_offering_a_rolled_colour(store, app, run, tmp_path):
     blue = store.record("aeb1", "aeb1-Round 1, Tile 102, Combat", content="Combat",
                         buttons=[
                             {"label": "(Defender) Roll Initative 3 Ships",
@@ -198,11 +201,58 @@ def test_combat_overview_stops_offering_a_rolled_colour(store, app):
                              "style": 1, "disabled": False, "url": None},
                         ])
 
-    app._retire_combat_rolls("aeb1", "aeb1-Round 1, Tile 102, Combat", "blue")
+    app.mirror = DiscordMirror(None, 1, store, tmp_path)
+
+    async def retire():
+        app._retire_combat_rolls("aeb1", "aeb1-Round 1, Tile 102, Combat", "blue", blue)
+
+    run(retire())
 
     buttons = store.get(blue)["buttons"]
     assert [button["custom_id"] for button in buttons] == [
         "FCIDred_rollDice_102_red_3_attacker", "refreshImage_102"]
+    job = store.next_mirror_job()
+    assert job["operation"] == "edit"
+    assert job["message_id"] == blue
+    assert [button["custom_id"] for button in json.loads(job["payload"])["buttons"]] == [
+        "FCIDred_rollDice_102_red_3_attacker", "refreshImage_102"]
+
+
+def test_consecutive_initiatives_keep_the_next_roll(start_game, store, app, run, no_random, monkeypatch):
+    game, channel = start_game()
+    for seat, stats in [(1, {"base_interceptor_speed": 3, "base_cruiser_speed": 2,
+                             "interceptor_parts": ["ioc"], "cruiser_parts": ["ioc"]}),
+                        (2, {"base_interceptor_speed": 0, "interceptor_parts": ["ioc"]})]:
+        game.get_player(seat).update(stats)
+    game.gamestate["board"]["201"].update(
+        player_ships=["blue-int", "blue-cru", "red-int"], attacker=["blue"], defender=["red"])
+    game.update()
+    surface = Surface(store, game.game_id, seat="1", channel_name="aeb1-Round 1, Tile 201, Combat")
+    original_prompt = Combat.promptNextSpeed
+
+    async def send_prompt(*args, **kwargs):
+        await original_prompt(*args, **kwargs)
+        await asyncio.sleep(0)  # Exercise delivery before the HTTP handler's cleanup.
+
+    monkeypatch.setattr(Combat, "promptNextSpeed", send_prompt)
+    run(Combat.promptNextSpeed(game, "201", surface.channel, False))
+    first = next(message for message in store.pending_messages(game.game_id, "1")
+                 if any(button["custom_id"] == "FCIDblue_rollDice_201_blue_3_deleteMsg"
+                        for button in message["buttons"]))
+    no_random([1, 1])
+
+    async def body():
+        return {"seat": "1", "message_id": first["id"],
+                "custom_id": "FCIDblue_rollDice_201_blue_3_deleteMsg"}
+
+    request = SimpleNamespace(match_info={"game_id": game.game_id}, json=body)
+    response = json.loads(run(app.api_press(request)).text)
+
+    assert response["error"] is None
+    assert any(button["custom_id"] == "FCIDblue_rollDice_201_blue_2_deleteMsg"
+               for message in response["pending"] for button in message["buttons"])
+    assert not any(button["custom_id"] == "FCIDblue_rollDice_201_blue_3_deleteMsg"
+                   for message in response["pending"] for button in message["buttons"])
 
 
 def test_board_pieces_sit_on_the_drawn_ship_and_planet_snaps(start_game, store, app):

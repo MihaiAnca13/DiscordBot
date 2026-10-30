@@ -21,6 +21,7 @@ class DiscordMirror:
         self.media_dir = Path(media_dir)
         self.wakeup = asyncio.Event()
         self.worker = None
+        self.created_threads = {}
 
     def start(self):
         self.worker = asyncio.create_task(self.run())
@@ -94,17 +95,22 @@ class DiscordMirror:
     def _guild(self):
         return self.bot.get_guild(self.guild_id)
 
-    def _channel(self, game_id, room):
+    def _channel(self, room):
+        if room in self.created_threads:
+            return self.created_threads[room]
         guild = self._guild()
         if guild is None:
             return None
-        channel = discord.utils.get(guild.channels, name=room)
-        if channel is None:
-            channel = discord.utils.get(guild.channels, name=f"{game_id}-actions")
-        return channel
+        return discord.utils.get([*guild.channels, *guild.threads], name=room)
 
     async def send(self, game_id, room, content, view, files, nonce=None):
-        channel = self._channel(game_id, room)
+        channel = self._channel(room)
+        if channel is None and room.startswith(f"{game_id}-Round "):
+            actions = self._channel(f"{game_id}-actions")
+            if actions is not None:
+                channel = await actions.create_thread(name=room, auto_archive_duration=10080,
+                                                      type=discord.ChannelType.public_thread)
+                self.created_threads[room] = channel
         if channel is None:
             raise RuntimeError(f"Discord channel unavailable: {room}")
         payload = [discord.File(io.BytesIO(data), filename=name) for name, data in (files or [])]
@@ -118,7 +124,7 @@ class DiscordMirror:
                 "attachments": [{"name": a.filename, "url": a.url} for a in message.attachments]}
 
     async def edit(self, room, discord_id, content, view):
-        channel = self._channel(None, room)
+        channel = self._channel(room)
         if channel is None:
             raise RuntimeError(f"Discord channel unavailable: {room}")
         try:
@@ -129,7 +135,7 @@ class DiscordMirror:
             logging.getLogger(__name__).info("Discord message %s already removed", discord_id)
 
     async def delete(self, room, discord_id):
-        channel = self._channel(None, room)
+        channel = self._channel(room)
         if channel is None:
             raise RuntimeError(f"Discord channel unavailable: {room}")
         try:
