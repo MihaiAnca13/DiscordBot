@@ -259,7 +259,6 @@ class Surface:
         self.seat = None if seat is None else str(seat)
         self.mirror = mirror
         self.media_dir = media_dir
-        self.ephemeral_to = None
         self.custom_id = None
         self.channel = WebChannel(self, name=channel_name or f"{game_id}-actions")
 
@@ -301,6 +300,14 @@ class Surface:
         return channel
 
 
+class WebClient:
+    def __init__(self, surface):
+        self.surface = surface
+
+    async def fetch_channel(self, channel_id):
+        return WebChannel(self.surface, name=str(channel_id))
+
+
 class WebInteraction:
     """A press that arrived over HTTP, shaped exactly like the Discord object handlers expect."""
 
@@ -311,6 +318,7 @@ class WebInteraction:
         self.surface = Surface(store, game_id, seat=seat, mirror=mirror, media_dir=media_dir,
                                channel_name=channel_name)
         self.channel = self.surface.channel
+        self.client = WebClient(self.surface)
         self.surface.custom_id = custom_id
         self.message = WebMessage(self.surface, int(message_id)) if message_id is not None else None
         self.user = WebUser(str(seat), display_name)
@@ -334,6 +342,10 @@ class RecordingMessage:
 
     def __getattr__(self, name):
         return getattr(self._real, name)
+
+    async def create_thread(self, name):
+        thread = await self._real.create_thread(name=name)
+        return RecordingChannel(thread, self.surface)
 
     async def delete(self):
         # The real Discord message is already the mirror, so no fan-out here.
@@ -367,7 +379,6 @@ class RecordingChannel:
             self.surface.game_id, room, content=content,
             buttons=buttons,
             attachments=attachments,
-            ephemeral_to=self.surface.ephemeral_to,
             author_id=self.surface.seat,
             discord_id=real.id,
             combat=combat_context(self.surface.game_id, room, content, buttons, self.surface.custom_id))
@@ -380,6 +391,19 @@ class RecordingChannel:
             raise not_found()
         real = await self._real.fetch_message(int(row["discord_id"]))
         return RecordingMessage(real, self.surface, int(message_id))
+
+
+class RecordingClient:
+    def __init__(self, real, surface):
+        self.real = real
+        self.surface = surface
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+    async def fetch_channel(self, channel_id):
+        channel = await self.real.fetch_channel(channel_id)
+        return RecordingChannel(channel, self.surface)
 
 
 class RecordingResponder:
@@ -400,12 +424,11 @@ class RecordingResponder:
         send = self._real.send if self.ephemeral else self._real.send_message
         real = await send(content=content, ephemeral=ephemeral, **kwargs)
         attachments = [{"name": a.filename, "url": a.url} for a in getattr(real, "attachments", [])]
-        self.surface.ephemeral_to = self.surface.seat if (ephemeral or self.ephemeral) else None
         self.surface.store.record(
             self.surface.game_id, "private", content=content,
             buttons=buttons_from_view(view) if view is not None else [],
             attachments=attachments,
-            ephemeral_to=self.surface.ephemeral_to,
+            ephemeral_to=self.surface.seat if (ephemeral or self.ephemeral) else None,
             author_id=self.surface.seat)
         return real
 
@@ -420,6 +443,7 @@ class RecordingInteraction:
         self.surface = Surface(store, game_id, seat=str(getattr(interaction.user, "id", "")),
                                mirror=mirror)
         self.channel = RecordingChannel(interaction.channel, self.surface)
+        self.client = RecordingClient(interaction.client, self.surface)
         self.surface.custom_id = interaction.data.get("custom_id")
         self.surface.channel = self.channel
         self.followup = RecordingResponder(interaction.followup, self.surface, ephemeral=True)

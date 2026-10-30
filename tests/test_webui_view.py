@@ -55,6 +55,26 @@ def test_another_seats_public_prompt_is_not_one_of_your_choices(start_game, stor
                    for button in message["buttons"])
 
 
+@pytest.mark.parametrize("kind", ["no_explore", "reaction", "no_discs"])
+def test_turn_menus_without_explore_are_hidden_when_another_seat_is_active(
+        start_game, store, app, run, monkeypatch, kind):
+    game, channel = start_game()
+    player = game.get_player(1)
+    if kind == "reaction":
+        player["passed"] = True
+    elif kind == "no_discs":
+        player["influence_discs"] = 0
+    else:
+        monkeypatch.setattr("Buttons.Turn.ExploreButtons.getTilesToExplore", lambda *args: [])
+    game.gamestate["activePlayerColor"] = ["red"]
+    game.update()
+    menu = turn_menu(run, store, game, "1", "blue")
+
+    pending = app.snapshot(game.game_id, "1")["pending"]
+
+    assert menu.id not in [message["id"] for message in pending]
+
+
 def test_history_keeps_used_prompts_and_pages_backwards(start_game, store, app, run):
     game, _channel = start_game()
     menu = turn_menu(run, store, game, "1", "blue")
@@ -105,6 +125,8 @@ def test_a_game_over_hides_the_stale_turn_menu(start_game, store, app, run):
 
 def test_private_prompts_are_only_in_their_seats_choices(start_game, store, app, run):
     game, _channel = start_game()
+    game.gamestate["players"]["1"]["passed"] = True
+    game.update()
     turn_menu(run, store, game, "1", "blue")
     store.record("aeb1", "aeb1-actions", content="blue only", ephemeral_to="1", buttons=[
         {"label": "Pass Unless Someone Attacks You", "custom_id": "permanentlyPass",
@@ -118,6 +140,18 @@ def test_private_prompts_are_only_in_their_seats_choices(start_game, store, app,
     # A standing reaction offer does not replace the reaction turn's actions.
     assert any(button["custom_id"].endswith("_startBuild")
                for message in blue["pending"] for button in message["buttons"])
+
+
+@pytest.mark.parametrize("passed,perma_passed", [(False, False), (True, True)])
+def test_stale_reaction_pass_offer_is_hidden(start_game, store, app, passed, perma_passed):
+    game, channel = start_game()
+    game.gamestate["players"]["1"].update(passed=passed, perma_passed=perma_passed)
+    game.update()
+    store.record(game.game_id, channel.name, ephemeral_to="1", buttons=[
+        {"label": "Pass Unless Someone Attacks You", "custom_id": "permanentlyPass",
+         "style": 3, "disabled": False, "url": None}])
+
+    assert app.snapshot(game.game_id, "1")["pending"] == []
 
 
 def test_a_new_phase_hides_the_previous_turn_menu(start_game, store, app, run):

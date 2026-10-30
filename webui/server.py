@@ -206,7 +206,7 @@ def _button_color(button):
 
 
 def _is_turn_menu(message):
-    return any((button.get("custom_id") or "").endswith("_startExplore")
+    return any((button.get("custom_id") or "").endswith("_passForRound")
                for button in message["buttons"])
 
 
@@ -407,6 +407,9 @@ class WebApp:
         pending = [message for message in pending
                    if message["actionable"] and seat_requested
                    and not _is_past_combat(message["room"], game.gamestate.get("roundNum"))]
+        if not (you or {}).get("passed") or (you or {}).get("perma_passed"):
+            pending = [message for message in pending if not any(
+                button.get("custom_id") == "permanentlyPass" for button in message["buttons"])]
         drafting = game.gamestate.get("draftingPlayers", [])
         if drafting and seat_requested != str(drafting[0]):
             pending = [message for message in pending if not any(

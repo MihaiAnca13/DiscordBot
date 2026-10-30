@@ -6,6 +6,7 @@ import pytest
 from discord.ui import Button, View
 
 from Buttons.Draft import DraftButtons
+from Buttons.Influence import InfluenceButtons
 from commands.setup_commands import CommunitySheetButtonView, CommunitySheetSelectView
 from listeners.ButtonListener import ButtonListener
 from webui import runtime
@@ -13,7 +14,7 @@ from webui.server import build
 
 from tests.fakes import FakeChannel, FakeInteraction
 from webui.store import FeedStore
-from webui.transport import RecordingInteraction
+from webui.transport import RecordingInteraction, WebInteraction
 
 
 @pytest.fixture
@@ -50,6 +51,20 @@ def test_deleting_through_the_feed_deletes_the_discord_message(store, run):
     assert channel.messages[0].id in channel.deleted
 
 
+def test_discord_combat_threads_record_their_messages(store, run, start_game):
+    game, channel = start_game()
+    wrapped = RecordingInteraction(FakeInteraction(channel, custom_id="x"), store, "aeb1")
+    sent = run(wrapped.channel.send("Combat will occur"))
+    thread = run(sent.create_thread(name="aeb1-Round 3, Tile 000, Combat"))
+    run(thread.send("Roll dice", view=view()))
+
+    battles = store.combat_history("aeb1", "42")
+    assert len(battles) == 1
+    assert battles[0]["room"] == thread.name
+    assert battles[0]["buttons"][0]["custom_id"] == "FCIDblue_startBuild"
+    assert battles[0]["discord_id"]
+
+
 def test_editing_discord_content_preserves_buttons_until_explicitly_removed(store, run):
     channel = FakeChannel("aeb1-actions")
     wrapped = RecordingInteraction(FakeInteraction(channel, custom_id="x"), store, "aeb1")
@@ -69,6 +84,37 @@ def test_ephemeral_discord_replies_are_private_to_the_presser(store, run):
     assert store.open_messages("aeb1", "42")[0]["content"] == "only you"
     seen_by_other = [m["content"] for m in store.open_messages("aeb1", "43")]
     assert "only you" not in seen_by_other
+
+
+def test_private_discord_reply_does_not_hide_later_public_prompts(store, run):
+    wrapped = RecordingInteraction(FakeInteraction(FakeChannel("aeb1-actions"), user_id=42), store, "aeb1")
+    run(wrapped.followup.send("only you", ephemeral=True))
+    run(wrapped.channel.send("public choice", view=view()))
+
+    other_seat = store.open_messages("aeb1", "43")
+    assert any(message["content"] == "public choice" for message in other_seat)
+    assert not any(message["content"] == "only you" for message in other_seat)
+
+
+@pytest.mark.parametrize("surface", ["web", "discord"])
+def test_ending_turn_retires_influence_offer_from_another_channel(store, run, start_game, surface):
+    game, channel = start_game()
+    if surface == "discord":
+        interaction = RecordingInteraction(FakeInteraction(channel, user_id=1), store, game.game_id)
+    else:
+        interaction = WebInteraction(store, game.game_id, "1")
+    announcement = run(interaction.channel.send("Influence offer"))
+    thread = run(announcement.create_thread(name="aeb1-Round 1, Tile 202 Influence"))
+    run(InfluenceButtons.offerInfluenceDisc(game, thread, "202", ["blue"], "Place or decline"))
+    offer = dict(game.gamestate["influenceOffers"]["202"])
+
+    run(InfluenceButtons.declinePendingInfluence(game, game.get_player(1), interaction))
+
+    assert "202" not in game.gamestate["influenceOffers"]
+    assert store.get(offer["message"])["deleted"]
+    if surface == "discord":
+        real_thread = channel.threads[0]
+        assert real_thread.messages[0].id in real_thread.deleted
 
 
 def test_runtime_wraps_game_channels_only(tmp_path, monkeypatch):
