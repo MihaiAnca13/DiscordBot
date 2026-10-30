@@ -65,7 +65,9 @@ class PlayerShip(Ship):
         self.ship_type = self.ship_type_fixer(ship_type)
         self.speed = player[f"base_{self.ship_type}_speed"]
         self.energy = player[f"base_{self.ship_type}_nrg"]
-        self.total_energy = player[f"base_{self.ship_type}_nrg"]
+        if FactionData.has(player, "soul_hunters"):
+            self.energy += player.get("wraithSouls", 0)
+        self.total_energy = self.energy
         self.computer = player[f"base_{self.ship_type}_comp"]
 
         # added for Outcast factions

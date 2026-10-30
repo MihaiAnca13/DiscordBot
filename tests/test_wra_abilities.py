@@ -8,6 +8,7 @@ import pytest
 
 from Buttons.Build import BuildButtons
 from Buttons.Explore import ExploreButtons
+from Buttons.Upgrade import UpgradeButtons
 from helpers.CombatHelper import Combat
 from helpers.PlayerHelper import PlayerHelper
 from helpers.ShipHelper import PlayerShip
@@ -322,11 +323,11 @@ def test_stock_interceptor_uses_its_one_unused_energy(make_game):
     assert Combat.phase_mode(game, "blue", "101", "interceptor")["comp"] == 1
 
 
-def test_offboard_power_is_shared_between_blueprints_and_reset_refunds_it(make_game):
+def test_offboard_power_applies_to_each_blueprint_and_reset_only_clears_options(make_game):
     game = phase_combat(make_game, souls=2, blue_ships=("blue-int", "blue-cru"))
     player = game.get_player(1)
     for ship in ("interceptor", "cruiser"):
-        player[f"base_{ship}_nrg"] -= PlayerShip(player, ship).energy
+        player[f"base_{ship}_nrg"] += 2 - PlayerShip(player, ship).energy
     channel = FakeInteraction().channel
     message = offer_phase(game, channel)
 
@@ -337,15 +338,15 @@ def test_offboard_power_is_shared_between_blueprints_and_reset_refunds_it(make_g
 
     cruiser = FakeInteraction(channel, message=message)
     asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_cruiser_speed", cruiser))
-    assert "Not enough power" in cruiser.followup.sent[0][0]
+    assert not cruiser.followup.sent
+    assert Combat.phase_mode(game, "blue", "101", "cruiser")["speed"] == 2
 
     reset = FakeInteraction(channel, message=message)
     asyncio.run(Combat.phaseModuleReset(game, "phaseModuleReset_101_blue_interceptor", reset))
     assert "interceptor" not in game.gamestate["board"]["101"].get("phaseModes", {}).get("blue", {})
 
-    cruiser = FakeInteraction(channel, message=message)
-    asyncio.run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_cruiser_speed", cruiser))
-    assert game.gamestate["board"]["101"]["phaseModes"]["blue"]["cruiser"]["speed"] == 2
+    assert Combat.phase_mode(game, "blue", "101", "cruiser")["speed"] == 2
+    assert game.get_player(1)["wraithSouls"] == 2
 
 
 def test_phase_module_done_starts_combat_once(make_game, monkeypatch):
@@ -438,7 +439,7 @@ def test_phase_module_offboard_power_defaults_to_zero_for_old_saves(make_game):
     game = phase_combat(make_game)
     del game.gamestate["players"]["1"]["wraithSouls"]
 
-    assert Combat.phase_offboard_remaining(game, "blue", "101") == 0
+    assert PlayerShip(game.get_player(1), "interceptor").energy == 1
 
 
 def winning_wraith_game(make_game, planets):
@@ -503,7 +504,7 @@ def test_phase_module_bombing_only_tile_offers_neutron_bombs_when_powered(make_g
     labels = [button.label for _content, kwargs in bombing.sent
               for button in getattr(kwargs.get("view"), "children", [])]
     assert labels == ["Roll to Destroy Population", "Use Phase Module: Neutron Bombs (2 Power)"]
-    assert any("spend 2 Power" in content for content, _kwargs in bombing.sent)
+    assert any("use 2 blueprint Power" in content for content, _kwargs in bombing.sent)
 
 
 @pytest.mark.parametrize("change", ["round", "fleet", "owner", "population", "combat"])
@@ -561,8 +562,8 @@ def test_phase_module_bombing_only_tile_without_power_leaves_only_the_roll(make_
     assert any("needs 2 Power" in content for content, _kwargs in bombing.sent)
 
 
-@pytest.mark.parametrize("energy, spent", [(0, 2), (1, 1), (3, 0)])
-def test_phase_module_bombs_a_sector_without_combat(make_game, run, energy, spent):
+@pytest.mark.parametrize("energy", [2, 3, 4])
+def test_phase_module_bombs_a_sector_without_consuming_power(make_game, run, energy):
     blue = player_stats("wra", color="blue")
     blue["military_tech"] = ["phm", "neb"]
     blue["wraithSouls"] = 4
@@ -579,11 +580,11 @@ def test_phase_module_bombs_a_sector_without_combat(make_game, run, energy, spen
     state = reload(game)
     assert state.gamestate["board"]["101"]["owner"] == 0
     assert state.get_player(1)["wraithSouls"] == 5
-    assert state.get_player(1)["wraithPowerSpent"] == spent
-    assert Combat.phase_offboard_remaining(state, "blue", "101") == 5 - spent
+    assert state.get_player(1).get("wraithPowerSpent", 0) == 0
+    assert PlayerShip(state.get_player(1), "interceptor").energy == energy + 1
     replay = FakeInteraction()
     run(Combat.phaseBombing(state, state.get_player(1), replay, "phaseBombing_101_1"))
-    assert state.get_player(1)["wraithPowerSpent"] == spent
+    assert state.get_player(1).get("wraithPowerSpent", 0) == 0
     assert "no longer has an owner" in replay.followup.sent[0][0]
 
 
@@ -626,7 +627,7 @@ def test_ghosts_retreat_blocks_a_manual_roll_until_the_destination_is_chosen(
     assert state.gamestate["board"]["101"]["player_ships"] == ["blue-int", "red-int"]
 
 
-def test_declared_power_is_spent_once_and_survives_the_next_combat(make_game, run, monkeypatch):
+def test_declared_power_is_not_consumed_and_survives_the_next_combat(make_game, run, monkeypatch):
     game = phase_combat(make_game, souls=2)
     channel = FakeInteraction().channel
     message = offer_phase(game, channel)
@@ -642,19 +643,19 @@ def test_declared_power_is_spent_once_and_survives_the_next_combat(make_game, ru
     run(Combat.phaseModuleDone(game, "phaseModuleDone_101_blue",
                                FakeInteraction(channel, message=message)))
     game = reload(game)
-    assert game.get_player(1)["wraithPowerSpent"] == 1
+    assert game.get_player(1).get("wraithPowerSpent", 0) == 0
     assert game.get_player(1)["wraithSouls"] == 2
-    assert Combat.phase_offboard_remaining(game, "blue", "101") == 1
+    assert PlayerShip(game.get_player(1), "interceptor").energy == 3
     Combat.clear_phase_module(game, "101")
-    assert Combat.phase_offboard_remaining(reload(game), "blue", "101") == 1
+    assert PlayerShip(reload(game).get_player(1), "interceptor").energy == 3
 
 
-@pytest.mark.parametrize("energy, souls, spent", [(3, 0, 0), (1, 1, 1), (0, 2, 2)])
-def test_phase_module_uses_blueprint_energy_before_shared_power(
-        make_game, run, monkeypatch, energy, souls, spent):
+@pytest.mark.parametrize("energy, souls", [(3, 0), (1, 1), (0, 2)])
+def test_phase_module_uses_permanent_blueprint_power(
+        make_game, run, monkeypatch, energy, souls):
     game = phase_combat(make_game, souls=souls)
     player = game.get_player(1)
-    player["base_interceptor_nrg"] += energy - PlayerShip(player, "interceptor").energy
+    player["base_interceptor_nrg"] += energy + souls - PlayerShip(player, "interceptor").energy
     channel = FakeInteraction().channel
     message = offer_phase(game, channel)
 
@@ -665,10 +666,10 @@ def test_phase_module_uses_blueprint_energy_before_shared_power(
     run(Combat.phaseModuleOption(game, "phaseModuleOption_101_blue_interceptor_speed",
                                 FakeInteraction(channel, message=message)))
     assert Combat.phase_mode(game, "blue", "101", "interceptor")["speed"] == 2
-    assert Combat.phase_offboard_remaining(game, "blue", "101") == souls - spent
+    assert PlayerShip(player, "interceptor").energy == energy + souls
     run(Combat.phaseModuleDone(game, "phaseModuleDone_101_blue",
                               FakeInteraction(channel, message=message)))
-    assert reload(game).get_player(1)["wraithPowerSpent"] == spent
+    assert reload(game).get_player(1).get("wraithPowerSpent", 0) == 0
 
 
 def test_blueprint_energy_is_not_shared_or_multiplied_by_ship_count(make_game, run):
@@ -717,5 +718,28 @@ def test_unused_blueprint_energy_is_available_again_next_combat(make_game, run, 
                                   FakeInteraction(channel, message=message)))
         game = reload(game)
         assert PlayerShip(game.get_player(1), "interceptor").energy == energy
-        assert game.get_player(1)["wraithPowerSpent"] == 0
+        assert game.get_player(1).get("wraithPowerSpent", 0) == 0
         Combat.clear_phase_module(game, "101")
+
+
+@pytest.mark.parametrize("souls, is_valid", [(0, False), (1, False), (2, True), (3, True)])
+def test_upgrade_uses_permanent_soul_power(start_game, run, souls, is_valid):
+    game, channel = start_game(factions=["wra", "eri"])
+    player = game.get_player(1)
+    player["wraithSouls"] = souls
+    player["wraithPowerSpent"] = 9  # Older saves must not lose their permanent bonus.
+    game.update()
+    interaction = FakeInteraction(channel)
+    run(UpgradeButtons.chooseUpgrade(game, player, interaction,
+                                     "chooseUpgrade_2_interceptor_nus_hul_1_dummy",
+                                     PlayerHelper("1", player)))
+
+    player = reload(game).get_player(1)
+    assert (player["interceptor_parts"][1] == "hul") is is_valid
+    assert player["wraithSouls"] == souls
+    if is_valid:
+        ship = PlayerShip(player, "interceptor")
+        assert ship.energy == souls - 2
+        assert ship.total_energy == souls
+    else:
+        assert "not valid" in interaction.followup.sent[0][0]
