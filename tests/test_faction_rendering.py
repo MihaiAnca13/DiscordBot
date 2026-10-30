@@ -122,6 +122,7 @@ def test_faction_rendering(start_game, monkeypatch, faction):
         game.gamestate["activePlayerColor"] = []
     if faction == "wra":
         player["wraithSouls"] = 2
+        player["wraithPowerSpent"] = 9
 
     drawing = DrawHelper(game.gamestate)
     image = drawing.player_area(player)
@@ -172,7 +173,10 @@ def test_faction_rendering(start_game, monkeypatch, faction):
     if faction == "wra":
         assert "images/resources/hexes/numberless/254.png" in loaded
         assert "images/resources/hexes/254.png" not in loaded
-        assert {"Power: 2", "+2"} <= {text for text, bounds in player_labels}
+        assert "+2" in {text for text, bounds in player_labels}
+        assert "images/resources/components/upgrades/wraith_soul_count.png" in resized
+        assert any(text == "2" and 4600 < bounds[0] < bounds[2] < 4660
+                   and 660 < bounds[1] < bounds[3] < 720 for text, bounds in player_labels)
         assert sum(path.endswith("/wraith_phase_module.png") for path in resized) == 4
     if faction in ("her", "kur"):
         assert drawing.faction_portrait(art).size == (600, 600)
@@ -193,3 +197,23 @@ def test_faction_rendering(start_game, monkeypatch, faction):
         for path in paths:
             with Image.open(path) as image:
                 assert image.convert("RGBA").getpixel((0, 0))[3] == 0
+
+
+@pytest.mark.render
+@pytest.mark.parametrize("souls", [0, 12])
+def test_wraith_soul_counter_draws_the_accumulated_number(start_game, monkeypatch, souls):
+    game, channel = start_game(factions=["wra", "eri"])
+    player = game.get_player(1)
+    player["wraithSouls"] = souls
+    labels = []
+    draw_text = ImageDraw.ImageDraw.text
+
+    def record_counter(draw, xy, text, *args, **kwargs):
+        if xy == (4640, 688):
+            labels.append(text)
+        return draw_text(draw, xy, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", record_counter)
+    DrawHelper(game.gamestate).player_area(player)
+
+    assert labels == [str(souls)]
