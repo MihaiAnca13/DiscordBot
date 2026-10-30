@@ -270,10 +270,11 @@ def faction_references(community_factions=True):
                          "- **Ghosts:** The Wraith may retreat immediately when it is their turn to fire"
                          " (there is no extra round of shooting).",
                          "- **Soul-Hunters:** Wraith capture the souls of planets they attack. To use Neutron Bombs"
-                         " you must research and then pay 2 Power using the Phase Module. You get +1 offboard"
+                         " you must research and have 2 available blueprint Power using the Phase Module. You get +1 offboard"
                          " power and +1 VP per sector you destroy with enemy population cubes in it (increment"
                          " the Dice on your faction board). It does not matter if you do not settle the sector"
-                         " or lose it later.",
+                         " or lose it later. Offboard power permanently adds energy to every blueprint, including"
+                         " for upgrades, and is never consumed.",
                          "- **Phase Module:** This is built into all your ships, and you use it for a range of"
                          " benefits, limited by how much Power you have: **Always:** Cloaking Device;"
                          " **for 1 Power each:** +1 to Hit, +1 Shield; **for 2 Power:** Neutron Bombs if"

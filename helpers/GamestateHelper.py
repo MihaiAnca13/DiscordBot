@@ -693,8 +693,7 @@ class GamestateHelper:
                                                 for item in harvesters)
         if FactionData.has(player, "soul_hunters"):
             souls = player.get("wraithSouls", 0)
-            spent = player.get("wraithPowerSpent", 0)
-            msg += f"\nSouls captured: {souls} (+{souls - spent} offboard power, +{souls} VP)"
+            msg += f"\nSouls captured: {souls} (+{souls} offboard power, +{souls} VP)"
         return msg
 
     def setCombatants(self, players, pos):
