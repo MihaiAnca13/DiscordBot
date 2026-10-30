@@ -81,6 +81,8 @@ class TurnButtons:
         if await ResearchButtons.has_unpaid_research(player, interaction):
             return
         from helpers.CombatHelper import Combat
+        from Buttons.Influence import InfluenceButtons
+        await InfluenceButtons.declinePendingInfluence(game, player, interaction)
         nextPlayer = game.get_next_player(player)
         await game.updateNamesAndOutRimTiles(interaction)
         game.initilizeKey("20MinReminder")
@@ -98,7 +100,7 @@ class TurnButtons:
             if any([len(Combat.findTilesInConflict(game)) > 0,
                     len(Combat.findUnownedTilesToTakeOver(game)) > 0,
                     len(Combat.findTilesInContention(game)) > 0]):
-                Combat.startCombatThreads(game, interaction)
+                await Combat.startCombatThreads(game, interaction)
                 msg += " after all battles are resolved"
             view.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                                  custom_id="startPopDrop"))
@@ -233,7 +235,15 @@ class TurnButtons:
 
     @staticmethod
     async def readyForUpkeep(game: GamestateHelper, player, interaction: discord.Interaction, p1: PlayerHelper):
+        from Buttons.Influence import InfluenceButtons
         color = player["color"]
+        pending = InfluenceButtons.pendingInfluence(game, player)
+        if pending:
+            await interaction.channel.send(
+                f"{player['player_name']} must first place or decline the influence disc in "
+                f"{', '.join(pending)} before marking ready for upkeep. "
+                "Use the buttons in that sector's thread.")
+            return
         game.removeFromKey("peopleToCheckWith", color)
         if p1.checkBankrupt():
             view = View()
@@ -287,6 +297,13 @@ class TurnButtons:
             for color2 in game.gamestate["peopleToCheckWith"]:
                 p2 = game.getPlayerObjectFromColor(color2)
                 msg += p2["player_name"]+"\n"
+            await interaction.channel.send(msg)
+            return
+        pending = game.gamestate.get("influenceOffers", {})
+        if pending:
+            msg = (" Some influence discs still have to be placed or declined in the Combat Phase:\n")
+            for pos, offer in pending.items():
+                msg += f"Tile {pos}: {', '.join(offer['colors'])}\n"
             await interaction.channel.send(msg)
             return
         round_num = game.gamestate.get("roundNum", 0)

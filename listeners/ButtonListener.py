@@ -410,6 +410,8 @@ class ButtonListener(commands.Cog):
             await UpgradeButtons.undoUpgrade(game, player, interaction, customID, player_helper)
         elif customID.startswith("restartTechnoMagic"):
             await UpgradeButtons.restartTechnoMagic(game, player, interaction, customID.split("_")[1])
+        elif customID.startswith("finishTechnoMagic"):
+            await Combat.technoMagicDone(game, customID, player, interaction)
         elif customID.startswith("technoMagic"):
             await Combat.technoMagicUpgrade(game, customID, player, interaction, player_helper)
         elif customID.startswith("phaseModuleShip"):
@@ -445,6 +447,8 @@ class ButtonListener(commands.Cog):
             await InfluenceButtons.eliminatePlayer(game, player, interaction,player_helper,True)
         elif customID.startswith("addInfluenceFinish"):
             await InfluenceButtons.addInfluenceFinish(game, player, interaction, customID)
+        elif customID.startswith("declineInfluence"):
+            await InfluenceButtons.declineInfluence(game, player, interaction, customID)
         elif customID.startswith("removeInfluenceStart"):
             await InfluenceButtons.removeInfluenceStart(game, player, interaction)
         elif customID.startswith("removeInfluenceFinish"):
