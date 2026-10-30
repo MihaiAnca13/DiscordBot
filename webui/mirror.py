@@ -12,6 +12,8 @@ from pathlib import Path
 
 import discord
 
+from webui.store import view_from_buttons
+
 
 class DiscordMirror:
     def __init__(self, bot, guild_id, store, media_dir):
@@ -73,10 +75,7 @@ class DiscordMirror:
         if payload["has_view"]:
             view = None
             if payload["buttons"] is not None:
-                view = discord.ui.View(timeout=None)
-                for button in payload["buttons"]:
-                    button["style"] = discord.ButtonStyle(button["style"])
-                    view.add_item(discord.ui.Button(**button))
+                view = view_from_buttons(payload["buttons"])
         if job["operation"] == "send":
             if row["deleted"] or row["discord_id"]:
                 return

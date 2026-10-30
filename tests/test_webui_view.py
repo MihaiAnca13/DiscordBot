@@ -196,7 +196,8 @@ def test_combat_overview_stops_offering_a_rolled_colour(store, app, run, tmp_pat
                              "style": 3, "disabled": False, "url": None},
                             {"label": "(Attacker) Roll Initative 3 Ships",
                              "custom_id": "FCIDred_rollDice_102_red_3_attacker",
-                             "style": 4, "disabled": False, "url": None},
+                             "style": 4, "disabled": False, "url": None,
+                             "type": 2, "emoji": {"name": "🔴"}},
                             {"label": "Refresh Image", "custom_id": "refreshImage_102",
                              "style": 1, "disabled": False, "url": None},
                         ])

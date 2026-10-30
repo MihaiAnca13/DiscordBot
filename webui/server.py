@@ -11,8 +11,7 @@ import re
 import traceback
 
 from aiohttp import web
-from discord import ButtonStyle
-from discord.ui import Button, View
+from discord.ui import View
 from Buttons.Draft import DraftButtons
 from setup.GameInit import GameInit
 
@@ -32,7 +31,7 @@ from webui import catalog
 from webui.auth import install_auth
 from webui.render import (SOURCE_H, SOURCE_W, TILE_H, TILE_W, board_meta, render_board,
                           render_tile_preview, render_panel, rotate_tile_point)
-from webui.store import FeedStore, buttons_from_view
+from webui.store import FeedStore, buttons_from_view, view_from_buttons
 from webui.transport import WebInteraction, combat_context
 
 LOG = logging.getLogger(__name__)
@@ -572,11 +571,8 @@ class WebApp:
             if changed:
                 self.store.set_buttons(row["id"], kept)
                 if self.mirror is not None and self.store.mirrors(game_id):
-                    view = View()
-                    for button in kept:
-                        view.add_item(Button(**{**button, "style": ButtonStyle(button["style"])}))
                     self.mirror.enqueue("edit", game_id, row["id"], room,
-                                        content=row["content"], view=view)
+                                        content=row["content"], view=view_from_buttons(kept))
 
     def _prune_research_options(self, game, room, color, game_id):
         """Other research menus were priced before this purchase.

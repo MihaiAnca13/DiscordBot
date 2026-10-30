@@ -14,6 +14,8 @@ import os
 import sqlite3
 import time
 
+import discord
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -64,6 +66,18 @@ def buttons_from_view(view):
             "url": getattr(child, "url", None),
         })
     return buttons
+
+
+def view_from_buttons(buttons):
+    view = discord.ui.View(timeout=None)
+    for button in buttons:
+        emoji = button.get("emoji")
+        view.add_item(discord.ui.Button(
+            label=button.get("label"), custom_id=button.get("custom_id"),
+            style=discord.ButtonStyle(button.get("style", 2)),
+            disabled=button.get("disabled", False), url=button.get("url"),
+            emoji=discord.PartialEmoji.from_dict(emoji) if isinstance(emoji, dict) else emoji))
+    return view
 
 
 class FeedStore:
