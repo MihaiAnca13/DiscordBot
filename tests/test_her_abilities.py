@@ -140,6 +140,11 @@ def test_raid_build_after_the_move_does_not_spend_a_second_disc(start_game, pres
     assert "FCIDblue_moveFrom_301_2" in menu
     assert "FCIDblue_finishAction" in menu
     assert not [cid for cid in menu if "herRaidBuild" in cid]
+    view = next(kwargs["view"] for content, kwargs in reversed(channel.sent)
+                if "Select the tile you would like to move from" in (content or ""))
+    ids = [child.custom_id for child in view.children]
+    assert ids.count("FCIDblue_finishAction") == 1
+    assert len(ids) == len(set(ids))
 
 
 def test_raid_nested_build_allows_only_one_unit(start_game, press):
