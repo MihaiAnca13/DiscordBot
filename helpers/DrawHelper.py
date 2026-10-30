@@ -1242,9 +1242,6 @@ class DrawHelper:
         # the colony ships one Influence action may flip (Buttons/Influence.py)
         text_drawable_image.text((618, 417), f"{FactionData.of(player).get('influence_colony_ships', 2)}",
                                  color, font=font, stroke_width=stroke_width, stroke_fill=stroke_color)
-        if FactionData.has(player, "soul_hunters"):
-            text_drawable_image.text((3850, 740), f"Power: {player.get('wraithSouls', 0)}",
-                                     color, font=font, stroke_width=stroke_width, stroke_fill=stroke_color)
             
 
 
@@ -1313,8 +1310,16 @@ class DrawHelper:
             text_drawable_image.text((bonus_x + 60, 660), f"{bonus:+d}", (0, 0, 0), font=font,
                                      anchor="mm")
 
-        # Alliance tiles sit to the right of the reputation track.
-        allianceX = 4600
+            source_x = bonus_x + 150
+            source = self.use_resized_image(
+                "images/resources/components/upgrades/wraith_soul_count.png", (120, 120))
+            context.paste(source, (source_x, 600), mask=source)
+            count_font = ImageFont.truetype("images/resources/arial.ttf", size=35 if bonus < 10 else 25)
+            text_drawable_image.text((source_x + 40, 688), str(bonus), (255, 255, 255),
+                                     font=count_font, anchor="mm", stroke_width=1, stroke_fill=(0, 0, 0))
+
+        # Alliance tiles sit to the right of the reputation track and soul counter.
+        allianceX = 4750 if FactionData.has(player, "soul_hunters") else 4600
         for allianceTile, betrayed in player.get("alliances", {}).items():
             side = "betrayed" if betrayed else "ally"
             alliance_path = (f"images/resources/components/alliances/"
