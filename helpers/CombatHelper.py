@@ -175,24 +175,6 @@ class Combat:
         return modes.get(color, {}).get(ship_type, {})
 
     @staticmethod
-    def phase_blueprint_cost(player, ship_type: str, cost: int):
-        return max(0, cost - max(0, PlayerShip(player, ship_type).energy))
-
-    @staticmethod
-    def phase_offboard_used(game: GamestateHelper, color: str, pos: str):
-        modes = game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {})
-        player = game.getPlayerObjectFromColor(color)
-        return sum(Combat.phase_blueprint_cost(player, ship, mode.get("cost", 0))
-                   for ship, mode in modes.items())
-
-    @staticmethod
-    def phase_offboard_remaining(game: GamestateHelper, color: str, pos: str):
-        player = game.getPlayerObjectFromColor(color)
-        available = player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0)
-        ready = game.gamestate["board"].get(pos, {}).get("phaseModuleReady", {}).get(color)
-        return max(0, available - (0 if ready else Combat.phase_offboard_used(game, color, pos)))
-
-    @staticmethod
     def phase_bombing_cost(game: GamestateHelper, color: str, pos: str):
         player = game.getPlayerObjectFromColor(color)
         energy = max((PlayerShip(player, ship).energy
@@ -201,18 +183,13 @@ class Combat:
 
     @staticmethod
     async def phaseBombing(game: GamestateHelper, player, interaction: discord.Interaction, customID: str):
-        """Spend 2 Power to use Neutron Bombs on a sector with no combat."""
+        """Require 2 available blueprint Power for Neutron Bombs without combat."""
         pos = customID.split("_")[1]
         if not FactionData.has(player, "phase_module"):
             return
         player_helper = PlayerHelper(game.get_player_from_color(player["color"]), player)
         if "neb" not in player_helper.getTechs():
             await interaction.followup.send("Research Neutron Bombs before using them.", ephemeral=True)
-            return
-        cost = Combat.phase_bombing_cost(game, player["color"], pos)
-        if player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0) < cost:
-            await interaction.followup.send("The Phase Module needs 2 Power for Neutron Bombs.",
-                                            ephemeral=True)
             return
         if game.gamestate["board"][pos]["owner"] == 0:
             await interaction.followup.send("That sector no longer has an owner to bomb.", ephemeral=True)
@@ -224,8 +201,11 @@ class Combat:
                 or game.is_population_gone(pos)):
             await interaction.followup.send("This bombing opportunity is no longer current.", ephemeral=True)
             return
-        player["wraithPowerSpent"] = player.get("wraithPowerSpent", 0) + cost
-        game.update_player(player_helper)
+        cost = Combat.phase_bombing_cost(game, player["color"], pos)
+        if cost > 0:
+            await interaction.followup.send("The Phase Module needs 2 Power for Neutron Bombs.",
+                                            ephemeral=True)
+            return
         await InfluenceButtons.removeInfluenceFinish(
             game, interaction, f"removeInfluenceFinish_{pos}_graveYard", True, player)
 
@@ -354,12 +334,11 @@ class Combat:
                                      custom_id=f"FCID{winner}_rollDice_{pos}_{winner}_1000_deleteMsg"))
                 message = f"{playerName}, you may roll to attempt to kill enemy population."
                 if wraithNeedsDeclaration:
-                    if (player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0)
-                            >= Combat.phase_bombing_cost(game, winner, pos)):
+                    if Combat.phase_bombing_cost(game, winner, pos) == 0:
                         view.add_item(Button(label="Use Phase Module: Neutron Bombs (2 Power)",
                                              style=discord.ButtonStyle.blurple,
                                              custom_id=f"FCID{winner}_phaseBombing_{pos}_{game.gamestate['roundNum']}"))
-                        message += " You may spend 2 Power to use Neutron Bombs on the population."
+                        message += " You may use 2 blueprint Power for Neutron Bombs on the population."
                     else:
                         message += (" The Phase Module needs 2 Power for Neutron Bombs,"
                                     " so only the roll is available here.")
@@ -2213,9 +2192,8 @@ class Combat:
         player = game.getPlayerObjectFromColor(color)
         modes = dict(game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {}))
         modes[ship_type] = record
-        used = sum(Combat.phase_blueprint_cost(player, ship, mode.get("cost", 0))
+        return all(mode.get("cost", 0) <= max(0, PlayerShip(player, ship).energy)
                    for ship, mode in modes.items())
-        return used <= player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0)
 
     @staticmethod
     def phase_module_main_view(game: GamestateHelper, color: str, pos: str):
@@ -2230,15 +2208,14 @@ class Combat:
         view.add_item(Button(label="Clear All & Start Combat", style=discord.ButtonStyle.red,
                              custom_id=f"FCID{color}_phaseModuleNone_{pos}_{color}"))
         content = (f"{player['player_name']}, declare Phase Module options for this combat. "
-                   f"{player.get('wraithSouls', 0) - player.get('wraithPowerSpent', 0)} offboard power "
-                   "is available after each blueprint uses its unused energy. Cloaking Device is always on.")
+                   f"Each blueprint includes +{player.get('wraithSouls', 0)} permanent offboard power. "
+                   "Options use available blueprint energy. Cloaking Device is always on.")
         return content, view
 
     @staticmethod
     def phase_module_ship_view(game: GamestateHelper, color: str, pos: str, ship_type: str):
         player = game.getPlayerObjectFromColor(color)
         mode = Combat.phase_mode(game, color, pos, ship_type)
-        remaining = Combat.phase_offboard_remaining(game, color, pos)
         view = View()
         options = [(option, label, cost) for option, (label, cost) in Combat.PHASE_OPTIONS.items()
                    if option != "planets"]
@@ -2255,7 +2232,7 @@ class Combat:
                              custom_id=f"FCID{color}_phaseModuleBack_{pos}_{color}"))
         content = (f"{player['player_name']}, {ship_type.capitalize()}: "
                    f"{max(0, PlayerShip(player, ship_type).energy)} unused blueprint energy; "
-                   f"{remaining} offboard power left. Declared: {mode.get('cost', 0)} power.")
+                   f"Declared: {mode.get('cost', 0)} power.")
         return content, view
 
     @staticmethod
@@ -2333,7 +2310,7 @@ class Combat:
             mode[option] = bool(mode[option])
         mode["cost"] = Combat.phase_option_cost(mode)
         if not Combat.phase_mode_valid(game, color, pos, ship_type, mode):
-            await interaction.followup.send("Not enough power from blueprint energy and the offboard pool.",
+            await interaction.followup.send("Not enough power available on this blueprint.",
                                             ephemeral=True)
             return
         if mode["cost"]:
@@ -2372,11 +2349,11 @@ class Combat:
             return
         if clear:
             tile.get("phaseModes", {}).pop(color, None)
-        cost = Combat.phase_offboard_used(game, color, pos)
-        if cost > player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0):
-            await interaction.followup.send("Not enough power from blueprint energy and the offboard pool.", ephemeral=True)
+        modes = tile.get("phaseModes", {}).get(color, {})
+        if any(not Combat.phase_mode_valid(game, color, pos, ship, mode)
+               for ship, mode in modes.items()):
+            await interaction.followup.send("Not enough power available on this blueprint.", ephemeral=True)
             return
-        player["wraithPowerSpent"] = player.get("wraithPowerSpent", 0) + cost
         ready[color] = True
         game.update()
         await interaction.message.edit(content=f"{player['player_name']} has finished declaring Phase Module options.",

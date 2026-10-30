@@ -1209,7 +1209,7 @@ class DrawHelper:
         text_drawable_image.text((618, 417), f"{FactionData.of(player).get('influence_colony_ships', 2)}",
                                  color, font=font, stroke_width=stroke_width, stroke_fill=stroke_color)
         if FactionData.has(player, "soul_hunters"):
-            text_drawable_image.text((3850, 740), f"Power: {player.get('wraithSouls', 0) - player.get('wraithPowerSpent', 0)}",
+            text_drawable_image.text((3850, 740), f"Power: {player.get('wraithSouls', 0)}",
                                      color, font=font, stroke_width=stroke_width, stroke_fill=stroke_color)
             
 
