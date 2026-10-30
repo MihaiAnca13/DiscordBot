@@ -7117,7 +7117,7 @@
     "neutraladv2_snap": [],
     "int_snap": [700, 100],
     "cru_snap": [640, 560],
-    "drd_snap": [60, 620],
+    "drd_snap": [330, 620],
     "sb_snap": [220, 220],
     "mon_snap": [512, 730],
     "orb_snap": [130, 730],
