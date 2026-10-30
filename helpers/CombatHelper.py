@@ -175,9 +175,15 @@ class Combat:
         return modes.get(color, {}).get(ship_type, {})
 
     @staticmethod
+    def phase_blueprint_cost(player, ship_type: str, cost: int):
+        return max(0, cost - max(0, PlayerShip(player, ship_type).energy))
+
+    @staticmethod
     def phase_offboard_used(game: GamestateHelper, color: str, pos: str):
         modes = game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {})
-        return sum(mode.get("cost", 0) for mode in modes.values())
+        player = game.getPlayerObjectFromColor(color)
+        return sum(Combat.phase_blueprint_cost(player, ship, mode.get("cost", 0))
+                   for ship, mode in modes.items())
 
     @staticmethod
     def phase_offboard_remaining(game: GamestateHelper, color: str, pos: str):
@@ -185,6 +191,13 @@ class Combat:
         available = player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0)
         ready = game.gamestate["board"].get(pos, {}).get("phaseModuleReady", {}).get(color)
         return max(0, available - (0 if ready else Combat.phase_offboard_used(game, color, pos)))
+
+    @staticmethod
+    def phase_bombing_cost(game: GamestateHelper, color: str, pos: str):
+        player = game.getPlayerObjectFromColor(color)
+        energy = max((PlayerShip(player, ship).energy
+                      for ship in Combat.phase_ship_types(game, color, pos)), default=0)
+        return max(0, 2 - max(0, energy))
 
     @staticmethod
     async def phaseBombing(game: GamestateHelper, player, interaction: discord.Interaction, customID: str):
@@ -196,7 +209,8 @@ class Combat:
         if "neb" not in player_helper.getTechs():
             await interaction.followup.send("Research Neutron Bombs before using them.", ephemeral=True)
             return
-        if player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0) < 2:
+        cost = Combat.phase_bombing_cost(game, player["color"], pos)
+        if player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0) < cost:
             await interaction.followup.send("The Phase Module needs 2 Power for Neutron Bombs.",
                                             ephemeral=True)
             return
@@ -210,7 +224,7 @@ class Combat:
                 or game.is_population_gone(pos)):
             await interaction.followup.send("This bombing opportunity is no longer current.", ephemeral=True)
             return
-        player["wraithPowerSpent"] = player.get("wraithPowerSpent", 0) + 2
+        player["wraithPowerSpent"] = player.get("wraithPowerSpent", 0) + cost
         game.update_player(player_helper)
         await InfluenceButtons.removeInfluenceFinish(
             game, interaction, f"removeInfluenceFinish_{pos}_graveYard", True, player)
@@ -340,7 +354,8 @@ class Combat:
                                      custom_id=f"FCID{winner}_rollDice_{pos}_{winner}_1000_deleteMsg"))
                 message = f"{playerName}, you may roll to attempt to kill enemy population."
                 if wraithNeedsDeclaration:
-                    if player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0) >= 2:
+                    if (player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0)
+                            >= Combat.phase_bombing_cost(game, winner, pos)):
                         view.add_item(Button(label="Use Phase Module: Neutron Bombs (2 Power)",
                                              style=discord.ButtonStyle.blurple,
                                              custom_id=f"FCID{winner}_phaseBombing_{pos}_{game.gamestate['roundNum']}"))
@@ -2198,7 +2213,8 @@ class Combat:
         player = game.getPlayerObjectFromColor(color)
         modes = dict(game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {}))
         modes[ship_type] = record
-        used = sum(mode.get("cost", 0) for mode in modes.values())
+        used = sum(Combat.phase_blueprint_cost(player, ship, mode.get("cost", 0))
+                   for ship, mode in modes.items())
         return used <= player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0)
 
     @staticmethod
@@ -2215,7 +2231,7 @@ class Combat:
                              custom_id=f"FCID{color}_phaseModuleNone_{pos}_{color}"))
         content = (f"{player['player_name']}, declare Phase Module options for this combat. "
                    f"{player.get('wraithSouls', 0) - player.get('wraithPowerSpent', 0)} offboard power "
-                   "is available to spend across blueprints. Cloaking Device is always on.")
+                   "is available after each blueprint uses its unused energy. Cloaking Device is always on.")
         return content, view
 
     @staticmethod
@@ -2238,6 +2254,7 @@ class Combat:
         view.add_item(Button(label="Back", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{color}_phaseModuleBack_{pos}_{color}"))
         content = (f"{player['player_name']}, {ship_type.capitalize()}: "
+                   f"{max(0, PlayerShip(player, ship_type).energy)} unused blueprint energy; "
                    f"{remaining} offboard power left. Declared: {mode.get('cost', 0)} power.")
         return content, view
 
@@ -2316,7 +2333,7 @@ class Combat:
             mode[option] = bool(mode[option])
         mode["cost"] = Combat.phase_option_cost(mode)
         if not Combat.phase_mode_valid(game, color, pos, ship_type, mode):
-            await interaction.followup.send("Not enough power in the offboard pool.",
+            await interaction.followup.send("Not enough power from blueprint energy and the offboard pool.",
                                             ephemeral=True)
             return
         if mode["cost"]:
@@ -2357,7 +2374,7 @@ class Combat:
             tile.get("phaseModes", {}).pop(color, None)
         cost = Combat.phase_offboard_used(game, color, pos)
         if cost > player.get("wraithSouls", 0) - player.get("wraithPowerSpent", 0):
-            await interaction.followup.send("Not enough power in the offboard pool.", ephemeral=True)
+            await interaction.followup.send("Not enough power from blueprint energy and the offboard pool.", ephemeral=True)
             return
         player["wraithPowerSpent"] = player.get("wraithPowerSpent", 0) + cost
         ready[color] = True
