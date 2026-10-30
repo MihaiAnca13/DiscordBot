@@ -207,6 +207,10 @@ class BuildButtons:
             science -= player["trade_value"]
         else:
             money -= player["trade_value"]
+        # the 3:2 trade buys two materials, so an odd cost leaves one of them with the player
+        if spent > int(cost):
+            material = str(int(material) + spent - int(cost))
+            spent = int(cost)
         science = str(science)
         money = str(money)
         spent = str(spent)

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import discord
 from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Explore import ExploreButtons
@@ -149,6 +150,68 @@ class InfluenceButtons:
         return playerShipsCount > 0
 
     @staticmethod
+    def pendingInfluence(game: GamestateHelper, player):
+        """Sectors where this player was offered an influence disc and has not answered yet."""
+        offers = game.gamestate.get("influenceOffers", {})
+        return [pos for pos, offer in offers.items() if player["color"] in offer["colors"]]
+
+    @staticmethod
+    async def offerInfluenceDisc(game: GamestateHelper, channel, pos: str, colors, message: str):
+        """Offer the disc in a sector: placing it or declining answers the offer."""
+        view = View()
+        for color in colors:
+            suffix = f" ({game.getPlayerObjectFromColor(color)['name']})" if len(colors) > 1 else ""
+            view.add_item(Button(label=f"Place Influence{suffix}", style=discord.ButtonStyle.blurple,
+                                 custom_id=f"FCID{color}_addInfluenceFinish_{pos}"))
+            view.add_item(Button(label=f"Decline Influence Placement{suffix}", style=discord.ButtonStyle.red,
+                                 custom_id=f"FCID{color}_declineInfluence_{pos}"))
+        sent = await channel.send(message, view=view)
+        game.gamestate.setdefault("influenceOffers", {})[pos] = {
+            "colors": list(colors), "channel": channel.id, "message": sent.id}
+        game.update()
+
+    @staticmethod
+    def declineOffer(game: GamestateHelper, player, pos: str):
+        """Drop this player's offer; True once nobody is left waiting on the sector."""
+        offers = game.gamestate.get("influenceOffers", {})
+        offer = offers.get(pos)
+        if offer is not None and player["color"] in offer["colors"]:
+            offer["colors"].remove(player["color"])
+        closed = offer is None or not offer["colors"]
+        if closed:
+            offers.pop(pos, None)
+        game.update()
+        return closed
+
+    @staticmethod
+    async def deleteOfferMessage(interaction: discord.Interaction, offer):
+        """The offer lives in a combat thread, so the delete may come from another channel."""
+        try:
+            channel = await interaction.client.fetch_channel(offer["channel"])
+            await (await channel.fetch_message(offer["message"])).delete()
+        except discord.NotFound:
+            logging.getLogger(__name__).info(
+                "Influence offer message %s in channel %s was already deleted.",
+                offer["message"], offer["channel"])
+
+    @staticmethod
+    async def declineInfluence(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str):
+        pos = buttonID.split("_")[1]
+        if InfluenceButtons.declineOffer(game, player, pos):
+            await interaction.message.delete()
+        await interaction.channel.send(f"{player['player_name']} declined the influence disc in {pos}.")
+
+    @staticmethod
+    async def declinePendingInfluence(game: GamestateHelper, player, interaction: discord.Interaction):
+        """Ending a turn without answering an influence offer declines it."""
+        offers = game.gamestate.get("influenceOffers", {})
+        for pos in InfluenceButtons.pendingInfluence(game, player):
+            offer = offers[pos]
+            if InfluenceButtons.declineOffer(game, player, pos):
+                await InfluenceButtons.deleteOfferMessage(interaction, offer)
+            await interaction.channel.send(f"{player['player_name']} declined the influence disc in {pos}.")
+
+    @staticmethod
     async def startInfluence(game: GamestateHelper, p1, interaction: discord.Interaction):
         view = View()
         apt = p1.get("influence_apt", 2)
@@ -200,6 +263,10 @@ class InfluenceButtons:
                 and p1.get("influenceActionUsed", 0) >= p1.get("influence_apt", 2)):
             await interaction.channel.send(f"{p1['player_name']} has no Influence Activations left this action.")
             return
+        offer = game.gamestate.get("influenceOffers", {}).get(tileLoc)
+        if offer is not None and p1["color"] not in offer["colors"]:
+            await interaction.channel.send(f"{p1['player_name']} already declined the influence disc in {tileLoc}.")
+            return
         if p1["influence_discs"] < 1:
             await interaction.channel.send(f"{p1['player_name']} does not have any more influence disks.")
             return
@@ -210,6 +277,7 @@ class InfluenceButtons:
         if game.gamestate["board"][tileLoc].get("type", "") == "nebula":
             await interaction.channel.send("Nebula Sectors may never contain Influence Discs.")
             return
+        game.gamestate.get("influenceOffers", {}).pop(tileLoc, None)
         game.add_control(p1["color"], tileLoc)
         if p1.get("influenceActionActive"):
             p1["influenceActionUsed"] = p1.get("influenceActionUsed", 0) + 1
@@ -373,6 +441,8 @@ class InfluenceButtons:
                 game.gamestate["peopleToCheckWith"].remove(player_color)
         except KeyError:
             pass
+        for pos in InfluenceButtons.pendingInfluence(game, player):
+            InfluenceButtons.declineOffer(game, player, pos)
         game.update()
 
 

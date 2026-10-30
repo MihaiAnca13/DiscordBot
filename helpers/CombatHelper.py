@@ -325,12 +325,9 @@ class Combat:
                                      custom_id=f"FCID{winner}_removeInfluenceFinish_{pos}_graveYard"))
                 message = f"{playerName}, you may destroy all enemy influence and population automatically."
                 asyncio.create_task(thread2.send(message, view=view))
-                view2 = View()
-                view2.add_item(Button(label="Place Influence", style=discord.ButtonStyle.blurple,
-                                      custom_id=f"FCID{winner}_addInfluenceFinish_{pos}"))
                 message = (f"{playerName}, you may place your influence on the tile"
                            " after destroying the enemy population.")
-                asyncio.create_task(thread2.send(message, view=view2))
+                await InfluenceButtons.offerInfluenceDisc(game, thread2, pos, [winner], message)
                 view3 = View()
                 view3.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                                       custom_id=f"FCID{player['color']}_startPopDrop"))
@@ -371,15 +368,8 @@ class Combat:
             pos = tile3[1]
             player = game.getPlayerObjectFromColor(playerColor)
             playerName = player['player_name']
-            view2 = View()
-            for color in playerSide:
-                label = "Place Influence"
-                if len(playerSide) > 1:
-                    label = f"Place Influence ({game.getPlayerObjectFromColor(color)['name']})"
-                view2.add_item(Button(label=label, style=discord.ButtonStyle.blurple,
-                                      custom_id=f"FCID{color}_addInfluenceFinish_{pos}"))
             message = (f"{playerName}, you may place your influence on the tile after destroying the enemy population.")
-            asyncio.create_task(thread3.send(message, view=view2))
+            await InfluenceButtons.offerInfluenceDisc(game, thread3, pos, playerSide, message)
             view3 = View()
             view3.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                                   custom_id=f"FCID{player['color']}_startPopDrop"))
@@ -862,6 +852,66 @@ class Combat:
         return allocation
 
     @staticmethod
+    def getAIHitAllocation(game: GamestateHelper, colorOrAI, pos, speed, dice, computer):
+        """Choose targets for a whole AI salvo before any hits are applied.
+
+        shortcut: exhaustive allocation search grows exponentially; optimize
+        if AI salvo sizes become large.
+        """
+        ships = game.gamestate["board"][pos]["player_ships"][:]
+        targets_by_die = [
+            Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, ships, die[0], computer, pos, speed)
+            for die in dice
+        ]
+        models = {}
+        initial_damage = {}
+        for target in {target for options in targets_by_die for target in options}:
+            owner, ship_type = target.split("-", 1)
+            if owner == "ai":
+                advanced = game.gamestate["advanced_ai"]
+                worldsafar = game.gamestate["wa_ai"]
+                if ship_type + "_type" in game.gamestate:
+                    advanced = "adv" in game.gamestate[ship_type + "_type"]
+                    worldsafar = "wa" in game.gamestate[ship_type + "_type"]
+                model = AI_Ship(ship_type, advanced, worldsafar)
+            else:
+                player = game.get_player_from_color(owner)
+                model = PlayerShip(game.gamestate["players"][player], ship_type)
+            models[target] = model
+            initial_damage[target] = game.add_damage(target, pos, 0)
+        targets = sorted(models, key=lambda target: (models[target].cost, target), reverse=True)
+
+        best_score = None
+        best_allocation = [None] * len(dice)
+
+        def search(die_index, allocation, damage, destroyed):
+            nonlocal best_score, best_allocation
+            if die_index == len(dice):
+                candidate_score = (tuple(destroyed[target] for target in targets),
+                                   tuple(damage[target] for target in targets))
+                if best_score is None or candidate_score > best_score:
+                    best_score = candidate_score
+                    best_allocation = allocation[:]
+                return
+            options = list(dict.fromkeys(
+                target for target in targets_by_die[die_index]
+                if destroyed[target] < ships.count(target))) or [None]
+            for target in options:
+                next_damage = damage.copy()
+                next_destroyed = destroyed.copy()
+                if target is not None:
+                    next_damage[target] += dice[die_index][1]
+                    if next_damage[target] > models[target].hull:
+                        next_destroyed[target] += 1
+                        next_damage[target] = 0
+                allocation.append(target)
+                search(die_index + 1, allocation, next_damage, next_destroyed)
+                allocation.pop()
+
+        search(0, [], initial_damage, dict.fromkeys(targets, 0))
+        return best_allocation
+
+    @staticmethod
     async def applyRiftBackfire(game: GamestateHelper, colorOrAI, interaction: discord.Interaction, pos, totalDamage,
                                 deferEnd: bool = False):
         reports = []
@@ -936,49 +986,23 @@ class Combat:
                     msg += f"\nThis ship type has a +{shipModel.computer} computer."
                 reports.append(msg + msg2)
                 oldNumPeeps = len(Combat.findPlayersInTile(game, pos))
-                for die in dieNums:
-                    tile_map = game.gamestate["board"]
-                    player_ships = tile_map[pos]["player_ships"][:]
+                allocation = Combat.getAIHitAllocation(game, colorOrAI, pos, speed, dieNums,
+                                                       shipModel.computer)
+                for die, target in zip(dieNums, allocation):
                     dieNum = die[0]
                     dieDam = die[1]
-                    hittableShips = []
-                    hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
-                                                                        dieNum, shipModel.computer, pos, speed)
-                    if all([dieNum + shipModel.computer > 5, len(hittableShips) == 0, oldNumPeeps == len(Combat.findPlayersInTile(game, pos))]):
+                    hittableShips = Combat.getOpponentUnitsThatCanBeHit(
+                        game, colorOrAI, game.gamestate["board"][pos]["player_ships"][:],
+                        dieNum, shipModel.computer, pos, speed)
+                    if (dieNum + shipModel.computer > 5 and not hittableShips
+                            and oldNumPeeps == len(Combat.findPlayersInTile(game, pos))):
                         message = (f"The computer bonus for a die that rolled a {dieNum}"
                                    " was cancelled by the shields on each of the opponents ships.")
                         reports.append(message)
-                    if len(hittableShips) > 0:
+                    if target is not None:
                         update = True
-                        if len(hittableShips) > 1:
-                            ship = hittableShips[0]
-                            oldShipVal = 0
-                            ableToKillSomething = False
-                            for option in hittableShips:
-                                damageOnShip = game.gamestate["board"][pos].get("damage_tracker", {}).get(option, 0)
-                                shipType = option.split("-")[1]
-                                shipOwner = option.split("-")[0]
-                                player = game.get_player_from_color(shipOwner)
-                                shipModel2 = PlayerShip(game.gamestate["players"][player], shipType)
-                                if ableToKillSomething:
-                                    if dieDam + damageOnShip > shipModel2.hull and shipModel2.cost > oldShipVal:
-                                        oldShipVal = shipModel2.cost
-                                        ship = option
-                                else:
-                                    if dieDam + damageOnShip > shipModel2.hull:
-                                        oldShipVal = shipModel2.cost
-                                        ship = option
-                                        ableToKillSomething = True
-                                    else:
-                                        if shipModel2.cost > oldShipVal:
-                                            oldShipVal = shipModel2.cost
-                                            ship = option
-                            buttonID = f"assignHitTo_{pos}_{colorOrAI}_{ship}_{dieNum}_{dieDam}"
-                            await Combat.assignHitTo(game, buttonID, interaction, False, reports=reports)
-                        else:
-                            ship = hittableShips[0]
-                            buttonID = f"assignHitTo_{pos}_{colorOrAI}_{ship}_{dieNum}_{dieDam}"
-                            await Combat.assignHitTo(game, buttonID, interaction, False, reports=reports)
+                        buttonID = f"assignHitTo_{pos}_{colorOrAI}_{target}_{dieNum}_{dieDam}"
+                        await Combat.assignHitTo(game, buttonID, interaction, False, reports=reports)
         await Combat.sendCombatReports(interaction.channel, reports)
         hitsToAssign = 0
         if "unresolvedHits" in game.gamestate["board"][pos]:
@@ -1075,11 +1099,14 @@ class Combat:
         if speed != 1000 and pairing and colorOrAI not in pairing:
             await interaction.channel.send("The combat pairing changed. Press Refresh Image and roll again.")
             return
-        if tile.get("phaseModuleColors") and not tile.get("phaseModulePrompted"):
-            await interaction.channel.send("Declare Phase Module options before rolling initiative.")
-            return
         if Combat.technoMagicPending(game, pos):
             await interaction.channel.send("Finish your Techno-Magic upgrades before rolling initiative.")
+            return
+        if speed != 1000 and len(Combat.currentPairing(game, pos)) < 2:
+            await interaction.channel.send("The combat in this sector has already ended.")
+            return
+        if tile.get("phaseModuleColors") and not tile.get("phaseModulePrompted"):
+            await interaction.channel.send("Declare Phase Module options before rolling initiative.")
             return
         if tile.get("ghostsRetreatPending"):
             await interaction.channel.send("A retreat is being resolved; choose its destination first.")
@@ -1706,12 +1733,9 @@ class Combat:
         await interaction.message.delete()
         if len(PopulationButtons.findFullPopulation(game, pos)) == 0:
             game.remove_control(owner, pos)
-            view2 = View()
-            view2.add_item(Button(label="Place Influence", style=discord.ButtonStyle.blurple,
-                                  custom_id=f"FCID{player['color']}_addInfluenceFinish_" + pos))
             message = (f"{player['player_name']}, you may place your influence"
                        " on the tile now that you have destroyed all the enemy population.")
-            await interaction.channel.send(message, view=view2)
+            await InfluenceButtons.offerInfluenceDisc(game, interaction.channel, pos, [player['color']], message)
             view3 = View()
             view3.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                                   custom_id=f"FCID{player['color']}_startPopDrop"))
@@ -1757,6 +1781,8 @@ class Combat:
 
     @staticmethod
     async def promptNextSpeed(game: GamestateHelper, pos: str, channel, update: bool, repeat: bool = False):
+        if len(Combat.currentPairing(game, pos)) != 2:
+            return
         tile = game.gamestate["board"].get(pos, {})
         if (Carapace.has_pending_missiles(game, pos) or Combat.technoMagicPending(game, pos)
                 or (tile.get("phaseModuleColors") and not tile.get("phaseModulePrompted"))):
@@ -2457,19 +2483,12 @@ class Combat:
             if owner == 0:
                 if Combat.discoveryTileClaimable(game, pos):
                     await Combat.offerDiscoveryTile(game, interaction.channel, pos, winner)
-                view2 = View()
-                for color in survivors:
-                    label = "Place Influence"
-                    if len(survivors) > 1:
-                        label = f"Place Influence ({game.getPlayerObjectFromColor(color)['name']})"
-                    view2.add_item(Button(label=label, style=discord.ButtonStyle.blurple,
-                                          custom_id=f"FCID{color}_addInfluenceFinish_{pos}"))
                 message = f"{playerName}, you may place your influence on the tile."
                 if len(survivors) > 1:
                     message = (f"{playerName}, your Alliance may place an influence disc here. "
                                "The buttons are in order of entry to the sector, so the first of you to "
                                "want the disc should take it.")
-                asyncio.create_task(interaction.channel.send(message, view=view2))
+                await InfluenceButtons.offerInfluenceDisc(game, interaction.channel, pos, survivors, message)
                 view3 = View()
                 view3.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                                       custom_id=f"FCID{player['color']}_startPopDrop"))
@@ -2492,12 +2511,9 @@ class Combat:
                                          custom_id=f"FCID{winner}_removeInfluenceFinish_{pos}_graveYard"))
                     message = f"{playerName}, you may destroy all enemy influence and population automatically."
                     asyncio.create_task(interaction.channel.send(message, view=view))
-                    view2 = View()
-                    view2.add_item(Button(label="Place Influence", style=discord.ButtonStyle.blurple,
-                                          custom_id=f"FCID{winner}_addInfluenceFinish_{pos}"))
                     message = (f"{playerName}, you may place your influence on the"
                                " tile after destroying the enemy population.")
-                    asyncio.create_task(interaction.channel.send(message, view=view2))
+                    await InfluenceButtons.offerInfluenceDisc(game, interaction.channel, pos, [winner], message)
                     view3 = View()
                     view3.add_item(Button(label="Put Down Population", style=discord.ButtonStyle.gray,
                                           custom_id=f"FCID{player['color']}_startPopDrop"))
