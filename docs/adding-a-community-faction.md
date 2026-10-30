@@ -1,125 +1,284 @@
 # Adding a community faction
 
-The generic process for adding a faction from `community-races/factions/<name>/` to the bot,
-with every correction made so far folded in. Keep this file free of faction-specific data —
-a faction's numbers live in `data/factions.json`, its home in `data/sectors.json`, its rules in
-the commit that added it, and its behaviour in its tests. The sections below are what to do and
-what has gone wrong before, not what any one faction is.
+The process this repo follows to add a faction from `community-races/factions/<name>/` to the bot,
+and the pitfalls that have actually bitten us. It is kept generic on purpose: a faction's numbers
+belong in `data/factions.json`, its home in `data/sectors.json`, its rules text in the commit, and
+its behaviour in its tests. The `add-faction` skill's `CHECKLIST.md` mirrors this process; if the
+two disagree, this file wins and both get updated.
 
-## Integration checklist
+A faction is done when its own tests pass, the verification pass below has come back clean, every
+throwaway probe has been triaged, and the render check has been done by eye.
 
-- **Source inventory.** List the faction folder first. The usual set is `<key>_{info,board,home,ambassador,icon}`, in mixed `.jpg`/`.png`, and folders do ship files missing. File names are not reliable: a folder can name the rules card `*Back`, the board `*`, the tile `*Sector` and the emblem `*Token`, so identify each file by what is in it (the card with the ability boxes is the info card) and say what you found. Note what exists; if something the implementation needs is missing (a home tile, a portrait), say so and ask — never improvise an asset.
-- **Rules text.** The card and the board are the only rules source. Transcribe the card verbatim (setup resources, colony ships, technologies, sector contents, activations, trade value, reputation track, every ability with its exact wording) and flag anything illegible instead of guessing. Read the card yourself as well as delegating the transcription: crop the card at native resolution and zoom on the numbers that matter. Do this for every image that carries rules text.
-- **Decode the board against an implemented faction's board.** Faction boards are made from a shared template: put the new board next to an implemented one of the same size and the *differences are the rule deltas*. This is how the reputation-slot frames (ambassador frame present or absent) and the action bubbles above the action circles (how many colony ships an Influence action flips) are read; neither is written anywhere else.
-- **Faction data** in `data/factions.json`: starting resources and colony ships, home sector, action limits, trade value, influence discs and tracks, technologies, reputation track, ship costs, stock, blueprints, population cube counts. Match the existing field set and key order. Put shared facts and reusable capabilities in the file (see *Faction facts in the data* below) and read them through `helpers/FactionData.py`. Keep unique behavior in its existing handler when that is simpler.
-- **Home sector** in `data/sectors.json` plus `images/resources/hexes/<id>.png`. Pick the number the artwork prints if it is free, otherwise a free one; a printed "SECTOR nnn" can be template art. Give the tile its VP value, artifact flag, population squares with their snap coordinates, wormholes and the ship structure snaps. The tile image recipe used so far: crop the source square image to the hexagon (dropping the black margins) and resize to 1024x890 RGBA. Derive each `*_snap` from the printed square and verify by rendering the tile.
-- **Population cube counts are not printed.** Every existing faction's track starts at 12 cubes per resource, minus one cube for every cube the setup places on the home sector's squares, including an Advanced square that a starting technology unlocks. Verify against the other factions' data before copying a number.
-- **Selection.** Set `"community": true` and a `"setup_color"` in the faction's data (it then appears only with `community_factions` enabled, respects drafted-away factions and explicit bans, and neither causes nor receives colour blocks), and add it to the faction choices in `commands/setup_commands.py`. Post its board plus its rules as text in the faction reference thread; do not post a separate reference/card image.
-- **Colours.** New colours are not supported; prefer one of the existing setup colours (blue, red, green, yellow, purple, white, pink, brown, teal). A community faction may share a colour with a standard faction — the draft allows both — and setup hands the second one another free colour. Standard factions share colours with their Terran equivalents on purpose.
-- **Name lookups.** Give the faction an `"artwork"` key in its data; `helpers/FactionData.py` derives images, emoji and blueprint keys from it (data key and artwork key may differ, e.g. `exl`/`exile`). Do not add a name table anywhere.
-- **Artwork.** Under `images/resources/components/`: `factions/<art>_{board,info,ambassador}.png`, `layouts/factionImages/<art>_image.png` (the icon), `layouts/faction_titles/name_trade_<art>.png`, `layouts/blueprints/classes/<art>_{interceptor,cruiser,dreadnought,starbase}_class.png`. The class images are 300x115 (dreadnought 315x148), transparent, white silhouette + two-line class name + initiative chevrons, and are pasted over the blueprint art — they usually have to be composed from the board and then verified by rendering them at the paste offset. The board may print neither the word CLASS nor the initiative chevrons; reuse those white glyphs from an existing class image and compose the ship name from the board's own stencil lettering. The chevrons are the base initiative, not the total printed next to the initiative arrow: a standard ship prints 2/1/0/4 for interceptor/cruiser/dreadnought/starbase, so count them off a standard board rather than off the number in the corner. Set `"portrait_image": true` in the faction data so `DrawHelper.faction_portrait` uses the dedicated `factionImages/<art>_image.png` instead of the crop used for standard boards.
-- **Abilities: reuse before building.** For every ability, grep for the closest existing flow *before* writing anything and route the ability through it; only add shared logic when the grep comes up empty. Name the flow each ability reuses in the commit message. Prefer a declared ability and a shared implementation when the behavior fits an existing pattern; a unique faction behavior can keep a direct name check in its existing handler. Write down the shared state machines the abilities can reach (see below) and check each one by hand.
-- **A setup action before the game starts.** A card action the bot models happens in the pre-game phase, before the first turn: declare its capability in faction data and add its setup action to `PreGameButtons.tasksForPlayer` in `Buttons/PreGame.py` and route it to the flow that already does that thing. Advance the task only after a successful action; return the next task name when a follow-up choice is needed. The game waits for it, so the prompt has to be completable on its own — and the flow must not offer a turn-only button, because there is no turn to go back to yet.
-- **Tests.** Data (fields, tech, parts), home sector (data, tile art, a render), draft visibility/colour/bans, artwork existence and size, each ability, and a real first round through setup. Add the faction as another player to the existing multi-faction first-round test rather than writing a new round test; it also catches setup hooks clashing. The first round loads some art only inside fire-and-forget render tasks, where a failure is swallowed — the artwork existence/size test is what actually covers those files. Any test that counts factions (draft buttons) needs updating in the same change.
-- **Verify.** Run the *full* suite, not the faction's tests. Grep the callers of every shared file touched and confirm existing factions are unchanged, including the shared population-removal paths and the draft. Re-read the ability text next to the code. Confirm every referenced artwork path exists and matches its source. Report anything uncertain from the transcription for a human to check against the physical card.
-- **Look at the render.** Run the first-round test with `--basetemp=<dir>`, then `local_debug/render_show_game.py <game_id> <dir>` on the saved game, and check the home tile, the player area and the blueprints by eye. Tests stub the art, so only this shows the picture.
-- **Branch hygiene.** Base the work on the latest base branch, commit as you go, and before the final report fetch/merge the base branch again and re-check the faction's wiring against anything that moved (draft rules, setup sends and shared helpers have all moved under a faction once).
+## The process
+
+1. **Inventory the source folder before planning.** List it and write down what exists. Mixed
+   `.jpg`/`.png`, missing assets and themed file names are normal: the rules card can be `*Back`,
+   the board can have no suffix, the tile can be `*Sector` and the emblem `*Token`. Identify each
+   file by what is in it (the card with the ability boxes is the info card) and record the mapping
+   in the commit message. If something the implementation needs is missing, ask; never improvise
+   an asset.
+2. **Read the rules images yourself, verbatim.** Crop at native resolution and zoom; write down
+   setup resources, colony ships, technologies, sector contents, activations, trade value,
+   reputation track and every ability's exact wording. Do this for every image that carries rules
+   text — some factions ship several info pages. In parallel, delegate a second transcription as a
+   cross-check and tell the delegate to flag anything illegible rather than normalise it. Flag
+   disputed readings instead of guessing.
+3. **Decode the board against an implemented board of the same template.** The differences are the
+   rule deltas: reputation-slot frames (ambassador frame present, absent, or mixed), the bubble
+   above an action circle (how many colony ships an Influence action flips), printed glyphs and
+   starting technology icons. None of that is written on the card.
+4. **Reconcile against the base rulebook and the existing code.** Check the rulebook for whatever
+   base mechanic each ability modifies, then grep for the closest existing flow *before* writing
+   anything. Route the ability through that flow; only add shared logic when the grep comes up
+   empty. Write down the shared state machines each ability can reach, as plain-language risk
+   guesses, and put them in the commit message with the flow each ability reuses.
+5. **Implement in independent chunks.** Data entry, home tile, artwork, selection wiring, each
+   ability, tests: fan the non-overlapping chunks out to parallel fast subagents, giving each one
+   the transcribed rule text, the flow to reuse, and the exact constants (snap coordinates, crop
+   boxes, pixel sizes) measured by you rather than by the worker. Anything touching a shared state
+   machine (population, prompts, scoring, draft/colour, setup hooks, ship costs) stays with the
+   lead or goes to exactly one worker. Any chunk that touches a risk guess also gets one throwaway
+   probe test aimed at that edge case, clearly marked. For every non-trivial branch, one real test.
+6. **Review the merged diff against `AGENTS.md`.** A new abstraction with one caller, a parallel
+   path where an existing flow would do, dead buttons or state from an earlier design. Where an
+   ability was routed into an existing flow, confirm that flow's validation and error handling
+   still cover the merged-in case.
+7. **Verify with a second, separate pass.** It checks, it does not build. In parallel:
+   - rule accuracy: the transcribed rules and board readings next to the code, including every
+     exclusion or narrowing an earlier review added, re-read against the exact wording;
+   - regression: diff against the base branch, grep the callers of every shared file touched,
+     confirm other factions are unchanged, run the *full* suite including the probes, and check
+     the draft, colour allocation and setup hooks;
+   - probe triage: a probe that failed found a real shared bug — fix it and keep the test without
+     its throwaway marker; a probe that passed is deleted;
+   - assets: every referenced artwork path exists and matches its source (pixel or hash compare,
+     not just dimensions), and this doc is still generic with any new shortcoming folded in.
+8. **Look at the render.** Run the first-round test, render the saved game through
+   `webui/render.py` (`render_board` / `render_panel`; there is no `local_debug` CLI), and check
+   the home tile, the player area and the blueprints by eye. Tests stub the art, so this is the
+   only check of the picture.
+9. **Report.** What was added, which flow each ability reuses, what the checks found, and anything
+   uncertain from the rules images that a human should confirm against the physical card.
+
+Work from the latest base branch and commit as you go. Before the final report, merge the base
+branch again and re-check the wiring against anything that moved: draft rules, setup sends and
+shared helpers have all shifted under a faction before.
+
+## Where things live in this repo
+
+| Piece | Location |
+|---|---|
+| Faction data and shared facts | `data/factions.json`, read through `helpers/FactionData.py` |
+| Home sector data | `data/sectors.json` |
+| Home tile art | `images/resources/hexes/<id>.png`, plus `hexes/numberless/<id>.png` when the printed number must go |
+| Shared artwork | `images/resources/components/factions/`, `layouts/factionImages/`, `layouts/faction_titles/`, `layouts/blueprints/classes/` |
+| Setup command and faction list | `commands/setup_commands.py` (`factionChoices`, autocomplete) |
+| Reference-thread text | `helpers/FactionReference.py` (hand-written per faction: rules as text plus the board file name; the board is the only image posted) |
+| Draft, colours, pagination | `Buttons/Draft.py` |
+| Pre-game setup actions | `Buttons/PreGame.py` (`tasksForPlayer`) |
+| Population paths | `Buttons/Population.py`, `helpers/GamestateHelper.remove_pop`, `helpers/PlayerHelper.upkeep` |
+| Prompt resolution | `listeners/ButtonListener.py` (`ANSWER_BUTTONS`) |
+| Drawing | `helpers/DrawHelper.py` (`player_area`, `faction_portrait`, `draw_blueprint_slots`, `draw_tech_track`, `board_tile_image`) |
+| Display sizes | `helpers/ImageCache.py` (`get_image_size`) |
+| Tests | `tests/`, including the per-batch first-round tests |
+
+Selection is data-driven: `"community": true` and a `"setup_color"` make an entry visible only with
+`community_factions` enabled, respect drafted-away factions and bans, and neither cause nor receive
+colour blocks. `SetupCommands.factionChoices` is a separate hardcoded list and a test keeps it in
+sync with the data. The draft's 25-button paging and the setup command's autocomplete already exist;
+don't re-add them, don't regress them.
+
+Colours: new ones are unsupported. Use an existing setup colour; a community faction may share one
+with a standard faction and setup hands the second one a free colour.
 
 ## Faction facts in the data
 
-Shared faction facts and reusable capabilities belong in `data/factions.json`
-and are read through `helpers/FactionData.py`. Reuse existing fields and flows
-when they fit; do not invent a data shape or hook for hypothetical factions.
-The fields in use:
+Shared facts and reusable capabilities belong in `data/factions.json` and are read through
+`helpers/FactionData.py`. Reuse an existing field when it fits; don't invent a shape for a
+hypothetical faction. The fields in use:
 
 | Field | Read by | Meaning |
 |---|---|---|
-| `artwork` | `FactionData.artwork_name` | image/emoji/blueprint key (differs from the data key: `exl`/`exile`) |
-| `name_aliases` | `FactionData.BY_NAME` | optional old names that resolve to the same faction facts and artwork |
+| `artwork` | `FactionData.artwork_name` | image/emoji/blueprint key (the data key and artwork key may differ) |
+| `name_aliases` | `FactionData.BY_NAME` | optional old names that resolve to the same facts and artwork |
 | `setup_color` | `DraftButtons.getColor` | colour the draft hands the faction |
 | `community` | `DraftButtons.getDraftButtons` | draft only with `community_factions` on |
 | `starting_ships` | `GamestateHelper.setup_finished` | ships on the home sector at setup (default `["int"]`) |
-| `influence_colony_ships` | `Buttons/Influence.py`, the player area drawing | colony ships one Influence action flips (default 2) |
-| `reputation_only_slots` | `PlayerHelper.is_reputation_only_slot` | indices of the reputation track with no ambassador slot |
-| `blueprint_slots` | `DrawHelper.draw_blueprint_slots` | per ship (`interceptor`/`cruiser`/`dread`/`starbase`), one `[column, half-row]` cell per parts entry when the printed slot shape is not the standard one |
+| `influence_colony_ships` | `Buttons/Influence.py`, `DrawHelper.player_area` | colony ships one Influence action flips (default 2) |
+| `reputation_only_slots` | `PlayerHelper.is_reputation_only_slot` | reputation-track indices with no ambassador slot |
+| `blueprint_slots` | `DrawHelper.draw_blueprint_slots` | per ship, one `[column, half-row]` cell per parts entry when the printed slot shape is not the standard one |
 | `portrait_image` | `DrawHelper.faction_portrait` | use `factionImages/<art>_image.png` instead of the standard board crop |
 | `abilities` | `FactionData.has(player, "...")` | named abilities the implementation is guarded by |
-| `vp_per_*` | `DrawHelper.get_public_points` | end-of-game points per owned tile, artifact tile, shrine, orbital population or Ancient ship |
-| `tech_track`, `tech_track_max`, `tech_track_vp` | `FactionData.tech_track`, `tech_track_max`, `tech_track_vp` | printed research discount by tiles already on the track, track length when it is not seven, and end-game VP by tile count |
-| `midas_touch_costs` | `TurnButtons.midasTouch` | the printed money costs per action for the paid extra activation |
-| `call_to_arms_materials` | `GamestateHelper.destroy_ship` | materials gained per ship type destroyed while the sector is not yours |
+| `vp_per_*` | `DrawHelper.get_public_points` | end-of-game points per owned tile, artifact tile, shrine, orbital population, Ancient ship, centre |
+| `tech_track`, `tech_track_max`, `tech_track_vp` | `FactionData.tech_track`, `tech_track_max`, `tech_track_vp` | printed research discount by tiles already on the track, track length when it is not seven, end-game VP by tile count |
+| `midas_touch_costs` | `TurnButtons.midasTouch` | money costs per action for the paid extra activation |
+| `call_to_arms_materials` | `GamestateHelper.destroy_ship` | materials per ship type destroyed while the sector is not yours |
 | `tech_masters_extra` | `ResearchButtons.calculate_cost` | the first wrong-tray extra and the step added to each later use |
 | `discovery_part_vp`, `discovery_part_ship_cost`, `money_trade_ratio`, `reputation_draw_money` | scoring, `PlayerHelper.get_ship_cost`, trade and reputation flows | the named number where an ability is a count |
 
-An ability whose behavior is a flow (Techno-Magic, Power of the Ancients,
-two discovery choices) keeps its implementation where the flow lives — the
-code only asks whether the player has it. Grep for `FactionData.has` before
-inventing an id: an ability that already exists has a guard at its
-implementation. Move repeated name checks into data when that simplifies the
-existing code. If a quirk is unique and has no useful shared data shape, keep
-it in its existing handler and explain the choice in the commit message.
-Numbers a faction accumulates during play live on the player instead (Magellan's `magPartPoints`,
-Lyra's `shrine_type`), as fields setup copies in for that faction only.
+An ability whose behaviour is an existing flow (a research discount, a discovery choice, a
+reputation draw) keeps its implementation where that flow lives; the code only asks whether the
+player has it. Grep for `FactionData.has` before inventing an id. Numbers a faction accumulates
+during play live on the player instead, as fields setup copies in for that faction only.
 
-## Shortcomings to expect (each one happened)
+Population cube counts are not printed: every track starts at 12 per resource minus one cube for
+each cube setup places on the home sector, including an Advanced square that a starting technology
+unlocks. Verify against the other factions rather than copying a number.
 
-- **A filed name does not say what the file is.** A faction folder can arrive with every asset renamed by theme: the board without a suffix, the rules card as `...Back`, the home tile as `...Sector`, the emblem as `...Token`, and the ambassador sheet named after the faction rather than `_ambassador`. Identify by content, then record the mapping in the commit message.
-- **The card can overrule the board's blueprint.** A card that says "Standard Ships" wins over a printed slot that would leave a ship without a weapon: on one board the interceptor's cannon box was drawn as a Hull. Copy the standard parts arrays (the other three blueprints matching standard is the confirmation) and flag the print.
-- **A printed tech track's first cell can be blank.** A blank first cell is the starting-tech space and reads as a 0 discount, not a missing slot; the remaining cells give the array. Identify the glyphs on a board whose values are known before writing the array: the board font draws 5, 6 and 8 alike, and a first reading of one row (and of the home sector's printed number) was off by one because of it. Also do not copy a neighbouring faction's array just because its board looks the same — an existing identical-looking row carries a value one cell off.
-- **"Make the attacker reroll" is a deferred defender prompt.** An ability that reacts to someone else's die cannot be resolved inside the attack roll: store the die's parameters with a token on the tile (the Carapace-shield pending-prompt pattern), keep the hit unassigned while it is pending, let the defender's answer reroll or accept, and close the pairing from the resolver when the last pending entry is answered. A reroll re-derives hit and damage from the stored computer/speed, not from the original damage number.
-- **An engagement-round counter must coexist with the first-shot phase.** An ability limited to "the first engagement round" cannot just count wraps of the speed list: with a first-shot faction in the game the phase switch also ends a pass. Increment only when the phase is over (or absent), or the ability fires in the wrong round.
-- **A printed quantity with no verb.** A note or bubble printed next to an action can be a *replacement* for the standard value, not an addition (`+1 BUI` next to `2 BUI` was an addition on one card, a bare `1` next to the standard `2` was a reduction on another). Compare the same spot on an official or implemented board before choosing.
-- **Slot types are art, not text.** Whether a sector's or reputation slot is reputation-only, ambassador-only or mixed is only visible in the board's frame art, and the three renderings differ: a plain gold shield is reputation-only, a notched frame with a hex-grid fill is ambassador-only, and a gold shield inside the notched frame is mixed. Compare the same slot position against an implemented board whose data is known, not against a description of the card. Zoom on the *frame*: a thin outline hugging the shield is not the notched frame, and a shield with no frame at all is reputation-only.
-- **The card and the board can disagree in tone, not in content.** Where a card note is ambiguous, the board's iconography is the tiebreak; where both are silent (ability timing, "any type" choices), write the reading down and flag it in the report.
-- **Derived artwork is not shipped.** Expect to compose the title and class images from the board; keep them at the sizes the existing ones use and verify visually, not just by file size.
-- **The home tile may not be a hexagon on black.** Some factions ship a full-bleed scene instead. Reconstruct the hexagon from the straight clips printed across the art — they are the tile edges — keep the canvas inscribed so the left and right tips survive, and verify by rendering. Do not assume the printed ring marks are population squares: a tile can print them as artifact-key markers while its real squares sit elsewhere. The card's Starting System icons list the square types. Setup fills every non-advanced home **resource** square with a cube, as on the base homes, whether or not the art prints one, plus any Advanced square a starting technology unlocks; the population tracks drop by the same count. A neutral square is a neutral planet, not a starting resource, and stays empty unless an ability fills it.
-- **No emoji token.** A new faction has no `<key>token` emoji, so its token falls back to ❓ until one is uploaded. Cosmetic; note it.
-- **Both transcriptions can be wrong.** The lead's reading and the delegated cross-check have each misread the same printed track, in opposite directions. Settle a disputed number with a sharpened high-zoom crop, and where a glyph stays ambiguous, template-match it against the same circle on a board whose value is known. Never write data from a reading the other reader disputed without re-verifying at high zoom.
-- **New answer-style prompts.** A prompt that resolves once must be added to `ANSWER_BUTTONS` in `listeners/ButtonListener.py`, and its handler must refuse a second resolution on its own as well.
-- **Extra population locations.** An ability that puts a cube on the influence disc (or any non-planet location) needs: a tile field for the cube, drawing at the disc rather than a planet snap, the normal population-track bookkeeping, and the neutral-style return path so losing the sector, combat hits, elimination, the upkeep graveYard and the population-gone check all handle it. List it in `PopulationButtons.findFullPopulation` and check `GamestateHelper.remove_pop` and `PlayerHelper.upkeep`.
-- **Faction counts in tests.** Adding a faction breaks assertions that count draft buttons or faction lists; fix them in the same change.
-- **Check the shape of lookup tables a new branch adds.** A per-type value that should be a list of ids but is a string is iterated character by character, and an `any()`/`all()` over it silently passes. One instrumented run through the real flow catches it.
-- **Press the colour the setup actually assigned.** generalSetup hands out colours by getColor order with a pop(0) fallback, so a faction's colour depends on which factions are in the game; a first-round test copied from another faction presses the wrong FCID colour and the press silently no-ops.
-- **Per-combat abilities.** "At the start of each combat" means `Combat.startCombat`, which reruns for every new pairing on a multi-player tile — not `startCombatThreads`, which only runs once per tile. Anything temporary the ability installs must come off at the next `startCombat` as well as in `declareAWinner`.
-- **Changing a shared button id breaks live games.** Buttons already posted keep their old `custom_id`; a parser that now expects an extra field must still accept the old shape.
-- **Reusing a turn flow for a setup hook.** Turn actions carry turn-only parts (the "using their turn" message, trading for the cost, Finish/Restart). Gate them with a flag rather than copying the flow.
-- **A new mode of a shared flow needs that flow's Undo.** Without it a misclick cannot be taken back, and a once-only guard then refuses the retry.
-- **Rules the board prints must reach the player area.** `DrawHelper.player_area` draws some board numbers from data (action activations, the colony ships one Influence action flips) and some from hardcoded faction lists. An ability that changes the latter needs the drawing updated too — and a number that lives in two places (rule and drawing) belongs in `factions.json`. The tech-track discounts are printed into the shared `player_layout.png`, not drawn from `tech_track`, so a faction with a custom or shorter track still shows the standard values in the player area; the research menu uses the data, but the picture is wrong. Either draw the track from data or record the gap explicitly.
-- **Do not narrow an ability beyond its text.** A reading that excludes a case the wording covers (a grey square from "any Advanced planet") was once written as a fix; check every exclusion against the exact text, and flag it rather than decide it.
-- **The tile number box.** Sectors without `images/resources/hexes/numberless/<id>.png` get `masks/banner.png` pasted over the printed nameplate with the map position on top. Home art with no nameplate there shows the box as a cutout; a numberless version (nameplate removed) avoids it.
-- **First-faction over-engineering.** The first faction built a parallel flow for an ability that an existing path already covered, and had to be simplified later. Hence the reuse-first rule above; and never scope the abilities out of the notes — the ability text is the part most likely to be got wrong silently.
-- **Class images are shown much smaller than they are committed.** `ImageCacheHelper` resizes them to about 90×33 in the player area; a name that is legible at 300×115 can disappear at display size. Check the composed image at the paste size, and give light blueprint headers a dark outline.
-- **Held sectors need two counts.** A reserve that is held off the board must be excluded from the outer-rim cleanup *and* included in the explore-position enumeration, or the last held tile becomes unplaceable when its deck empties.
-- **Copy a pairing before extending it.** `pairing = attacker; pairing += defender` mutates the tile's combat sides. Use `list(attacker) + list(defender)` wherever the result is only a local list.
-- **A home nameplate can sit over a population square.** A full-bleed home tile may need a numberless variant plus a per-tile number position; otherwise the standard banner covers a square or leaves a second printed number visible.
-- **`starting_ships` does not decrement `ship_stock`.** Set the stock to the physical count minus the ships setup places; do not copy the default array when a faction starts with a non-Interceptor.
-- **Check the body of a shared flag, not its name.** A flag such as a retreat penalty may still add draws for destroyed ships; a faction whose wording removes every draw needs its own guard in the shared reputation function.
-- **Blueprint cell counts come from the board render.** Plans and printed layouts can disagree with the actual number of part rectangles; count them from the art before writing the parts array. When the printed slot shape differs from the standard blueprint, give the faction `blueprint_slots` (one `[column, half-row]` cell per parts entry, see `DrawHelper.draw_blueprint_slots`) instead of adding name branches or coordinate overrides.
-- **Reconcile faction counts once per merge wave.** Each branch updates draft-count assertions to its own total; after merging several factions, set the shared count once and verify that every faction still appears with the right colour.
-- **Initiative changes need every speed path.** An ability that adds or changes initiative must be applied consistently in the speed enumeration, the manual-button validity check, the reroll path and the end-of-combat checks; fixing only the prompt leaves stale buttons live.
-- **A deferred hit still has to close the pairing.** A target button whose resolution is deferred must still call the end-of-combat check when it removes the last ship of a side; otherwise the combat waits forever after the button is pressed.
-- **A free activation's filter belongs in the next button id.** If a free move is restricted to one ship class, put that filter into the emitted `moveFrom` id and test the id the UI actually emits, not a hand-written equivalent.
-- **A displayed action count must be enforced.** `influence_apt`, `build_apt` and the other activation numbers are not just labels; the flow must cap the number of placements/removals/units, including the second and third presses.
-- **A built-in part slot must be excluded from upgrades.** If a faction's blueprint prints a fixed module in a slot, omit that slot from the part menu and reject a forged/stale selection; otherwise the player gets the module's benefit plus a free replacement part.
-- **Income from a placed piece must be counted before bankruptcy.** A Harvester-like income source that arrives at upkeep has to be applied before the bankruptcy check, or a player is wrongly forced to trade/remove control.
-- **A custom blueprint panel is not the shared template.** Only `blueprint_<ship>` files are resized to the paste area; a faction-specific panel either keeps its native size or uses the shared frame. Check the composed player area, not just the file dimensions.
-- **A no-combat bombing prompt still needs the weapon/power choice.** If the card lets a faction use a bombing technology outside a normal combat, offer that choice in the bombing prompt instead of claiming the combat-start declaration rules it out.
-- **A held home tile may need a per-tile number position.** Removing the printed sector number is not enough if the nameplate remains; a `number_snap` or an inpainted nameplate keeps “PLANET SECTOR 314” from appearing on the map.
-- **The draft has a hard 25-component limit.** With enough community factions the draft exceeds one message; paginate it (a "More" button carrying the next offset) instead of adding a 26th button, and test that the pages do not overlap.
-- **The setup command has a 25-choice limit per option too.** `/setup game` declares the faction list on nine options; once there are more than 25 factions Discord rejects the command. Switch those options to autocomplete and validate the typed value in the handler, rather than trimming factions from the list.
-- **Every ship part needs its own upgrade icon.** `DrawHelper.player_area` loads `upgrades/<part name>.png`; a tech-card image is a different file and does not satisfy it. Stubbed-art tests hide the miss — the first-round test must assert every file it asks for exists on disk.
-- **A home sector number can already be taken.** Use the number the artwork prints only if it is free; otherwise pick a free sector and say which number the bot uses in the faction reference text. Never renumber a faction already in play.
-- **A track read left-to-right is stored right-to-left.** Discount arrays are indexed by how many tiles are already on the track, so the printed first slot is the last array entry. Reverse the reading before entering it, and verify the first-tech discount against the board (a faction can start at -1 rather than 0).
-- **A starting technology's passive still applies.** Setup copies a faction's starting techs into the track without routing them through `playerResearchTech`, so a starting tech with an `activ1` bonus must be applied in `player_setup` too; otherwise its action count is one low.
-- **Ambassador source scans can be two-up.** A source `_ambassador.jpg` may contain two identical tiles on an opaque grey field; the game pastes the file at 110×110, so a two-up sheet renders as two tiny cards on a grey square. Crop one tile and apply the same alpha shape as the existing single-tile ambassador art.
-- **A free activation inside another action must resume it.** A button that starts a free Upgrade from Build or Move has to return to that Build/Move menu (or finish the action) and allow exactly one upgrade; reusing the generic free-upgrade menu as-is can leave the action abandoned and grant unlimited swaps.
-- **A sub-flow that spends one activation must not hide the rest.** After a swap that consumes one activation (e.g. an upgrade-substitute), the next view must still offer the remaining normal activations; a results view that only offers "again" or "finish" traps them.
-- **A destroy hook only sees combat removals.** An ability that pays or triggers when a ship is destroyed is usually hooked into `destroy_ship`; ships removed by another effect (a black hole, a board cleanup, a manual editor) do not pass through it. Decide from the wording whether those count and route them explicitly if they do, or record the narrower reading.
+`starting_ships` does not decrement `ship_stock`: set the stock to the physical count minus what
+setup places.
 
-## Shared state machines an ability can reach
+## Gotchas, grouped by area
 
-Check each one the faction touches, by hand and with a test: population placement and removal
-(`findEmptyPopulation` / `findFullPopulation` / `remove_pop` / `upkeep` graveYard / elimination /
-population-gone), prompt resolution (`ANSWER_BUTTONS`), scoring (`DrawHelper.get_public_points`),
-the draft and colour allocation, setup hooks in `Buttons/PreGame.py` (several factions can be
-drafted in one game), the influence action's colony-ship refresh, and ship cost/upgrade paths.
+### Reading the rules
+
+- **Filed names do not say what the file is.** Identify by content, record the mapping.
+- **The card can overrule the board's blueprint.** A card that says "Standard Ships" wins over a
+  printed slot that would leave a ship without a weapon. Copy the standard parts array and flag the
+  print in the report.
+- **A printed tech track's first cell can be blank.** A blank first cell is the starting-tech space
+  and reads as a 0 discount. Identify glyphs on a board whose values are known — a board font can
+  draw several digits alike. Don't copy a neighbouring faction's array because the row looks the
+  same. Arrays are indexed by tiles already on the track, so a track read left to right is entered
+  right to left; verify the first-tech discount against the board.
+- **A printed quantity with no verb may be a replacement.** A bare number next to an action can
+  replace the standard value rather than add to it. Compare the same spot on an implemented board.
+- **Slot types are art, not text.** Reputation-only, ambassador-only and mixed slots differ only in
+  the frame: a plain gold shield, a notched frame with a hex fill, and a shield inside that frame.
+  A thin outline hugging the shield is not the notched frame. Compare against a board whose data is
+  known, not against a description.
+- **Two readings can both be wrong.** Settle a disputed number with a sharpened high-zoom crop or
+  by template-matching the glyph against a board whose value is known.
+- **Do not narrow an ability beyond its text.** Check every exclusion against the exact wording and
+  flag it rather than deciding it.
+- **Silence on timing is a decision.** Where card and board are both silent (timing, "any type"),
+  write the reading down and flag it in the report.
+
+### Home tile and sector data
+
+- **The source may not be a hexagon on black.** Some factions ship a full-bleed scene: reconstruct
+  the hexagon from the straight clips printed across the art and keep the canvas inscribed so the
+  tips survive. The cache resizes every tile to 1024×890, which is the target; shipped files vary
+  by a few pixels.
+- **Printed ring marks are not automatically population squares.** They can be artifact-key markers
+  while the real squares sit elsewhere; the card's Starting System icons give the square types.
+  Setup fills every non-advanced home *resource* square with a cube (plus any Advanced square a
+  starting technology unlocks) whether or not the art prints one, and the population tracks drop by
+  the same count. A neutral square is a neutral planet and stays empty.
+- **A nameplate can sit over a population square.** Then the tile needs a numberless variant plus a
+  per-tile `number_snap`, or the banner covers a square or a second printed number shows.
+- **The tile number box.** Without a numberless variant, `images/resources/masks/banner.png` is
+  pasted over the printed nameplate. Home art with no nameplate there shows the box as a cutout.
+- **A home sector number can already be taken.** Use the printed number only if it is free, else
+  pick a free sector and say which number the bot uses in the reference text. Never renumber a
+  faction already in play.
+- **Held sectors need two counts.** A reserve held off the board must be excluded from the
+  outer-rim cleanup *and* included in the explore-position enumeration, or the last held tile
+  becomes unplaceable when its deck empties.
+
+### Artwork
+
+- **Derived artwork is not shipped.** Expect to compose the title and class images from the board,
+  and verify them where the game draws them.
+- **Class images are committed large and shown small.** They are 300×115 (dreadnought 315×148),
+  transparent, with a white silhouette, a two-line class name and initiative chevrons; the cache
+  shrinks them to 90×33 in the player area. Compose from the board's own stencil lettering and
+  reuse the white glyphs; the chevrons are the base initiative, not the total printed next to the
+  initiative arrow. Check the name at paste size and outline light headers darkly.
+- **A custom blueprint panel is not the shared template.** Only `blueprint_<ship>` files are
+  resized to the paste area.
+- **Every ship part needs its own upgrade icon.** `player_area` loads `upgrades/<part name>.png`; a
+  tech-card image is not it.
+- **An ambassador source can be two-up.** A two-up sheet on an opaque field renders as two tiny
+  cards on a grey square. Crop one tile and apply the same alpha shape as the existing single-tile
+  art.
+- **A new faction has no emoji token.** Its token falls back to a placeholder until one is
+  uploaded. Cosmetic; note it, don't spend the task on it.
+
+### Drawing the player area
+
+- **Rules the board prints must reach the player area.** `DrawHelper.player_area` draws some board
+  numbers from data and some from hardcoded faction lists; an ability that changes the latter needs
+  the drawing updated too. A number that lives in both rule and drawing belongs in `factions.json`.
+- **A custom or shorter tech track is drawn from data.** The shared `player_layout.png` carries the
+  standard discounts, so a non-standard track must go through `draw_tech_track`; check that both
+  the picture and the research menu agree.
+- **Blueprint slot counts come from the render.** Plans and printed layouts can disagree with the
+  number of part rectangles; count them from the art. When the printed slot shape is not standard,
+  give the faction `blueprint_slots` instead of adding name branches or coordinate overrides.
+
+### Setup and the draft
+
+- **A card action can happen before the first turn.** Declare the capability in data, add the task
+  to `PreGameButtons.tasksForPlayer`, and route it to the flow that already does that thing.
+  Advance the task only after a successful action and return the next task name when a follow-up
+  choice is needed. The game waits for it, so the prompt must be completable on its own and must
+  not offer a turn-only button — there is no turn to go back to yet.
+- **Reusing a turn flow for a setup hook.** Turn actions carry turn-only parts (the "using their
+  turn" message, trading for the cost, Finish/Restart). Gate them with a flag rather than copying
+  the flow.
+- **A new mode of a shared flow needs that flow's Undo.** A once-only guard otherwise refuses the
+  retry after a misclick.
+- **A starting technology's passive still applies.** Setup copies starting techs into the track
+  without `playerResearchTech`, so an action-count bonus must be applied in `player_setup` too.
+- **Press the colour setup actually assigned.** `generalSetup` hands out colours in `getColor`
+  order with a `pop(0)` fallback, so the faction's colour depends on who else is in the game; a
+  test copied from another faction can press the wrong colour and silently no-op.
+
+### Abilities and shared state machines
+
+Check each machine the faction touches by hand and with a test: population placement and removal
+(`findEmptyPopulation` / `findFullPopulation` / `remove_pop` / upkeep graveYard / elimination /
+population-gone), prompt resolution (`ANSWER_BUTTONS`), scoring, the draft and colour allocation,
+setup hooks (several factions can be drafted into one game), the Influence action's colony-ship
+refresh, and ship cost/upgrade paths.
+
+- **Extra population locations.** A cube on the influence disc or another non-planet location needs
+  a tile field, drawing at that location, the normal track bookkeeping, and the return path so
+  losing the sector, combat hits, elimination, the upkeep graveYard and the population-gone check
+  all handle it. List it in `findFullPopulation` and check `remove_pop` and `upkeep`.
+- **A displayed action count must be enforced.** Activation numbers are not labels: cap the
+  placements, removals or units, including later presses.
+- **A built-in part slot must be excluded from upgrades.** Otherwise the player gets the module and
+  a free replacement.
+- **Income from a placed piece must be counted before bankruptcy.** Apply it before the check, or a
+  player is wrongly forced to trade or remove control.
+- **A destroy hook only sees combat removals.** Ships removed by another effect (a black hole, a
+  board cleanup, the editor) don't pass through `destroy_ship`. Decide from the wording whether
+  they count and route them explicitly, or record the narrower reading.
+- **Check the body of a shared flag, not its name.** A flag may do more than its name suggests; a
+  faction whose wording removes more needs its own guard in the shared function.
+- **Check the shape of a lookup table a new branch adds.** A value that should be a list of ids but
+  is a string is iterated character by character and silently passes an `any()`/`all()`.
+- **Changing a shared button id breaks live games.** Posted buttons keep their old `custom_id`, so
+  a parser expecting an extra field must still accept the old shape.
+
+### Combat
+
+- **"At the start of each combat" is `Combat.startCombat`,** which reruns for every new pairing on a
+  multi-player tile — not `startCombatThreads`, which runs once per tile. Temporary state the
+  ability installs must come off at the next `startCombat` and in `declareAWinner`.
+- **An engagement-round counter must coexist with the first-shot phase.** With a first-shot faction
+  in the game the phase switch also ends a pass; increment only when the phase is over (or absent)
+  or the ability fires in the wrong round.
+- **"Make the attacker reroll" is a deferred defender prompt.** Store the die's parameters with a
+  token on the tile, keep the hit unassigned while pending, let the defender answer, and close the
+  pairing from the resolver when the last pending entry is answered. A reroll re-derives hit and
+  damage from the stored computer/speed.
+- **A deferred hit still has to close the pairing.** A target button whose resolution is deferred
+  must still run the end-of-combat check when it removes the last ship of a side.
+- **Initiative changes need every speed path.** Apply them in the speed enumeration, the manual
+  button validity check, the reroll path and the end-of-combat checks.
+- **A free activation's filter belongs in the next button id.** Put a class restriction into the
+  emitted `moveFrom` id and test the id the UI emits.
+- **A no-combat bombing prompt still needs the weapon/power choice.** Offer it rather than claiming
+  a combat-start declaration covers the case.
+
+### Prompts, menus and buttons
+
+- **New answer-style prompts.** A prompt that resolves once must be added to `ANSWER_BUTTONS` and
+  its handler must refuse a second resolution on its own.
+- **A free activation inside another action must resume it.** Return to the Build or Move menu (or
+  finish the action) and allow exactly one upgrade.
+- **A sub-flow that spends one activation must not hide the rest.** After the swap, offer the
+  remaining normal activations; a view with only "again" or "finish" traps them.
