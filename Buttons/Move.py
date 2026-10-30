@@ -250,7 +250,7 @@ class MoveButtons:
                                  custom_id=f"FCID{player['color']}_herRaidBuild_{moveCount}"))
         if buttonID == "startMove":
             UpgradeButtons.addInfinitePossibilitiesButton(view, game, player, "move")
-        if raid_resume:
+        if raid_resume and int(moveCount) == 1:
             view.add_item(Button(label="Finish Action", style=discord.ButtonStyle.red,
                                  custom_id=f"FCID{player['color']}_finishAction"))
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
