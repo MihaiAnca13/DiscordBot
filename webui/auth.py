@@ -76,7 +76,7 @@ def install_auth(app, surface):
 
     @web.middleware
     async def authenticate(request, handler):
-        if request.path.startswith("/auth/"):
+        if request.path.startswith(("/auth/", "/api/obg/")):
             return await handler(request)
         user_id = surface.store.session_user(request.cookies.get("session", ""))
         if user_id is None:

@@ -58,7 +58,7 @@ async def start_webui(bot):
     mirror = DiscordMirror(bot, getattr(config, "guild_id", 0), store, os.path.join(ROOT, "data", "media"))
     mirror.start()
     runner = await start(port, store=store, mirror=mirror,
-                         host=getattr(config, "webui_host", "127.0.0.1"))
+                         host=getattr(config, "webui_host", "127.0.0.1"), bot=bot)
     _runners.append(runner)
     LOG.info("web ui started on port %s", port)
 

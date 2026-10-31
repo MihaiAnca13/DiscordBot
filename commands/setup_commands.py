@@ -1,17 +1,14 @@
 import asyncio
-import json
 import discord
 from Buttons.Draft import DraftButtons
 import config
+from helpers.GameLock import game_lock
 from discord.ext import commands
 from discord import app_commands
 from typing import Optional
-from setup.GameInit import GameInit
+from setup.GameLaunch import launch_game
 from helpers.GamestateHelper import GamestateHelper
-from helpers.DrawHelper import DrawHelper
 from helpers import FactionData
-from helpers.FactionReference import faction_references
-from webui import runtime
 
 
 async def faction_autocomplete(interaction: discord.Interaction, current: str):
@@ -284,145 +281,33 @@ class SetupCommands(commands.GroupCog, name="setup"):
             ai_ships = "def"
         else:
             ai_ships = ai_ship_type.value
-        new_game = GameInit(game_name, player_list, ai_ships, rift_cannon, turn_order_variant,
-                            community_parts, community_rep_mod, community_factions=community_factions)
-        new_game.create_game()
-        game = GamestateHelper(None, new_game.gamestate["game_id"])
-        for member in temp_player_list:
-            if member is not None:
-                game.gamestate["players"][str(member.id)]["username"] = member.display_name
-        game.update()
-
-        async def get_or_create_category(guild: discord.Guild, category_name):
-            """Get an existing category or create a new one."""
-            for category in guild.categories:
-                if category.name == category_name:
-                    return category
-            # If category doesn't exist, create it
-            overwrites = {
-                # Deny access to everyone else
-                interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            }
-            return await guild.create_category(category_name, overwrites=overwrites)
-
-        async def get_or_create_role(guild: discord.Guild, role_name):
-            for role in guild.roles:
-                if role.name == role_name:
-                    return role
-            return await guild.create_role(name=role_name, mentionable=True)
-
-        if config.game_number <= 10:
-            category_name = "Games #1-10"
-        else:
-            start = 10 * ((config.game_number - 1) // 10) + 1
-            end = start + 9
-            category_name = f"Games #{start}-{end}"
-        category = await get_or_create_category(interaction.guild, category_name)
-
-        role_name = f"aeb{config.game_number}"
-        role = await get_or_create_role(interaction.guild, role_name)
-        overwrites = {interaction.guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                      role: discord.PermissionOverwrite(read_messages=True, manage_messages=True)}
-
-        for player_id in player_list:
-            member = interaction.guild.get_member(player_id[0])
-            if member:
-                await member.add_roles(role)
-                overwrites[member] = discord.PermissionOverwrite(read_messages=True,
-                                                                 manage_messages=True)  # Grant access to the player
-        roleObv = discord.utils.get(interaction.guild.roles, name="Observers")
-        if roleObv:
-            overwrites[roleObv] = discord.PermissionOverwrite(read_messages=True)
-        # Create the text channels for the game
-        tabletalk = await interaction.guild.create_text_channel(f'aeb{config.game_number}-{game_name}',
-                                                                category=category, overwrites=overwrites)
-        actions = await interaction.guild.create_text_channel(f'aeb{config.game_number}-actions',
-                                                              category=category, overwrites=overwrites)
-        thread_name = f'aeb{config.game_number}-bot-map-updates'
-        thread = await actions.create_thread(name=thread_name, auto_archive_duration=10080,type=discord.ChannelType.public_thread)
-        new_game.update_num()
-        if player_count < 2:
-            player_count = 2
-        if player_count > 9:
-            player_count = 9
-        msgBig = ""
-        if hyperlanes:
-            if player_count != 4 and player_count != 5:
-                hyperlanes = False
-                msgBig += "## Hyperlanes cannot be enabled in anything except 4 or 5 player games at the moment, so they have not been enabled for this game"
-            else:
-                msgBig +="## Hyperlanes have been enabled for this game"
-        if galactic_event_tiles:
-            msgBig += "\n## Galactic Event Tiles and Nebula Sectors have been added to this game"
-        if rift_cannon:
-            msgBig += "\n## Rift Cannons have been added to this game"
-        if alliances:
-            if player_count < 4:
-                alliances = False
-                msgBig += ("\n## Alliances require at least 4 players,"
-                           " so they have not been enabled for this game")
-            else:
-                msgBig += "\n## Alliances have been enabled for this game"
-        if msgBig != "":
-            await actions.send(msgBig)
-
-        game.setAlliances(alliances)
-        game.setup_techs_and_outer_rim(player_count, galactic_event_tiles, hyperlanes)
-        drawing = DrawHelper(game.gamestate)
-
-
-        minorSpeciesList = ""
-        for species in game.gamestate["minor_species"]:
-            minorSpeciesList += species + "\n"
-        await thread.send(role.mention + " pinging you here")
-        await actions.send("Initial tech draw is as follows", file=drawing.show_available_techs())
-        await actions.send(f"{role.mention}, draft factions and turn position in the manner of your choice,"
-                           + " then setup the game with /setup game. "
-                           + "Enter the players in the order they should take turns in"
-                           + " (i.e. enter first player first). "
-                           + "A draft has been started for you that you may use instead of the slash command.")
-        await actions.send("A common way to draft factions is to generate a random pick order"
-                           + " and then have the turn order be the reverse of that pick order. "
-                           + "For your convenience, the following random pick order was generated,"
-                           + " but you may ignore it. \n" +
-                           "This game has been set to auto include minor species,"
-                           + " 4 of which have been drawn at random below. "
-                           + "If you want to disable this, you may use `/game disable_minor_species`. "
-                           + "The minor species are as follows:\n"
-                           + minorSpeciesList,
-                           file=drawing.show_minor_species())
-        file = await asyncio.to_thread(drawing.show_AI_stats)
-        await actions.send("AI stats look like this", file=file)
-        await DraftButtons.startDraft(game, player_list, interaction,
-                                     runtime.record_channel(actions, game.game_id), ban_factions)
-
-        factionThread = await actions.create_thread(name="Faction Reference", auto_archive_duration=10080)
-        boardPrefix = "images/resources/components/factions/"
-        community_sheets = {}
-
-        standard_boards = {board for _, board in faction_references(False)}
-        for message, board_file in faction_references(community_factions):
-            if board_file in standard_boards:
-                await factionThread.send(message, file=drawing.get_file(boardPrefix + board_file))
-            else:
-                community_sheets[board_file] = (message, board_file)
-
-        message = "\n".join(["Rift Reference"])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "Rift_Reference.png"))
-
-        message = "\n".join(["Minor Species Reference"])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "Minor_Species_Reference.png"))
-
-        message = "\n".join(["Discovery Reference"])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "Discovery_Reference.png"))
-        await factionThread.send(role.mention + " pinging you here, which contains all the faction sheets")
-        if community_sheets:
-            sheet_manager = CommunitySheetManager(factionThread, drawing, community_sheets)
-            self.community_sheet_managers[factionThread.id] = sheet_manager
-            await sheet_manager.publish_button()
-        await interaction.followup.send("\n".join(["New game created! Here are the channels:",
-                                                   tabletalk.jump_url, actions.jump_url]))
-        if isinstance(interaction.channel, discord.Thread):
-            new_name = f"[Launched] {interaction.channel.name}"
-            await interaction.channel.edit(name=new_name)
-            await interaction.channel.edit(archived=True)
+        async with game_lock("game-create"):
+            launch = await launch_game(
+                interaction.guild,
+                game_name,
+                player_list,
+                player_count,
+                display_names={str(m.id): m.display_name for m in temp_player_list if m is not None},
+                members={str(m.id): m for m in temp_player_list if m is not None},
+                ai_ships=ai_ships,
+                rift_cannon=rift_cannon,
+                turn_order_variant=turn_order_variant,
+                galactic_event_tiles=galactic_event_tiles,
+                hyperlanes=hyperlanes,
+                community_parts=community_parts,
+                community_rep_mod=community_rep_mod,
+                ban_factions=ban_factions,
+                alliances=alliances,
+                community_factions=community_factions,
+            )
+            if launch["community_sheets"]:
+                sheet_manager = CommunitySheetManager(launch["faction_thread"], launch["drawing"],
+                                                      launch["community_sheets"])
+                self.community_sheet_managers[launch["faction_thread"].id] = sheet_manager
+                await sheet_manager.publish_button()
+            await interaction.followup.send("\n".join(["New game created! Here are the channels:",
+                                                       launch["tabletalk_url"], launch["actions_url"]]))
+            if isinstance(interaction.channel, discord.Thread):
+                new_name = f"[Launched] {interaction.channel.name}"
+                await interaction.channel.edit(name=new_name)
+                await interaction.channel.edit(archived=True)

@@ -56,6 +56,7 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
 
 | Route | Purpose |
 |---|---|
+| `POST /api/obg/games` | server-to-server game creation from an OBG lobby game; requires `X-OBG-Token` and `obg_shared_secret` |
 | `GET /api/games` | active games with players and round |
 | `GET /api/games/{id}/view?seat=` | one seat's table state: board geometry, players, market, pending choices, first history page |
 | `GET /api/games/{id}/history?seat=&before=` | paged feed, including used prompts and their canonical ids |
@@ -137,6 +138,20 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
   serve it beside the bot API. Still required: TLS, an auth layer, a proxy route for
   `/api`, `/static` and `/art`, and a WireGuard binding between the frontend host and
   the bot host. The bot process stays the only writer of `gamestates/`.
+
+## OBG-hosted table
+
+OBG's `ECL` Django app renders the table and proxies `/ECL/<game_id>/proxy/...` to
+this server over WireGuard. `webui_host` must be the WireGuard address (not
+`0.0.0.0`) and `obg_shared_secret` must match OBG's `ECL_BOT_SECRET`. The page sets
+`window.ECL_BASE`; `app.js` prefixes every API and artwork URL with it. OBG binds the
+seat to the logged-in player's Discord id and only proxies the allowlisted paths for
+the mapped `aebN` game. In this mode keep `webui_require_login` false: the bot's API
+is reachable only from the OBG host, and OBG owns the user session.
+
+`POST /api/obg/games` is the only creation path for an OBG game. It validates the
+players against the guild, then uses the same channel/role/draft setup as
+`/setup create_new_game` (`setup/GameLaunch.py`).
 - **Polling.** Each browser polls the seat view every 1.5 s; the server caches by save
   version and feed revision. A busy instance should push snapshots instead.
 - **Combat starter.** The demo sandbox has no starting combat; use

@@ -8,12 +8,15 @@ import json
 import logging
 import os
 import re
+import secrets
 import traceback
 
+import discord
 from aiohttp import web
 from discord.ui import View
 from Buttons.Draft import DraftButtons
 from setup.GameInit import GameInit
+from setup.GameLaunch import launch_game
 
 import config
 from Buttons.Research import ResearchButtons
@@ -324,10 +327,11 @@ def _current_prompts(pending, turn_menus=()):
 
 
 class WebApp:
-    def __init__(self, store, games_path, mirror=None, data_dir=None, guild_name=None):
+    def __init__(self, store, games_path, mirror=None, data_dir=None, guild_name=None, bot=None):
         self.store = store
         self.games_path = games_path
         self.mirror = mirror
+        self.bot = bot
         data_dir = data_dir or os.path.join(ROOT, "data")
         self.media_dir = os.path.join(data_dir, "media")
         self.render_dir = os.path.join(data_dir, "renders")
@@ -652,6 +656,96 @@ class WebApp:
             await DraftButtons.startDraft(game, players, interaction, interaction.channel, body.get("ban_factions", False))
         return web.json_response({"id": game_id}, status=201)
 
+    async def api_obg_create_game(self, request):
+        """Create a real Discord game for an OBG lobby game (server-to-server)."""
+        expected = config.obg_shared_secret
+        if not expected:
+            return web.json_response({"error": "OBG game creation is not configured"}, status=503)
+        token = request.headers.get("X-OBG-Token", "")
+        if not secrets.compare_digest(token, expected):
+            return web.json_response({"error": "invalid OBG token"}, status=401)
+        try:
+            body = await request.json()
+        except (ValueError, UnicodeDecodeError):
+            return web.json_response({"error": "invalid json"}, status=400)
+        if not isinstance(body, dict):
+            return web.json_response({"error": "expected a JSON object"}, status=400)
+
+        name = body.get("name")
+        players = body.get("players")
+        count = body.get("player_count")
+        options = ("rift_cannon", "turn_order_variant", "galactic_event_tiles", "hyperlanes",
+                   "community_parts", "community_rep_mod", "ban_factions", "alliances",
+                   "community_factions")
+        defaults = {"rift_cannon": True, "turn_order_variant": True}
+        ai = body.get("ai_ship_type", "def")
+        if (not isinstance(name, str) or not name.strip() or len(name) > 100
+                or not isinstance(players, list) or not 2 <= len(players) <= 9
+                or type(count) is not int or count != len(players)
+                or ai not in ("def", "adv", "wa", "random")
+                or any(type(body.get(key, defaults.get(key, False))) is not bool for key in options)):
+            return web.json_response({"error": "Invalid game settings"}, status=400)
+        ids = []
+        names = {}
+        for player in players:
+            if not isinstance(player, dict):
+                return web.json_response({"error": "Every player must be an object"}, status=400)
+            discord_id = str(player.get("discord_id") or "")
+            if not re.fullmatch(r"\d{1,20}", discord_id):
+                return web.json_response({"error": "Every player needs a Discord id"}, status=400)
+            if discord_id in ids:
+                return web.json_response({"error": "Duplicate Discord id"}, status=400)
+            ids.append(discord_id)
+            names[discord_id] = str(player.get("name") or discord_id)[:100]
+        if body.get("hyperlanes") and count not in (4, 5):
+            return web.json_response({"error": "Hyperlanes require 4 or 5 players"}, status=400)
+        if body.get("alliances") and count < 4:
+            return web.json_response({"error": "Alliances require at least 4 players"}, status=400)
+
+        guild = self.bot.get_guild(config.guild_id) if self.bot else None
+        if guild is None:
+            return web.json_response({"error": "Discord guild is not available"}, status=503)
+        members = {}
+        for discord_id in ids:
+            try:
+                members[discord_id] = await guild.fetch_member(int(discord_id))
+            except (discord.NotFound, discord.HTTPException):
+                return web.json_response(
+                    {"error": f"Discord user {discord_id} is not in the guild"}, status=400)
+
+        player_list = [[int(discord_id), f"<@{discord_id}>"] for discord_id in ids]
+        async with game_lock("game-create"):
+            result = await launch_game(
+                guild, name.strip(), player_list, count,
+                display_names=names,
+                members=members,
+                ai_ships=ai,
+                rift_cannon=body.get("rift_cannon", True),
+                turn_order_variant=body.get("turn_order_variant", True),
+                galactic_event_tiles=body.get("galactic_event_tiles", False),
+                hyperlanes=body.get("hyperlanes", False),
+                community_parts=body.get("community_parts", False),
+                community_rep_mod=body.get("community_rep_mod", False),
+                ban_factions=body.get("ban_factions", False),
+                alliances=body.get("alliances", False),
+                community_factions=body.get("community_factions", False),
+            )
+        if result["community_sheets"]:
+            from commands.setup_commands import CommunitySheetManager
+
+            manager = CommunitySheetManager(result["faction_thread"], result["drawing"],
+                                            result["community_sheets"])
+            cog = self.bot.get_cog("setup")
+            if cog is not None:
+                cog.community_sheet_managers[result["faction_thread"].id] = manager
+            try:
+                await manager.publish_button()
+            except Exception as exc:  # the game is already created; do not fail the API for a button
+                LOG.warning("cannot publish community faction sheet button: %s", exc)
+        return web.json_response({"id": result["id"],
+                                  "tabletalk_url": result["tabletalk_url"],
+                                  "actions_url": result["actions_url"]}, status=201)
+
     async def api_games(self, request):
         games = []
         active_ids = set(list_active_game_ids())
@@ -843,6 +937,13 @@ class WebApp:
             message_id = int(request.match_info["message_id"])
         except ValueError:
             return web.json_response({"error": "bad media id"}, status=400)
+        game_id = request.query.get("game_id")
+        row = self.store.get(message_id)
+        if game_id and (row is None or row["game_id"] != game_id):
+            return web.json_response({"error": "no such media"}, status=404)
+        seat = request.query.get("seat")
+        if game_id and row is not None and row["ephemeral_to"] and str(row["ephemeral_to"]) != str(seat or ""):
+            return web.json_response({"error": "no such media"}, status=404)
         name = os.path.basename(request.match_info["name"])
         path = os.path.join(self.media_dir, str(message_id), name)
         if not os.path.isfile(path):
@@ -860,6 +961,7 @@ class WebApp:
         app.router.add_get("/", self.index)
         app.router.add_get("/api/games", self.api_games)
         app.router.add_post("/api/games", self.api_create_game)
+        app.router.add_post("/api/obg/games", self.api_obg_create_game)
         app.router.add_get("/api/games/{game_id}/view", self.api_view)
         app.router.add_get("/api/games/{game_id}/history", self.api_history)
         app.router.add_get("/api/catalog", self.api_catalog)
@@ -875,16 +977,16 @@ class WebApp:
         return app
 
 
-def build(store=None, games_path=None, mirror=None, data_dir=None):
+def build(store=None, games_path=None, mirror=None, data_dir=None, bot=None):
     games_path = games_path or config.gamestate_path
     if store is None:
         store = FeedStore(os.path.join(data_dir or os.path.join(ROOT, "data"), "webui.sqlite3"))
-    return WebApp(store, games_path, mirror=mirror, data_dir=data_dir)
+    return WebApp(store, games_path, mirror=mirror, data_dir=data_dir, bot=bot)
 
 
-async def start(port, store=None, games_path=None, mirror=None, host="127.0.0.1"):
+async def start(port, store=None, games_path=None, mirror=None, host="127.0.0.1", bot=None):
     """Start the server on the current event loop (the bot's). Returns the runner."""
-    app = build(store=store, games_path=games_path, mirror=mirror).create_app()
+    app = build(store=store, games_path=games_path, mirror=mirror, bot=bot).create_app()
     runner = web.AppRunner(app)
     await runner.setup()
     await web.TCPSite(runner, host, port).start()

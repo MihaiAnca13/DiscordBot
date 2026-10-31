@@ -1,33 +1,37 @@
 // One page, one API client. Keep every HTTP call in this file's `api` object so the
 // whole thing can be lifted into a Vue app when it moves into the OBG repo.
+const BASE = (window.ECL_BASE || '').replace(/\/$/, '');
+const apiUrl = (path) => `${BASE}${path}`;
+const assetUrl = (url) => (url && url.startsWith('/') ? `${BASE}${url}` : url);
+
 const api = {
   async marketLayout(gameId) {
-    const response = await fetch(`/api/games/${gameId}/market-layout`);
+    const response = await fetch(apiUrl(`/api/games/${gameId}/market-layout`));
     if (!response.ok) throw new Error('Could not load technology targets');
     return response.json();
   },
   async games() {
-    const response = await fetch('/api/games');
+    const response = await fetch(apiUrl('/api/games'));
     const data = await response.json();
     state.isDevMode = !!data.can_create;
     document.getElementById('new-game').classList.toggle('hidden', !data.can_create);
     return data.games || [];
   },
   async view(gameId, seat) {
-    const response = await fetch(`/api/games/${gameId}/view?seat=${encodeURIComponent(seat)}`);
+    const response = await fetch(apiUrl(`/api/games/${gameId}/view?seat=${encodeURIComponent(seat)}`));
     return response.json();
   },
   async history(gameId, seat, before) {
     const suffix = before ? `&before=${encodeURIComponent(before)}` : '';
-    const response = await fetch(`/api/games/${gameId}/history?seat=${encodeURIComponent(seat)}${suffix}`);
+    const response = await fetch(apiUrl(`/api/games/${gameId}/history?seat=${encodeURIComponent(seat)}${suffix}`));
     return response.json();
   },
   async catalog() {
-    const response = await fetch('/api/catalog');
+    const response = await fetch(apiUrl('/api/catalog'));
     return response.json();
   },
   async press(gameId, seat, customId, messageId) {
-    const response = await fetch(`/api/games/${gameId}/press`, {
+    const response = await fetch(apiUrl(`/api/games/${gameId}/press`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seat, custom_id: customId, message_id: messageId }),
@@ -35,7 +39,7 @@ const api = {
     return response.json();
   },
   async mirror(gameId, seat, on) {
-    const response = await fetch(`/api/games/${gameId}/mirror`, {
+    const response = await fetch(apiUrl(`/api/games/${gameId}/mirror`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seat, mirror_to_discord: on }),
@@ -117,7 +121,7 @@ function bodyHtml(content) {
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/&lt;(a?):([\w]+):(\d+)&gt;/g, (_m, animated, name, id) => {
       const source = /^dice_(ion|plasma|antimatter|soliton|rift)_[1-6]$/.test(name)
-        ? `/art/components/dice_faces/${name}.png`
+        ? assetUrl(`/art/components/dice_faces/${name}.png`)
         : `https://cdn.discordapp.com/emojis/${id}.${animated ? 'gif' : 'png'}`;
       return `<img class="emoji" alt=":${name}:" loading="lazy" src="${source}">`;
     });
@@ -682,7 +686,7 @@ function renderTilePreview(actions, tiles) {
     rotatePreview(1);
   });
   const image = document.createElement('img');
-  image.src = `/api/games/${encodeURIComponent(state.gameId)}/tile.webp`
+  image.src = apiUrl(`/api/games/${encodeURIComponent(state.gameId)}/tile.webp`)
     + `?sector=${encodeURIComponent(places[0].sector)}&rot=${state.previewRotation}`;
   image.alt = `Explored sector, rotation ${state.previewRotation} degrees`;
   image.draggable = false;
@@ -820,7 +824,7 @@ function renderBoard(view) {
       el.boardEmpty.textContent = 'Board render failed — see the server log';
       el.boardNote.textContent = 'render failed';
     };
-    el.board.src = view.board;
+    el.board.src = assetUrl(view.board);
     if (el.board.complete && el.board.naturalWidth) {
       state.boardLoaded = true;
       el.boardEmpty.classList.add('hidden');
@@ -841,7 +845,7 @@ function panelImage(view, panel, seat, label) {
   image.className = 'rendered-panel';
   image.alt = label;
   image.loading = 'lazy';
-  image.src = `/api/games/${encodeURIComponent(view.game.id)}/${panel}.webp`
+  image.src = apiUrl(`/api/games/${encodeURIComponent(view.game.id)}/${panel}.webp`)
     + `?v=${encodeURIComponent(view.version)}&seat=${encodeURIComponent(seat || '')}`;
   image.title = ['ai', 'species', 'player'].includes(panel) ? label : 'Click to enlarge';
   if (panel === 'player') image.style.cursor = 'default';
@@ -1035,7 +1039,7 @@ function partChoices(message) {
     const part = state.catalog.parts?.[target.part];
     return `<li><button type="button" class="part-option" data-custom="${escapeHtml(button.custom_id)}"
       ${button.disabled ? 'disabled' : ''} title="${escapeHtml(part?.description || button.label)}">
-      ${part?.image ? `<img src="${part.image}" alt="" loading="lazy">` : ''}
+      ${part?.image ? `<img src="${assetUrl(part.image)}" alt="" loading="lazy">` : ''}
       <span>${escapeHtml(button.label || part?.name || target.part)}</span>
     </button></li>`;
   }).join('');
@@ -1092,7 +1096,7 @@ function upgradeBlueprint(message, choices) {
   const first = choices[0];
   const ship = SHIP_NAMES[shipClass(first.target.ship)];
   const view = state.view;
-  const url = `/api/games/${encodeURIComponent(view.game.id)}/blueprint-${ship}.webp`
+  const url = apiUrl(`/api/games/${encodeURIComponent(view.game.id)}/blueprint-${ship}.webp`)
     + `?seat=${encodeURIComponent(view.seat)}&v=${encodeURIComponent(view.version)}`;
   const image = document.createElement('img');
   image.alt = `${ship} blueprint`;
@@ -1158,7 +1162,7 @@ function buildPanel(entries, message) {
     const target = entry.target;
     const cost = Number(((entry.button.label || '').match(/\((\d+)\)/) || [])[1]);
     const short = BUILD_ART[target.ship] || target.ship.toLowerCase();
-    const art = `/art/components/basic_ships/${['orb', 'mon'].includes(short) ? short : `${color}-${short}`}.png`;
+    const art = assetUrl(`/art/components/basic_ships/${['orb', 'mon'].includes(short) ? short : `${color}-${short}`}.png`);
     const card = document.createElement('button');
     card.type = 'button';
     card.className = 'build-card';
@@ -1188,7 +1192,7 @@ function discoveryPanel(entries, keep, message) {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'discovery-choice';
-      card.innerHTML = `${info?.image ? `<img src="${info.image}" alt="${escapeHtml(info.name)}">` : ''}
+      card.innerHTML = `${info?.image ? `<img src="${assetUrl(info.image)}" alt="${escapeHtml(info.name)}">` : ''}
         <span>${escapeHtml(info?.name || entry.disc)}</span>`;
       card.addEventListener('click', () => press(message.id, entry.button.custom_id, card));
       grid.appendChild(card);
@@ -1197,7 +1201,7 @@ function discoveryPanel(entries, keep, message) {
     return wrap;
   }
   const source = entries[0]?.disc ? state.catalog.discoveries?.[entries[0].disc] : null;
-  const image = source?.image || (message.attachments || [])[0]?.url;
+  const image = assetUrl(source?.image || (message.attachments || [])[0]?.url);
   if (image) {
     const art = document.createElement('img');
     art.src = image;
@@ -1298,7 +1302,7 @@ function promptCard(message, index) {
     for (const attachment of message.attachments || []) {
       const image = document.createElement('img');
       image.className = 'attachment';
-      image.src = attachment.url;
+      image.src = assetUrl(attachment.url);
       image.alt = attachment.name || '';
       image.loading = 'lazy';
       body.appendChild(image);
@@ -1609,7 +1613,7 @@ function historyItem(message) {
   for (const attachment of message.attachments || []) {
     const image = document.createElement('img');
     image.className = 'attachment';
-    image.src = attachment.url;
+    image.src = assetUrl(attachment.url);
     image.alt = attachment.name || '';
     image.loading = 'lazy';
     wrap.appendChild(image);
@@ -1671,7 +1675,7 @@ function renderFaction() {
   el.factionTitle.textContent = faction.name;
   el.factionSub.textContent = `${player.name} · ${player.color || ''}`;
   el.factionBody.innerHTML = `<div class="faction-reference content">${bodyHtml(faction.reference)}</div>
-    ${faction.image ? `<img id="faction-image" class="rendered-panel" src="${faction.image}" alt="${escapeHtml(faction.name)} board" title="Click to enlarge">` : ''}`;
+    ${faction.image ? `<img id="faction-image" class="rendered-panel" src="${assetUrl(faction.image)}" alt="${escapeHtml(faction.name)} board" title="Click to enlarge">` : ''}`;
   const image = document.getElementById('faction-image');
   if (image) {
     image.addEventListener('click', () => {
@@ -1783,7 +1787,7 @@ function render(view, force = false) {
   const order = document.getElementById('turn-order');
   order.classList.toggle('hidden', view.game.setup || !active.length);
   if (!view.game.setup && active.length) {
-    order.src = `/api/games/${encodeURIComponent(view.game.id)}/turn-order.webp?v=${encodeURIComponent(view.version)}`;
+    order.src = apiUrl(`/api/games/${encodeURIComponent(view.game.id)}/turn-order.webp?v=${encodeURIComponent(view.version)}`);
   }
   document.getElementById('s3-remaining').textContent = `S3: ${view.game.s3_remaining} remaining`;
   el.boardNote.classList.toggle('hidden', false);
@@ -1914,7 +1918,7 @@ function bind() {
       const body = Object.fromEntries(new FormData(form));
       body.players = Number(body.players);
       form.querySelectorAll('[type="checkbox"]').forEach((input) => { body[input.name] = input.checked; });
-      const response = await fetch('/api/games', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const response = await fetch(apiUrl('/api/games'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not create game');
       localStorage.setItem('eclipse-game', result.id);

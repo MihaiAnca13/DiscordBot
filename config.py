@@ -21,6 +21,7 @@ tester_ids = {str(tester_id) for tester_id in tester_ids}
 guild_id = data.get("guild_id", 0)
 webui_port = data.get("webui_port", 0)
 webui_host = data.get("webui_host", "127.0.0.1")
+obg_shared_secret = data.get("obg_shared_secret", "")
 if data.get("dev_seed") is not None:
     random.seed(data["dev_seed"])
 
