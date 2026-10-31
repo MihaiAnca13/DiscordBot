@@ -640,7 +640,7 @@ class WebApp:
         if body.get("alliances") and count < 4:
             return web.json_response({"error": "Alliances require at least 4 players"}, status=400)
         players = [[seat, f"Player {seat}"] for seat in range(1, count + 1)]
-        async with game_lock("dev-create"):
+        async with game_lock("game-create"):
             while os.path.exists(os.path.join(self.games_path, f"aeb{config.game_number}.json")):
                 config.game_number += 1
             init = GameInit(name.strip(), players, ai, body.get("rift_cannon", True),

@@ -138,6 +138,10 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
   serve it beside the bot API. Still required: TLS, an auth layer, a proxy route for
   `/api`, `/static` and `/art`, and a WireGuard binding between the frontend host and
   the bot host. The bot process stays the only writer of `gamestates/`.
+- **Polling.** Each browser polls the seat view every 1.5 s; the server caches by save
+  version and feed revision. A busy instance should push snapshots instead.
+- **Combat starter.** The demo sandbox has no starting combat; use
+  `python -m dev.webui.scenarios combat` while the service is stopped.
 
 ## OBG-hosted table
 
@@ -152,10 +156,6 @@ is reachable only from the OBG host, and OBG owns the user session.
 `POST /api/obg/games` is the only creation path for an OBG game. It validates the
 players against the guild, then uses the same channel/role/draft setup as
 `/setup create_new_game` (`setup/GameLaunch.py`).
-- **Polling.** Each browser polls the seat view every 1.5 s; the server caches by save
-  version and feed revision. A busy instance should push snapshots instead.
-- **Combat starter.** The demo sandbox has no starting combat; use
-  `python -m dev.webui.scenarios combat` while the service is stopped.
 
 ## Next, in order
 
