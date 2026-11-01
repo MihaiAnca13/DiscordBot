@@ -352,12 +352,15 @@ class RecordingMessage:
         self.surface.store.remove(self.id)
         await self._real.delete()
 
-    async def edit(self, content=None, view=discord.utils.MISSING, **kwargs):
+    async def edit(self, content=discord.utils.MISSING, view=discord.utils.MISSING, **kwargs):
         buttons = buttons_from_view(view) if view is not discord.utils.MISSING else None
-        self.surface.store.update(self.id, content=content, buttons=buttons)
+        self.surface.store.update(self.id, content=None if content is discord.utils.MISSING else content,
+                                  buttons=buttons)
+        if content is not discord.utils.MISSING:
+            kwargs["content"] = content
         if view is not discord.utils.MISSING:
             kwargs["view"] = view
-        await self._real.edit(content=content, **kwargs)
+        await self._real.edit(**kwargs)
 
 
 class RecordingChannel:

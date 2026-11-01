@@ -14,7 +14,7 @@ from webui.server import build
 
 from tests.fakes import FakeChannel, FakeInteraction
 from webui.store import FeedStore
-from webui.transport import RecordingInteraction, WebInteraction
+from webui.transport import RecordingInteraction, RecordingMessage, Surface, WebInteraction
 
 
 @pytest.fixture
@@ -73,6 +73,21 @@ def test_editing_discord_content_preserves_buttons_until_explicitly_removed(stor
     assert store.get(sent.id)["buttons"]
     run(sent.edit(view=None))
     assert store.get(sent.id)["buttons"] == []
+
+
+def test_removing_discord_buttons_keeps_message_content(store, run):
+    calls = []
+
+    async def edit(**kwargs):
+        calls.append(kwargs)
+
+    message_id = store.record("aeb1", "aeb1-actions", content="prompt", buttons=[{"label": "Choose"}])
+    message = RecordingMessage(SimpleNamespace(edit=edit), Surface(store, "aeb1"), message_id)
+    run(message.edit(view=None))
+
+    assert calls == [{"view": None}]
+    assert store.get(message_id)["content"] == "prompt"
+    assert store.get(message_id)["buttons"] == []
 
 
 def test_ephemeral_discord_replies_are_private_to_the_presser(store, run):
