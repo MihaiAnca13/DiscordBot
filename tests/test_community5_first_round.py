@@ -89,6 +89,9 @@ def test_community5_factions_setup_and_first_round(games_dir, run, press):
 
     for pid in range(1, 6):
         press(channel, pid, f"FCID{colors[pid]}_passForRound")
+    for pos, color in list(reload(game).gamestate.get("pendingDiscoveryResolutions", {}).items()):
+        pid = next(pid for pid, player_color in colors.items() if player_color == color)
+        press(channel, pid, f"FCID{color}_keepDiscForPoints_{pos}")
     press(channel, 1, "runUpkeep")
     final = reload(game)
     assert final.gamestate["roundNum"] == 2
