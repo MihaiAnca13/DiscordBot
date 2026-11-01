@@ -125,11 +125,31 @@ def test_nine_lives_declined_lets_the_hit_land(make_game, no_random, run, press)
     assert state.gamestate["board"]["101"]["damage_tracker"]["blue-cru"] == 1
 
 
-def test_nine_lives_only_answers_the_attacker(make_game):
+def test_nine_lives_targets_the_faction_being_hit(make_game):
     game = _combat_game(make_game, ["blue-int", "red-cru"], "blue", "red")
     assert Combat.nine_lives_target(game, "101", "blue", ["red-cru"]) is None
     defender = _combat_game(make_game, ["red-int", "blue-cru"], "red", "blue")
     assert Combat.nine_lives_target(defender, "101", "red", ["blue-cru"]) == "blue"
+
+
+def test_nine_lives_when_hegemony_attacks(make_game, no_random, run, press):
+    game = _combat_game(make_game, ["blue-cru", "red-int"], "blue", "red")
+    channel = FakeChannel("aeb1-actions")
+    no_random([6, 1])
+    run(Combat.rollDice(game, "rollDice_101_red_3_deleteMsg", FakeInteraction(channel)))
+    reroll = next(cid for cid in buttons(channel) if cid.startswith("FCIDblue_nineLives_101_reroll_"))
+    press(channel, 1, reroll)
+    state = reload(game)
+    assert state.gamestate["players"]["1"]["colony_ships"] == 2
+    assert "damage_tracker" not in state.gamestate["board"]["101"]
+
+
+def test_nine_lives_when_hegemony_attacks_ai(make_game, no_random, run):
+    game = _combat_game(make_game, ["blue-cru", "ai-anc"], "blue", "ai")
+    channel = FakeChannel("aeb1-actions")
+    no_random([6, 6])
+    run(Combat.rollDiceAI(game, "rollDice_101_ai_2_deleteMsg", FakeInteraction(channel)))
+    assert any(cid.startswith("FCIDblue_nineLives_101_") for cid in buttons(channel))
 
 
 def test_nine_lives_prompt_answers_once(make_game, no_random, run):

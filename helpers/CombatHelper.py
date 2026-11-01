@@ -1994,14 +1994,9 @@ class Combat:
     @staticmethod
     def nine_lives_target(game: GamestateHelper, pos: str, colorOrAI: str, hittableShips):
         """The Hegemony defender whose ship this attacking die could hit, or None."""
-        tile = game.gamestate["board"][pos]
-        attacker = Combat.sideOf(tile.get("attacker"))
-        defender = Combat.sideOf(tile.get("defender"))
-        if colorOrAI not in attacker:
-            return None
         for ship in hittableShips:
             owner = ship.split("-")[0]
-            if owner == "ai" or owner not in defender:
+            if owner == "ai":
                 continue
             player = game.getPlayerObjectFromColor(owner)
             if FactionData.has(player, "nine_lives") and player["colony_ships"] > 0:
