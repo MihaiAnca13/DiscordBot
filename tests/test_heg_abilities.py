@@ -95,6 +95,28 @@ def test_nine_lives_works_with_the_last_colony_ship(make_game, no_random, run, p
     assert "damage_tracker" not in state.gamestate["board"]["101"]
 
 
+def test_nine_lives_can_reroll_again_until_colony_ships_run_out(make_game, no_random, run, press):
+    game = _combat_game(make_game, ["red-int", "blue-cru"], "red", "blue")
+    game.get_player(1)["colony_ships"] = 2
+    game.update()
+    channel = FakeChannel("aeb1-actions")
+    no_random([6, 6, 6])
+    run(Combat.rollDice(game, "rollDice_101_red_3_deleteMsg", FakeInteraction(channel)))
+    first = next(cid for cid in buttons(channel) if cid.startswith("FCIDblue_nineLives_101_reroll_"))
+    assert any("Colony Ships available: 2" in str(content) for content, _ in channel.sent)
+    press(channel, 1, first)
+    state = reload(game)
+    assert "damage_tracker" not in state.gamestate["board"]["101"]
+    assert any("Colony Ships available: 1" in str(content) for content, _ in channel.sent)
+    second = next(cid for cid in buttons(channel)
+                  if cid.startswith("FCIDblue_nineLives_101_reroll_") and cid != first)
+    press(channel, 1, second)
+    state = reload(game)
+    assert state.get_player(1)["colony_ships"] == 0
+    assert state.gamestate["board"]["101"]["damage_tracker"]["blue-cru"] == 1
+    assert not state.gamestate["board"]["101"]["nineLivesPending"]
+
+
 def test_pride_pays_only_on_the_hegemonys_own_centre(make_game):
     def points(owner, alliances=None):
         player = player_stats("heg", color="blue")
@@ -316,6 +338,7 @@ def test_nine_lives_reroll_keeps_built_for_war(make_game, no_random, run, press)
     run(Combat.rollDice(game, "rollDice_101_red_1_deleteMsg", FakeInteraction(channel)))
     no_random([6])
     press(channel, 1, _nine_lives_reroll(channel))
+    press(channel, 1, next(cid for cid in buttons(channel) if cid == "FCIDblue_nineLives_101_pass_2"))
     # a yellow die deals 1, and Built for War adds 1 on the rerolled six too
     assert reload(game).gamestate["board"]["101"]["damage_tracker"]["blue-cru"] == 2
 
@@ -331,6 +354,7 @@ def test_nine_lives_reroll_keeps_spine_damage(make_game, no_random, run, press):
     run(Combat.rollDice(game, "rollDice_101_red_2_deleteMsg_spinedmg", FakeInteraction(channel)))
     no_random([6])
     press(channel, 1, _nine_lives_reroll(channel))
+    press(channel, 1, next(cid for cid in buttons(channel) if cid == "FCIDblue_nineLives_101_pass_2"))
     assert reload(game).gamestate["board"]["101"]["damage_tracker"]["blue-cru"] == 2
 
 

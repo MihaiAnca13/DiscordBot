@@ -2114,7 +2114,7 @@ class Combat:
         tile = game.gamestate["board"][pos]
         token = tile.get("nineLivesToken", 0) + 1
         tile["nineLivesToken"] = token
-        tile.setdefault("nineLivesPending", []).append({"token": token, **entry})
+        tile.setdefault("nineLivesPending", []).append({**entry, "token": token})
         tile.setdefault("nineLivesOldLength", len(Combat.findPlayersInTile(game, pos)))
         game.update()
         player = game.getPlayerObjectFromColor(defender)
@@ -2125,7 +2125,8 @@ class Combat:
                              custom_id=f"FCID{defender}_nineLives_{pos}_pass_{token}"))
         await interaction.channel.send(
             f"{player['player_name']}, Nine Lives: flip a Colony Ship to make the attacker reroll the"
-            f" {entry['dieColor']} die that rolled a {entry['dieNum']}?", view=view)
+            f" {entry['dieColor']} die that rolled a {entry['dieNum']}?"
+            f" Colony Ships available: {player['colony_ships']}.", view=view)
 
     @staticmethod
     async def resolveNineLives(game: GamestateHelper, player_helper: PlayerHelper,
@@ -2162,7 +2163,11 @@ class Combat:
             game, entry["roller"], tile["player_ships"][:], dieNum, entry["computer"],
             pos, entry["speed"], entry["ignore"])
         game.update()
-        if hittable:
+        defender = Combat.nine_lives_target(game, pos, entry["roller"], hittable) if mode == "reroll" else None
+        if defender:
+            await Combat.offerNineLives(game, interaction, pos, defender,
+                                        {**entry, "dieNum": dieNum, "hits": hits})
+        elif hittable:
             if entry["roller"] == "ai":
                 ship = hittable[0] if len(hittable) == 1 else Combat.ai_target(game, pos, hittable, hits[0])
                 await Combat.assignHitTo(game, f"assignHitTo_{pos}_ai_{ship}_{dieNum}_{hits[0]}",
