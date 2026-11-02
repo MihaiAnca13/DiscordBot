@@ -67,7 +67,6 @@ class DiscoveryTileButtons:
         #    game.fillInDiscTiles()
         if game.gamestate["board"][tile]["disctile"] == 0:
             await interaction.followup.send("No discovery tile in tile " + tile)
-
             return False
         game.gamestate.get("discoveryOffers", {}).pop(tile, None)
         if FactionData.has(player, "two_discovery_choices"):
@@ -179,8 +178,8 @@ class DiscoveryTileButtons:
                 if tech in ownedTechs:
                     continue
                 tech_details = tech_data.get(tech)
-                if (minCost == tech_details["base_cost"] and tech not in cheapestTechs
-                        and DiscoveryTileButtons.can_gain_tech(player, tech_details)):
+                if minCost == tech_details["base_cost"] and tech not in cheapestTechs \
+                        and DiscoveryTileButtons.can_gain_tech(player, tech_details):
                     cheapestTechs.append(tech)
             if not cheapestTechs:
                 await interaction.channel.send("No unowned technology remains that fits this faction's trays.")

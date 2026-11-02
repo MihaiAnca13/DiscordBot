@@ -224,7 +224,6 @@ class ExploreButtons:
         await interaction.channel.send(f"Tile added to position {msg[1]}")
         if (game.gamestate["board"][msg[1]]["ancient"] == 0
                 or FactionData.has(player, "may_not_fight_ancients")):
-            view = View()
             if "bh" in game.gamestate["board"][msg[1]].get("type", ""):
                 await interaction.channel.send("This is a black hole tile, "
                                                "so its discovery tile cannot be claimed until a ship moves in, "

@@ -261,7 +261,7 @@ class Combat:
         tm_waiting = await Combat.offerTechnoMagic(game, channel, pos)
         await Carapace.offer(game, channel, pos)
         waiting = await Combat.offerPhaseModule(game, channel, pos)
-        if not waiting and not tm_waiting:
+        if not tm_waiting and not waiting:
             await Combat.promptNextSpeed(game, pos, channel, False)
 
     @staticmethod
@@ -2632,7 +2632,7 @@ class Combat:
         tile = game.gamestate["board"][pos]
         colors = []
         for color in Combat.sideOf(tile.get("attacker")) + Combat.sideOf(tile.get("defender")):
-            if color and color != "ai" and game.getPlayerObjectFromColor(color)["name"] == "Techno-Mages":
+            if color and color != "ai" and FactionData.has(game.getPlayerObjectFromColor(color), "techno_magic"):
                 colors.append(color)
         if not colors:
             return False
@@ -2641,11 +2641,10 @@ class Combat:
         game.update()
         for color in colors:
             player = game.getPlayerObjectFromColor(color)
-            view = UpgradeButtons.getTechnoMagicView(game, player, pos)
-            if len(view.children):
-                await channel.send(f"{player['player_name']}, Techno-Magic lets you temporarily Upgrade 1 on each"
-                                   " ship blueprint for this combat. The new parts are removed when the battle"
-                                   " ends. You may not remove ship parts or place Ancient ship parts.", view=view)
+            await channel.send(f"{player['player_name']}, Techno-Magic lets you temporarily Upgrade 1 on each"
+                               " ship blueprint for this combat. The new parts are removed when the battle"
+                               " ends. You may not remove ship parts or place Ancient ship parts.",
+                               view=UpgradeButtons.getTechnoMagicView(game, player, pos))
         return True
 
     @staticmethod

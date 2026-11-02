@@ -83,6 +83,10 @@ class TileCommands(commands.GroupCog, name="tile"):
         :return:
         """
         game = GamestateHelper(interaction.channel)
+        tile_position = tile_position.lower()
+        if "-" in tile_position:
+            parent, suffix = tile_position.rsplit("-", 1)
+            tile_position = parent if suffix == "a" else parent + suffix
         player_color = color.value if color else game.get_player(str(interaction.user.id),interaction)["color"]
 
         added_units, removed_units = [], []

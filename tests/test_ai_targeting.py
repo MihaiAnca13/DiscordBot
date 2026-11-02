@@ -35,8 +35,8 @@ def test_ai_allocates_two_hits_to_destroy_largest_ship(make_game, no_random, run
 
     def ship_model(_player, ship_type):
         return SimpleNamespace(
+            ship_type="cruiser" if ship_type == "cru" else "interceptor",
             speed=4,
-            ship_type=ship_type,
             computer=0,
             shield=1 if ship_type == "cru" else 0,
             hull=1 if ship_type == "cru" else 0,
