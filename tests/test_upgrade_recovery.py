@@ -5,12 +5,15 @@ import discord
 import pytest
 
 from Buttons.Upgrade import UpgradeButtons
+from helpers.DrawHelper import DrawHelper
 from helpers.PlayerHelper import PlayerHelper
 from tests.fakes import FakeInteraction, buttons, reload
 
 
 @pytest.fixture
-def upgrade_game(start_game):
+def upgrade_game(start_game, monkeypatch):
+    monkeypatch.setattr(DrawHelper, "player_area", lambda *args: None)
+    monkeypatch.setattr(DrawHelper, "show_player_ship", lambda *args: None)
     return start_game(factions=["tm", "eri"])
 
 
