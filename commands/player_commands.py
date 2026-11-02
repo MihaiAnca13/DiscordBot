@@ -11,6 +11,7 @@ from Buttons.Research import ResearchButtons
 from Buttons.Turn import TurnButtons
 from Buttons.Upgrade import UpgradeButtons
 from helpers.PlayerHelper import PlayerHelper
+from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
 from helpers.DrawHelper import DrawHelper
 from discord.ui import View, Button
@@ -318,7 +319,9 @@ class PlayerCommands(commands.GroupCog, name="player"):
         game = GamestateHelper(interaction.channel)
         player = game.get_player(interaction.user.id,interaction)
         await interaction.response.defer(thinking=False)
-        await MoveButtons.startMove(game, player, interaction, "startMove_8", False)
+        # The last move activation: one ship, and startMove does not reject the count.
+        apt = FactionData.action_apt(player, "move")
+        await MoveButtons.startMove(game, player, interaction, f"startMove_{apt}", False)
 
     @app_commands.command(name="break_relations")
     @app_commands.choices(color=color_choices)
