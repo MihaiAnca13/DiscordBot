@@ -1,4 +1,5 @@
 import discord
+from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
 from helpers.PlayerHelper import PlayerHelper
 from discord.ui import View, Button
@@ -47,4 +48,6 @@ class PulsarButtons:
         if action == "upgrade":
             await UpgradeButtons.startUpgrade(game, player, interaction, False, "dummy","dum")
         if action == "move":
-            await MoveButtons.startMove(game, player, interaction, "startMove_8", False)
+            # The last move activation: one ship, and startMove does not reject the count.
+            apt = FactionData.action_apt(player, "move")
+            await MoveButtons.startMove(game, player, interaction, f"startMove_{apt}", False)
