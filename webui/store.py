@@ -164,11 +164,25 @@ class FeedStore:
         rev = self._next_rev()
         cur = self.conn.execute(
             "INSERT INTO messages (game_id, room, author_id, content, buttons, attachments,"
-            " ephemeral_to, discord_id, rev, created_at, combat) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            " ephemeral_to, discord_id, rev, created_at, combat) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+            " ON CONFLICT (game_id, discord_id) WHERE discord_id IS NOT NULL DO NOTHING",
             (game_id, room, author_id, content,
              json.dumps(buttons or []), json.dumps(attachments or []),
              ephemeral_to, None if discord_id is None else str(discord_id),
              rev, time.time(), json.dumps(combat or {})))
+        if cur.rowcount == 0:
+            # One Discord message, one row. A press on a just-posted message can add an
+            # empty row before the send that posted it returns; fill that row, never a full one.
+            existing = self.by_discord_id(game_id, discord_id)
+            if existing["content"] is None and content is not None:
+                self.conn.execute(
+                    "UPDATE messages SET content = ?, buttons = ?, attachments = ?, ephemeral_to = ?,"
+                    " author_id = ?, combat = ?, rev = ? WHERE id = ?",
+                    (content, json.dumps(buttons or []), json.dumps(attachments or []),
+                     ephemeral_to, author_id, json.dumps(combat or {}), self._next_rev(),
+                     existing["id"]))
+            self.conn.commit()
+            return existing["id"]
         self.conn.commit()
         return cur.lastrowid
 
