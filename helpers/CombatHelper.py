@@ -1168,13 +1168,16 @@ class Combat:
 
     @staticmethod
     def die_damage(game: GamestateHelper, colorOrAI: str, dieColor: str, face: int,
-                   damage_bonus: int = 0, split: bool = False):
+                   damage_bonus: int = 0, split: bool = False, shielded: bool = False):
         """The hits one physical die deals: its colour's damage, Spine's bonus and Built for War's
-        extra damage on a six. A split die deals the same total as separate one-damage hits."""
+        extra damage on a six. A split die deals the same total as separate one-damage hits.
+        Carapace Shields dock the die by one before it can split."""
         total = Combat.translateColorToDamage(dieColor, face) + damage_bonus
         if (face == 6 and dieColor != "pink" and colorOrAI != "ai"
                 and FactionData.has(game.getPlayerObjectFromColor(colorOrAI), "built_for_war")):
             total += 1
+        if shielded:
+            total = max(0, total - 1)
         return [1] * total if split else [total]
 
     @staticmethod
@@ -1276,6 +1279,7 @@ class Combat:
                 dieNums = []
                 msg2 = "\n"
                 shipRiftBackfire = 0
+                shielded = Carapace.engaged(game, pos, colorOrAI, shipModel.ship_type)
                 for x in range(ship[2]):
                     for die_index, die in enumerate(dice):
                         source = sources[die_index] if die_index < len(sources) else None
@@ -1307,18 +1311,12 @@ class Combat:
                         if speed == 1000:
                             split = True
                         hits = Combat.die_damage(game, colorOrAI, die, random_number,
-                                                 damage_bonus, split)
+                                                 damage_bonus, split, shielded)
                         die_total = sum(hits)
                         for hit in hits:
                             dieNums.append([random_number, hit, die, source, roll_id, die_total])
                 if computerVal > 0:
                     msg += f"\nThis ship type has a +{computerVal} computer."
-
-                shielded = Carapace.engaged(game, pos, colorOrAI, shipModel.ship_type)
-                if shielded:
-                    for die in dieNums:
-                        die[1] = Carapace.weapon_damage(game, pos, colorOrAI,
-                                                        shipModel.ship_type, die[1])
 
                 if len(dice) > 0:
                     # await interaction.channel.send(msg,file=drawing.append_images(dieFiles))
@@ -1919,10 +1917,7 @@ class Combat:
         game.update_player(player_helper)
         dieNum = random.randint(1, 6)
         hits = Combat.die_damage(game, roller, entry["dieColor"], dieNum,
-                                 entry["damageBonus"], entry["split"])
-        if entry["shielded"]:
-            hits = [Carapace.weapon_damage(game, pos, roller, entry["shipType"], damage)
-                    for damage in hits]
+                                 entry["damageBonus"], entry["split"], entry["shielded"])
         await interaction.channel.send(
             f"{interaction.user.mention} rerolled a {entry['dieColor']} die with a colony ship:"
             f" the die is rerolled into a {dieNum}.")
@@ -2013,10 +2008,7 @@ class Combat:
                 game.update_player(player_helper)
                 dieNum = random.randint(1, 6)
                 hits = Combat.die_damage(game, entry["roller"], entry["dieColor"], dieNum,
-                                         entry["damageBonus"], entry["split"])
-                if entry["shielded"]:
-                    hits = [Carapace.weapon_damage(game, pos, entry["roller"], entry["shipType"],
-                                                   damage) for damage in hits]
+                                         entry["damageBonus"], entry["split"], entry["shielded"])
                 await interaction.channel.send(
                     f"{interaction.user.mention} flipped a Colony Ship for Nine Lives: the die is"
                     f" rerolled into a {dieNum}.")
