@@ -1317,6 +1317,9 @@ class Combat:
                             dieNums.append([random_number, hit, die, source, roll_id, die_total])
                 if computerVal > 0:
                     msg += f"\nThis ship type has a +{computerVal} computer."
+                if spine_bonus:
+                    msg += (f"\nSpine Cannon augment: +{spine_bonus} to "
+                            f"{'Hit' if spine_mode == 'spinehit' else 'Damage'}.")
 
                 if len(dice) > 0:
                     # await interaction.channel.send(msg,file=drawing.append_images(dieFiles))
@@ -1532,7 +1535,8 @@ class Combat:
                                  custom_id=f"FCID{color}_wolfPackDone_{pos}"))
             await interaction.channel.send(
                 f"{player['player_name']}, Wolf Pack: {sixes} six{'es' if sixes != 1 else ''}. "
-                "Convert a miss from the same attack pool into a hit, or save a reroll for a later ship.",
+                "Convert a miss from the same attack pool into a guaranteed hit (it counts as a 6),"
+                " or save a reroll for a later ship.",
                 view=view)
             return
         if state["available"] > 0:
@@ -1620,6 +1624,10 @@ class Combat:
             state["sixes"][pool] -= 1
             state["misses"].pop(index)
             save()
+            await interaction.channel.send(
+                f"{player['player_name']} used Wolf Pack: the"
+                f" {Combat.translateShipAbrToName(pool)} miss counts as a"
+                f" {Combat.die_face(interaction, miss[3], 6)}, so it hits.")
             await targets_for(6, 0, miss[2], miss[3], miss[5], miss[6], miss[7])
         elif kind == "wolfPackSave":
             pool = next(pool for pool, count in state["sixes"].items() if count > 0)
@@ -1645,6 +1653,10 @@ class Combat:
                 state["sixes"][miss[0]] = state["sixes"].get(miss[0], 0) + 1
             damage = Combat.translateColorToDamage(miss[3], roll) + miss[7]
             save()
+            await interaction.channel.send(
+                f"{player['player_name']} used Wolf Pack to reroll the"
+                f" {Combat.translateShipAbrToName(miss[0])} miss:"
+                f" {Combat.die_face(interaction, miss[3], roll)}.")
             await targets_for(roll, miss[4], damage, miss[3], miss[5], miss[6], miss[7])
         elif kind == "wolfPackTarget":
             pending = state.get("pendingHit")
@@ -2607,6 +2619,20 @@ class Combat:
         return content, view
 
     @staticmethod
+    def phase_declaration_summary(game: GamestateHelper, color: str, pos: str):
+        """The options one player declared for each blueprint, for the whole table to read."""
+        modes = game.gamestate["board"].get(pos, {}).get("phaseModes", {}).get(color, {})
+        if not modes:
+            return "No options were declared, so only the Cloaking Device applies."
+        declared = "; ".join(
+            f"{ship_type.capitalize()}: "
+            + ", ".join(label for option, (label, _cost) in Combat.PHASE_OPTIONS.items()
+                        if mode.get(option))
+            + f" ({mode.get('cost', 0)} power)"
+            for ship_type, mode in modes.items())
+        return f"{declared}. Cloaking Device is always on."
+
+    @staticmethod
     async def offerPhaseModule(game: GamestateHelper, channel, pos: str):
         """Phase Module: declare each blueprint's options before initiative is prompted."""
         tile = game.gamestate["board"][pos]
@@ -2727,8 +2753,10 @@ class Combat:
             return
         ready[color] = True
         game.update()
-        await interaction.message.edit(content=f"{player['player_name']} has finished declaring Phase Module options.",
-                                       view=None)
+        await interaction.message.edit(
+            content=(f"{player['player_name']} has finished declaring Phase Module options. "
+                     f"{Combat.phase_declaration_summary(game, color, pos)}"),
+            view=None)
         if (all(ready.get(color2) for color2 in colors)
                 and not tile.get("phaseModulePrompted")):
             tile["phaseModulePrompted"] = True
@@ -3137,6 +3165,14 @@ class Combat:
                 return 1
             return 0
         return 1
+
+    @staticmethod
+    def die_face(interaction: discord.Interaction, dieColor: str, dieValue: int):
+        """A die face as its dice emoji, or the plain number when the bot has no such emoji."""
+        name = f"dice_{Combat.translateColorToName(dieColor)}_{dieValue}"
+        emoji = Emoji._app.get(name) or next(
+            (str(item) for item in interaction.guild.emojis if item.name == name), None)
+        return emoji or str(dieValue)
 
     @staticmethod
     def translateShipAbrToName(ship: str):
