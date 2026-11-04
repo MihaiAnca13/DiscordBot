@@ -1993,7 +1993,8 @@ class Combat:
                              custom_id=f"FCID{defender}_nineLives_{pos}_pass_{token}"))
         await interaction.channel.send(
             f"{player['player_name']}, Nine Lives: flip a Colony Ship to make the attacker reroll the"
-            f" {entry['dieColor']} die that rolled a {entry['dieNum']}?"
+            f" {entry['dieColor']} die that rolled a"
+            f" {Combat.die_face(interaction, entry['dieColor'], entry['dieNum'])}?"
             f" Colony Ships available: {player['colony_ships']}.", view=view)
 
     @staticmethod
@@ -2023,7 +2024,8 @@ class Combat:
                                          entry["damageBonus"], entry["split"], entry["shielded"])
                 await interaction.channel.send(
                     f"{interaction.user.mention} flipped a Colony Ship for Nine Lives: the die is"
-                    f" rerolled into a {dieNum}.")
+                    f" rerolled into a"
+                    f" {Combat.die_face(interaction, entry['dieColor'], dieNum)}.")
         hittable = Combat.getOpponentUnitsThatCanBeHit(
             game, entry["roller"], tile["player_ships"][:], dieNum, entry["computer"],
             pos, entry["speed"], entry["ignore"])
