@@ -1451,6 +1451,9 @@ class Combat:
                             dieNums.append([random_number, hit, die, source, roll_id, die_total])
                 if computerVal > 0:
                     msg += f"\nThis ship type has a +{computerVal} computer."
+                if spine_bonus:
+                    msg += (f"\nSpine Cannon augment: +{spine_bonus} to "
+                            f"{'Hit' if spine_mode == 'spinehit' else 'Damage'}.")
 
                 if len(dice) > 0:
                     # await interaction.channel.send(msg,file=drawing.append_images(dieFiles))
@@ -1680,7 +1683,8 @@ class Combat:
                                  custom_id=f"FCID{color}_wolfPackDone_{pos}"))
             await interaction.channel.send(
                 f"{player['player_name']}, Wolf Pack: {sixes} six{'es' if sixes != 1 else ''}. "
-                "Convert a miss from the same attack pool into a hit, or save a reroll for a later ship.",
+                "Convert a miss from the same attack pool into a guaranteed hit (it counts as a 6),"
+                " or save a reroll for a later ship.",
                 view=view)
             return
         if state["available"] > 0:
@@ -1768,6 +1772,10 @@ class Combat:
             state["sixes"][pool] -= 1
             state["misses"].pop(index)
             save()
+            await interaction.channel.send(
+                f"{player['player_name']} used Wolf Pack: the"
+                f" {Combat.translateShipAbrToName(pool)} miss counts as a"
+                f" {Combat.die_face(interaction, miss[3], 6)}, so it hits.")
             await targets_for(6, 0, miss[2], miss[3], miss[5], miss[6], miss[7])
         elif kind == "wolfPackSave":
             pool = next(pool for pool, count in state["sixes"].items() if count > 0)
@@ -1793,6 +1801,10 @@ class Combat:
                 state["sixes"][miss[0]] = state["sixes"].get(miss[0], 0) + 1
             damage = Combat.translateColorToDamage(miss[3], roll) + miss[7]
             save()
+            await interaction.channel.send(
+                f"{player['player_name']} used Wolf Pack to reroll the"
+                f" {Combat.translateShipAbrToName(miss[0])} miss:"
+                f" {Combat.die_face(interaction, miss[3], roll)}.")
             await targets_for(roll, miss[4], damage, miss[3], miss[5], miss[6], miss[7])
         elif kind == "wolfPackTarget":
             pending = state.get("pendingHit")
@@ -3334,6 +3346,14 @@ class Combat:
                 return 1
             return 0
         return 1
+
+    @staticmethod
+    def die_face(interaction: discord.Interaction, dieColor: str, dieValue: int):
+        """A die face as its dice emoji, or the plain number when the bot has no such emoji."""
+        name = f"dice_{Combat.translateColorToName(dieColor)}_{dieValue}"
+        emoji = Emoji._app.get(name) or next(
+            (str(item) for item in interaction.guild.emojis if item.name == name), None)
+        return emoji or str(dieValue)
 
     @staticmethod
     def translateShipAbrToName(ship: str):
