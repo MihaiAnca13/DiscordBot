@@ -537,6 +537,23 @@ class Combat:
         return 1 if colorOrAI in tile["pounceSide"] else 0
 
     @staticmethod
+    def computer_message(game: GamestateHelper, pos: str, colorOrAI: str, speed: int, computer):
+        """The computer total with the parts that make it up, and why Pounce is missing."""
+        solitary = Combat.solitary_hunter_bonus(game, pos, colorOrAI)
+        pounce = Combat.pounce_hit(game, pos, colorOrAI, speed)
+        msg = f"\nThis ship type has a +{computer} computer"
+        if solitary or pounce:
+            parts = [f"+{computer - solitary - pounce} from the blueprint"]
+            parts += [f"+{value} from {name}" for name, value in
+                      (("Solitary Hunter", solitary), ("Pounce", pounce)) if value]
+            msg += ": " + ", ".join(parts[:-1]) + " and " + parts[-1]
+        msg += "."
+        if (speed < 90 and not pounce and game.gamestate["board"][pos].get("engagementRound", 1) == 1
+                and FactionData.has(game.getPlayerObjectFromColor(colorOrAI), "pounce")):
+            msg += "\nPounce does not apply: the other side shoots first in this engagement round."
+        return msg
+
+    @staticmethod
     def getBothCombatantShipsBySpeed(game: GamestateHelper, defender, attacker, playerShipsList, pos):
         """defender and attacker are sides: lists of colours."""
         ships = []
@@ -1316,7 +1333,7 @@ class Combat:
                         for hit in hits:
                             dieNums.append([random_number, hit, die, source, roll_id, die_total])
                 if computerVal > 0:
-                    msg += f"\nThis ship type has a +{computerVal} computer."
+                    msg += Combat.computer_message(game, pos, colorOrAI, speed, computerVal)
                 if spine_bonus:
                     msg += (f"\nSpine Cannon augment: +{spine_bonus} to "
                             f"{'Hit' if spine_mode == 'spinehit' else 'Damage'}.")
@@ -1727,7 +1744,7 @@ class Combat:
             dieNums.append([random_number, Combat.translateColorToDamage(die, random_number), die])
 
         if computerVal > 0:
-            msg += f"\nThis ship type has a +{str(computerVal)} computer."
+            msg += Combat.computer_message(game, pos, colorOrAI, speed, computerVal)
         await interaction.channel.send(msg + msg2)
 
         oldNumPeeps = len(Combat.findPlayersInTile(game, pos))
