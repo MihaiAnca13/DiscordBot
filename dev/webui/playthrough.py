@@ -11,20 +11,31 @@ Prepare the game first (service stopped), then run this with the service up:
     ... python -m dev.webui.playthrough combat
 """
 import json
+import os
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 
-BASE = "http://127.0.0.1:8099/api/games/aeb1"
+WEBUI = os.environ.get("WEBUI", "http://127.0.0.1:8099")
+GAME = os.environ.get("GAME", "aeb1")
+BASE = f"{WEBUI}/api/games/{GAME}"
+
+
+def fetch(url, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(url, data=data,
+                                     headers={"Content-Type": "application/json"} if data else {})
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        raise SystemExit(f"{error.code}: {error.read().decode()}")
 
 
 def api(path, body=None):
-    data = json.dumps(body).encode() if body is not None else None
-    request = urllib.request.Request(BASE + path, data=data,
-                                     headers={"Content-Type": "application/json"} if data else {})
-    with urllib.request.urlopen(request, timeout=90) as response:
-        return json.load(response)
+    return fetch(BASE + path, body)
 
 
 def view(seat):
@@ -208,9 +219,88 @@ def play_combat():
           [(player["name"], player["reputation"]) for player in after["game"]["players"]])
 
 
+# -- one press at a time, for an agent playing the game ----------------------
+# GAME=aeb2 python3 -m dev.webui.playthrough show 1
+# GAME=aeb2 python3 -m dev.webui.playthrough press 1 "Explore (1)"   (a label or a custom_id)
+# GAME=aeb2 python3 -m dev.webui.playthrough img player 1             (board, player, blueprint-cru, /api/media/...)
+# GAME=aeb2 python3 -m dev.webui.playthrough state                     (every player's resources and tiles)
+
+def print_message(message):
+    print(f"\n#{message['id']} [{message['room']}]{' private' if message['private'] else ''}")
+    if message["content"]:
+        print(message["content"])
+    for button in message["buttons"]:
+        print(f"  [{button.get('label')}]  {button['custom_id']}")
+        for count in button.get("counts", []):
+            print(f"    [{count.get('label')}]  {count['custom_id']}")
+    for attachment in message["attachments"]:
+        print(f"  file: {attachment['url']}")
+
+
+def show(seat):
+    snapshot = view(seat)
+    game = snapshot["game"]
+    drafting = f", drafting seat {game['drafting_seat']}" if game["setup"] else ""
+    print(f"{GAME} round {game['round']}, active {game['active']}{drafting}")
+    for message in snapshot["pending"]:
+        print_message(message)
+
+
+def choose(seat, text):
+    """Press the one button whose custom_id or label is text (else contains it), print what followed."""
+    options = [(message, choice) for message in pending(seat) for button in message["buttons"]
+               for choice in [button, *button.get("counts", [])]]
+    matches = ([(m, b) for m, b in options if text in (b["custom_id"], b.get("label"))]
+               or [(m, b) for m, b in options if text in (b.get("label") or "")])
+    if len(matches) != 1:
+        raise SystemExit(f"{len(matches)} buttons match {text!r}: "
+                         f"{[(b.get('label'), b['custom_id']) for _m, b in matches or options]}")
+    last = max((m["id"] for m in api(f"/history?seat={seat}")["messages"]), default=0)
+    message, button = matches[0]
+    result = api("/press", {"seat": seat, "custom_id": button["custom_id"], "message_id": message["id"]})
+    if result.get("error"):
+        print(f"ERROR: {result['error']}")
+    time.sleep(0.35)
+    print("--- posted since the press ---")
+    for posted in reversed(api(f"/history?seat={seat}")["messages"]):
+        if posted["id"] > last:
+            print_message(posted)
+    print("\n--- pending now ---")
+    show(seat)
+
+
+def state():
+    for player in view("1")["game"]["players"]:
+        print({key: player[key] for key in (
+            "id", "color", "faction_name", "money", "science", "materials", "colony_ships",
+            "influence_discs", "points", "actions", "reputation", "ship_stock", "passed")},
+              "tiles:", [tile["position"] for tile in player["owned_tiles"]])
+
+
+def image(panel, seat=""):
+    url = WEBUI + panel if panel.startswith("/") else f"{BASE}/{panel}.webp" + (f"?seat={seat}" if seat else "")
+    folder = os.environ.get("OUT", "dev/webui/artifacts/playtest")
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f"{GAME}-{panel.strip('/').replace('/', '-')}{'-' + seat if seat else ''}"
+                        + ("" if panel.startswith("/") else ".webp"))
+    urllib.request.urlretrieve(url, path)
+    print(os.path.abspath(path))
+
+
 if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "round"
-    if mode == "round":
+    if mode == "new":
+        print(fetch(f"{WEBUI}/api/games", {"name": "Playtest", "players": int(sys.argv[2]),
+                                           "community_factions": True})["id"])
+    elif mode == "show":
+        show(sys.argv[2])
+    elif mode == "press":
+        choose(sys.argv[2], sys.argv[3])
+    elif mode == "img":
+        image(*sys.argv[2:])
+    elif mode == "state":
+        state()
+    elif mode == "round":
         play_round()
     elif mode == "movement":
         play_movement()
@@ -219,4 +309,4 @@ if __name__ == "__main__":
     elif mode == "combat":
         play_combat()
     else:
-        raise SystemExit("mode must be round, movement, full or combat")
+        raise SystemExit("mode must be new, show, press, img, state, round, movement, full or combat")

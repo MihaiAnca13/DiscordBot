@@ -22,6 +22,8 @@ services:
       - ./setup:/app/setup
       - ./dev:/app/dev
       - ./config.py:/app/config.py
+      - ./data:/app/data:ro
+      - ./images:/app/images:ro
       - webui-sandbox:/sandbox
       - webui-feed:/app/webui/data
       - ./dev/webui/artifacts:/app/dev/webui/artifacts

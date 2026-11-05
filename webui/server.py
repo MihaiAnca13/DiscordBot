@@ -897,5 +897,14 @@ if __name__ == "__main__":
     # Dev: point at a copy of the save folder so real games are never written.
     games_path = os.environ.get("WEBUI_GAMESTATE_PATH", config.gamestate_path)
     port = int(os.environ.get("WEBUI_PORT", "8099"))
+    # No Discord here, so no application emojis: name the dice and faction tokens as
+    # :text: so a message that skips its emoji is still visible to a playtest.
+    from glob import glob
+    from helpers import FactionData
+    from helpers.EmojiHelper import Emoji
+    names = [os.path.basename(path)[:-4] for path in glob(os.path.join(
+        ART_DIR, "components", "dice_faces", "dice_*.png"))]
+    names += [Emoji.token_name(faction["artwork"]) for faction in FactionData.FACTIONS.values()]
+    Emoji._app = {name: f":{name}:" for name in names}
     app = build(games_path=games_path).create_app()
     web.run_app(app, host=os.environ.get("WEBUI_HOST", "127.0.0.1"), port=port)

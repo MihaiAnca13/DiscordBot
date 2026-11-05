@@ -7,7 +7,7 @@ its behaviour in its tests. The `add-faction` skill's `CHECKLIST.md` mirrors thi
 two disagree, this file wins and both get updated.
 
 A faction is done when its own tests pass, the verification pass below has come back clean, every
-throwaway probe has been triaged, and the render check has been done by eye.
+throwaway probe has been triaged, and the sandbox playtest (step 8) has come back with no open bugs.
 
 ## The process
 
@@ -22,7 +22,10 @@ throwaway probe has been triaged, and the render check has been done by eye.
    reputation track and every ability's exact wording. Do this for every image that carries rules
    text — some factions ship several info pages. In parallel, delegate a second transcription as a
    cross-check and tell the delegate to flag anything illegible rather than normalise it. Flag
-   disputed readings instead of guessing.
+   disputed readings instead of guessing. Give every ability a row in a timing table: trigger
+   (setup, pre-game, own turn, a named action, combat start, each die, upkeep, end of game),
+   limit (once, per die, per round, unlimited) and who it applies to. Fill each cell from the
+   wording; a blank cell is a reading to record, not a default.
 3. **Decode the board against an implemented board of the same template.** The differences are the
    rule deltas: reputation-slot frames (ambassador frame present, absent, or mixed), the bubble
    above an action circle (how many colony ships an Influence action flips), printed glyphs and
@@ -53,12 +56,14 @@ throwaway probe has been triaged, and the render check has been done by eye.
      its throwaway marker; a probe that passed is deleted;
    - assets: every referenced artwork path exists and matches its source (pixel or hash compare,
      not just dimensions), and this doc is still generic with any new shortcoming folded in.
-8. **Look at the render.** Run the first-round test, render the saved game through
-   `webui/render.py` (`render_board` / `render_panel`; there is no `local_debug` CLI), and check
-   the home tile, the player area and the blueprints by eye. Tests stub the art, so this is the
-   only check of the picture.
-9. **Report.** What was added, which flow each ability reuses, what the checks found, and anything
-   uncertain from the rules images that a human should confirm against the physical card.
+8. **Playtest in the sandbox.** Run the `faction-playtest` skill: agents draft the faction in the
+   web UI sandbox, compare the rendered home tile, player area and blueprints with the board, fire
+   each ability and read every message it posts. Tests stub the art and fake Discord, so this is
+   the only check of the picture and the text. Without the skill, at least render the first-round
+   save through `webui/render.py` (`render_board` / `render_panel`) and check it by eye.
+9. **Report.** What was added, which flow each ability reuses, what the checks found, the readings
+   taken where the card was silent, and only the questions that pass the gate in
+   [Questions for the human](#questions-for-the-human).
 
 Work from the latest base branch and commit as you go. Before the final report, merge the base
 branch again and re-check the wiring against anything that moved: draft rules, setup sends and
@@ -105,7 +110,9 @@ hypothetical faction. The fields in use:
 | `community` | `DraftButtons.getDraftButtons` | draft only with `community_factions` on |
 | `starting_ships` | `GamestateHelper.setup_finished` | ships on the home sector at setup (default `["int"]`) |
 | `influence_colony_ships` | `Buttons/Influence.py`, `DrawHelper.player_area` | colony ships one Influence action flips (default 2) |
-| `reputation_only_slots` | `PlayerHelper.is_reputation_only_slot` | reputation-track indices with no ambassador slot |
+| `reputation_track` | setup, `GamestateHelper` relation code | one `mixed`/`rep`/`amb` entry per printed slot |
+| `reputation_only_slots` | `PlayerHelper.is_reputation_only_slot` | reputation-track indices with no ambassador slot; must name exactly the `rep` entries of `reputation_track` |
+| `<ship>_parts` | setup, `DrawHelper.player_area` | one entry per printed slot in the standard slot order (see Drawing), `empty` where nothing is printed |
 | `blueprint_slots` | `DrawHelper.draw_blueprint_slots` | per ship, one `[column, half-row]` cell per parts entry when the printed slot shape is not the standard one |
 | `portrait_image` | `DrawHelper.faction_portrait` | use `factionImages/<art>_image.png` instead of the standard board crop |
 | `abilities` | `FactionData.has(player, "...")` | named abilities the implementation is guarded by |
@@ -153,6 +160,18 @@ setup places.
   flag it rather than deciding it.
 - **Silence on timing is a decision.** Where card and board are both silent (timing, "any type"),
   write the reading down and flag it in the report.
+- **Do not add limits the text lacks.** "Once", "only when defending", "only your own dice" are
+  narrowings like any other: an ability that answers a die answers every die it can see, rerolls
+  included, unless the wording says otherwise.
+- **A card's resource word is usually a base-game quantity.** Before inventing a counter that is
+  spent and refilled, check whether the word (Power, energy, souls) matches an existing stat such
+  as blueprint energy, colony ships or influence. A permanent bonus read as a spendable pool
+  changes every fight, and the costs it pays may come from spare blueprint energy first.
+- **"The X action" is not every way to do X.** Pulsar builds and moves, free activations granted by
+  another ability, `/move` and similar commands enter the same flow. Decide from the wording which
+  of them trigger the ability and check each entry path (flags such as `pulsar_build`).
+- **The setup line on the card is an ability.** "Start with", "place", "choose" before round one
+  needs a pre-game task; a recurring choice (each upkeep) needs its own hook, not a pre-game one.
 
 ### Home tile and sector data
 
@@ -165,6 +184,12 @@ setup places.
   Setup fills every non-advanced home *resource* square with a cube (plus any Advanced square a
   starting technology unlocks) whether or not the art prints one, and the population tracks drop by
   the same count. A neutral square is a neutral planet and stays empty.
+- **Plain or advanced is printed per square.** Read each square's frame on the tile art; the
+  card's icon count does not say which square is advanced. A square that a starting technology
+  does not unlock starts empty.
+- **Snaps are centres.** Each `<type><n>_snap` is the centre of its printed square, not a corner
+  or a ring mark, and every ship snap (`int`, `cru`, `drd`, `sb`, `orb`, `mon`) lies inside the
+  hexagon. Check by rendering the tile with every square filled and every ship type placed.
 - **A nameplate can sit over a population square.** Then the tile needs a numberless variant plus a
   per-tile `number_snap`, or the banner covers a square or a second printed number shows.
 - **The tile number box.** Without a numberless variant, `images/resources/masks/banner.png` is
@@ -200,12 +225,21 @@ setup places.
 - **Rules the board prints must reach the player area.** `DrawHelper.player_area` draws some board
   numbers from data and some from hardcoded faction lists; an ability that changes the latter needs
   the drawing updated too. A number that lives in both rule and drawing belongs in `factions.json`.
-- **A custom or shorter tech track is drawn from data.** The shared `player_layout.png` carries the
-  standard discounts, so a non-standard track must go through `draw_tech_track`; check that both
-  the picture and the research menu agree.
-- **Blueprint slot counts come from the render.** Plans and printed layouts can disagree with the
-  number of part rectangles; count them from the art. When the printed slot shape is not standard,
-  give the faction `blueprint_slots` instead of adding name branches or coordinate overrides.
+  A counter the faction accumulates (a dial, a die on the board) needs drawing as well.
+- **A non-standard tech track pastes the board's own tray.** `draw_tech_track` crops the tray from
+  the 4400px `<art>_board.png` at fixed coordinates and skips the starting technologies the board
+  already prints. A board that is not the standard template needs its crop measured. Check that
+  the picture and the research menu's discounts agree.
+- **Parts arrays follow the standard slot order.** `DrawHelper.player_area` places entry *n* of
+  `<ship>_parts` on the standard template's slot *n*: top row left to right, bottom row left to
+  right, then the extra corner slot. Count the printed slots including empty ones and write
+  `empty` where nothing is printed. A special part printed in a standard slot (a hull-like part,
+  say) goes in that slot of the standard array.
+- **`blueprint_slots` is the last resort.** Overlay the standard template on the printed blueprint
+  first; a reordered parts array fixes most mismatches. Use `blueprint_slots` only for a shape the
+  template cannot show, never as name branches or coordinate overrides.
+- **The reputation track is two fields.** `reputation_track` and `reputation_only_slots` must agree
+  slot by slot, and both must match the frames on the board.
 
 ### Setup and the draft
 
@@ -272,7 +306,15 @@ refresh, and ship cost/upgrade paths.
 - **A free activation's filter belongs in the next button id.** Put a class restriction into the
   emitted `moveFrom` id and test the id the UI emits.
 - **A no-combat bombing prompt still needs the weapon/power choice.** Offer it rather than claiming
-  a combat-start declaration covers the case.
+  a combat-start declaration covers the case. A sector cleared that way still owes the influence
+  and population prompts that every other way of clearing a sector offers.
+- **Per-die modifiers apply before a split.** `Combat.die_damage` is the one place that turns a face
+  into hits; a reduction applied after an Antimatter split hits every fragment instead of the die.
+- **Reroll prompts chain.** One faction's reroll is a new die for another faction's die ability.
+  Keep the full die context (computer, speed, damage bonus, split, shield, ship) in the pending
+  entry so either side can answer the rerolled die.
+- **The AI assigns hits on its own path.** A defensive ability must hold when the AI is the
+  attacker (`Combat.ai_target`, the salvo allocation), not only when a player picks the target.
 
 ### Prompts, menus and buttons
 
@@ -281,4 +323,56 @@ refresh, and ship cost/upgrade paths.
 - **A free activation inside another action must resume it.** Return to the Build or Move menu (or
   finish the action) and allow exactly one upgrade.
 - **A sub-flow that spends one activation must not hide the rest.** After the swap, offer the
-  remaining normal activations; a view with only "again" or "finish" traps them.
+  remaining normal activations; a view with only "again" or "finish" traps them. Returning from it
+  must keep the activation count (no reset that lets the player exceed it) and must not add a
+  second Finish button.
+- **A new guard in a shared function breaks odd callers.** Commands and free activations call the
+  same function with unusual arguments (a move count of 8, a build with no action). Grep every
+  caller, slash commands included, before tightening a check.
+- **A recurring choice with one legal answer resolves itself.** Prompting every upkeep for a forced
+  choice stalls the round; apply it and say what was done.
+
+### Messages
+
+Tests fake Discord, so nothing checks the words. The playtest reads them.
+
+- **Announce every declared choice and every bonus with its parts.** When a player picks a mode or
+  an option, or an ability changes a roll, the public message names it; a total says what it is
+  made of (blueprint +1, ability +2) and why an ability that might apply did not. Another player
+  must be able to audit the roll from the channel alone.
+- **Dice are dice emoji, components are emoji.** A die face goes through `Combat.die_face`; parts,
+  resources and tokens through `Emoji.getEmojiByName`. A bare number where a die is meant, or a ❓,
+  is a bug. The sandbox web UI names dice and tokens as `:dice_red_6:` text so the check is
+  possible without Discord.
+- **A prompt states the budget it spends.** "Colony Ships available: 2", "Power left: 1".
+- **The reference text is code.** `helpers/FactionReference.py` is hand-written per faction; compare
+  its setup, starting-sector line and ability text with the transcription. A loop that prints
+  several factions' lines can repeat one faction's planets under another's name.
+
+### Live games and saves
+
+- **A data fix does not reach running games.** Setup copies faction data into the player, so a later
+  fix to `factions.json` changes new games only. Migrate on load (as `PlayerHelper.sync_blueprint_slots`
+  pads blueprints) or say the fix needs a new game. A new field needs a default that keeps old
+  saves behaving as before.
+- **Buttons must survive a restart.** A `View` with Python callbacks dies with the process; post plain
+  `custom_id`s that `ButtonListener` answers.
+- **A per-faction branch must not cost every faction.** A save or render added to a shared path for
+  one faction's reset runs for everyone; keep it inside the faction's condition.
+
+## Questions for the human
+
+Most questions an agent raises are answered by reading more carefully. Before a question reaches
+the human it must pass all four checks; otherwise the agent settles it and lists the reading under
+"Readings taken" in the report.
+
+1. **Re-read.** The exact card text, a zoomed crop of the board region, the home tile, and the
+   reference text. Quote what was read.
+2. **Rulebook.** `rulebook.md` does not define the term, timing or limit.
+3. **Precedent.** No implemented faction with the same wording or icon settles it (grep
+   `data/factions.json` and `helpers/FactionReference.py`).
+4. **It matters.** Both readings fit the verbatim text and lead to different play.
+
+Ask in one shape: the quote, reading A, reading B, what the code does now, the recommended
+default. At most three per faction, ranked by how often the difference comes up in play; the rest
+take the recommended default and are listed as readings taken.

@@ -64,6 +64,15 @@ score screen. `python -m dev.webui.shot <url> <name>` saves desktop and narrow
 screenshots plus a JSON error report; `python -m dev.webui.smoke` is the minimal
 build-menu check.
 
+### One press at a time (agents)
+
+`new`, `show`, `press`, `state` and `img` in `playthrough.py` let an agent play any
+sandbox game from the host: `GAME=aeb2 python3 -m dev.webui.playthrough press 1 "Explore (1)"`
+prints what the bot posted and what is pending. `python -m dev.webui.stage` places
+sectors and ships or edits a player in a live game (between presses only). The
+standalone server names dice and faction tokens as `:dice_red_6:` text, since the
+sandbox has no Discord emojis. The `faction-playtest` skill drives these.
+
 ## Direct interaction checks
 
 Each flow clicks the visible object (ship, ring slot, planet square, blueprint, tech
