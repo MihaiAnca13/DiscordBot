@@ -10,6 +10,7 @@ from Buttons.DiplomaticRelations import DiplomaticRelationsButtons
 from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Draft import DraftButtons
 from Buttons.Explore import ExploreButtons
+from Buttons.FactionSheet import FactionSheet
 from Buttons.Harvester import HarvesterButtons
 from Buttons.Influence import InfluenceButtons
 from Buttons.Move import MoveButtons
@@ -56,6 +57,9 @@ class ButtonListener(commands.Cog):
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         if interaction.type == discord.InteractionType.component:
+            if interaction.data.get("custom_id", "").startswith("community_sheet:"):
+                await FactionSheet.answer(interaction)
+                return
             start = datetime.now()
             start_time = time.perf_counter()
             logging.basicConfig(level=logging.INFO)
