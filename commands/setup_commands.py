@@ -1,7 +1,7 @@
 import asyncio
-import json
 import discord
 from Buttons.Draft import DraftButtons
+from Buttons.FactionSheet import BOARD_DIR, FactionSheet
 import config
 from discord.ext import commands
 from discord import app_commands
@@ -14,6 +14,9 @@ from helpers.FactionReference import faction_references
 from webui import runtime
 
 
+FACTION_REFERENCE_THREAD = "Faction Reference"
+
+
 async def faction_autocomplete(interaction: discord.Interaction, current: str):
     """Discord caps choices at 25 per option; autocomplete keeps the whole faction list."""
     current = current or ""
@@ -21,79 +24,19 @@ async def faction_autocomplete(interaction: discord.Interaction, current: str):
             if current.lower() in choice.name.lower()][:25]
 
 
-class CommunitySheetManager:
-    def __init__(self, channel, drawing, sheets):
-        self.channel = channel
-        self.drawing = drawing
-        self.sheets = sheets
-        self.button_message = None
-        self.lock = asyncio.Lock()
-
-    async def publish_button(self):
-        self.button_message = await self.channel.send(
-            "Need a community faction sheet?", view=CommunitySheetButtonView(self))
-
-    async def post_sheet(self, faction_key):
-        async with self.lock:
-            await self.button_message.edit(view=None)
-            message, board_file = self.sheets[faction_key]
-            board_path = "images/resources/components/factions/" + board_file
-            await self.channel.send(message, file=self.drawing.get_file(board_path))
-            await self.publish_button()
-
-
-class CommunitySheetButtonView(discord.ui.View):
-    def __init__(self, manager):
-        super().__init__(timeout=10080 * 60)
-        self.manager = manager
-
-    @discord.ui.button(label="Request community sheet", style=discord.ButtonStyle.blurple,
-                       custom_id="community_sheet:request")
-    async def request_sheet(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await present_community_sheet_picker(interaction, self.manager)
-
-
-class CommunitySheetSelectView(discord.ui.View):
-    def __init__(self, manager):
-        super().__init__(timeout=180)
-        self.manager = manager
-        options = [discord.SelectOption(
-            label=message.splitlines()[0].removeprefix("# ")[:100], value=key)
-            for key, (message, _) in manager.sheets.items()]
-        select = discord.ui.Select(placeholder="Select a faction", options=options,
-                                   custom_id="community_sheet:select")
-        select.callback = self.select_faction
-        self.add_item(select)
-
-    async def select_faction(self, interaction: discord.Interaction):
-        faction_key = interaction.data["values"][0]
-        await interaction.response.defer(ephemeral=True)
-        await self.manager.post_sheet(faction_key)
-        await interaction.followup.send("Added the faction sheet to the reference thread.", ephemeral=True)
-
-
-async def present_community_sheet_picker(interaction, manager):
-    await interaction.response.send_message(
-        "Choose a community faction:",
-        view=CommunitySheetSelectView(manager),
-        ephemeral=True)
-
-
 class SetupCommands(commands.GroupCog, name="setup"):
-    community_sheet_managers = {}
-
     def __init__(self, bot):
         self.bot = bot
 
     @app_commands.command(name="faction_sheet")
     async def faction_sheet(self, interaction: discord.Interaction):
-        manager = self.community_sheet_managers.get(interaction.channel_id)
-        if manager is None:
+        if not (isinstance(interaction.channel, discord.Thread)
+                and interaction.channel.name == FACTION_REFERENCE_THREAD):
             await interaction.response.send_message(
                 "Community faction sheets are available from the Faction Reference thread.",
                 ephemeral=True)
             return
-        await present_community_sheet_picker(interaction, manager)
+        await FactionSheet.present_picker(interaction)
     ai_choices = [app_commands.Choice(name="Default", value="def"),
                   app_commands.Choice(name="Advanced", value="adv"),
                   app_commands.Choice(name="Worlds Apart", value="wa"),
@@ -396,30 +339,23 @@ class SetupCommands(commands.GroupCog, name="setup"):
         await DraftButtons.startDraft(game, player_list, interaction,
                                      runtime.record_channel(actions, game.game_id), ban_factions)
 
-        factionThread = await actions.create_thread(name="Faction Reference", auto_archive_duration=10080)
-        boardPrefix = "images/resources/components/factions/"
-        community_sheets = {}
+        factionThread = await actions.create_thread(name=FACTION_REFERENCE_THREAD,
+                                                    auto_archive_duration=10080)
 
-        standard_boards = {board for _, board in faction_references(False)}
         for message, board_file in faction_references(community_factions):
-            if board_file in standard_boards:
-                await factionThread.send(message, file=drawing.get_file(boardPrefix + board_file))
-            else:
-                community_sheets[board_file] = (message, board_file)
+            await factionThread.send(message, file=drawing.get_file(BOARD_DIR + board_file))
 
         message = "\n".join(["Rift Reference"])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "Rift_Reference.png"))
+        await factionThread.send(message, file=drawing.get_file(BOARD_DIR + "Rift_Reference.png"))
 
         message = "\n".join(["Minor Species Reference"])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "Minor_Species_Reference.png"))
+        await factionThread.send(message, file=drawing.get_file(BOARD_DIR + "Minor_Species_Reference.png"))
 
         message = "\n".join(["Discovery Reference"])
-        await factionThread.send(message, file=drawing.get_file(boardPrefix + "Discovery_Reference.png"))
+        await factionThread.send(message, file=drawing.get_file(BOARD_DIR + "Discovery_Reference.png"))
         await factionThread.send(role.mention + " pinging you here, which contains all the faction sheets")
-        if community_sheets:
-            sheet_manager = CommunitySheetManager(factionThread, drawing, community_sheets)
-            self.community_sheet_managers[factionThread.id] = sheet_manager
-            await sheet_manager.publish_button()
+        if not community_factions:
+            await factionThread.send("Need a community faction sheet?", view=FactionSheet.request_button())
         await interaction.followup.send("\n".join(["New game created! Here are the channels:",
                                                    tabletalk.jump_url, actions.jump_url]))
         if isinstance(interaction.channel, discord.Thread):

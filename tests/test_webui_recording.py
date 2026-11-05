@@ -7,7 +7,6 @@ from discord.ui import Button, View
 
 from Buttons.Draft import DraftButtons
 from Buttons.Influence import InfluenceButtons
-from commands.setup_commands import CommunitySheetButtonView, CommunitySheetSelectView
 from listeners.ButtonListener import ButtonListener
 from webui import runtime
 from webui.server import build
@@ -189,12 +188,12 @@ def test_setup_draft_channel_records_choices_and_deletes_real_message(store, run
 
 
 @pytest.mark.parametrize("kind", ["button", "select"])
-def test_community_sheet_controls_are_handled_only_by_their_own_callbacks(run, monkeypatch, kind):
+def test_community_sheet_controls_are_handled_outside_the_feed(run, monkeypatch, kind):
     async def check():
-        manager = SimpleNamespace(sheets={"cog": ("Children of Cog", "cog.png")})
-        view = CommunitySheetButtonView(manager) if kind == "button" else CommunitySheetSelectView(manager)
-        interaction = FakeInteraction(custom_id=view.children[0].custom_id)
+        custom_id = "community_sheet:" + ("request" if kind == "button" else "select")
+        interaction = FakeInteraction(custom_id=custom_id)
         interaction.type = discord.InteractionType.component
-        monkeypatch.setattr(runtime, "record", lambda request: pytest.fail("Global handler must ignore sheet controls"))
+        interaction.data["values"] = ["cog_board.png"]
+        monkeypatch.setattr(runtime, "record", lambda request: pytest.fail("Sheet controls are not feed prompts"))
         await ButtonListener(None).on_interaction(interaction)
     run(check())
