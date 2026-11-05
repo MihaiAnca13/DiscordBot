@@ -1466,6 +1466,9 @@ class Combat:
                                        for die in dieNums]
                         allocation = Combat.getAIHitAllocation(game, colorOrAI, pos, speed,
                                                               dice_for_ai, shipModel.computer)
+                    # A rift die defers the salvo's combat-end check, so every hit in
+                    # the same salvo must defer too or the kill is declared twice.
+                    salvo_defer = is_wolf or any(die[2] == "pink" for die in dieNums)
                     for die_index, die in enumerate(dieNums):
                         if die[4] in deferred_nine_lives:
                             continue
@@ -1598,8 +1601,8 @@ class Combat:
                                     hittableShips = [ship]
                                 await Combat.offerHitPrompt(game, interaction, pos, colorOrAI, hittableShips,
                                                             dieNum, dieDam, counter=counter,
-                                                            deferEnd=dieColor == "pink" or is_wolf, reports=reports)
-                                deferredEnd = deferredEnd or dieColor == "pink" or is_wolf
+                                                            deferEnd=salvo_defer, reports=reports)
+                                deferredEnd = deferredEnd or salvo_defer
                     await Combat.sendCombatReports(interaction.channel, reports)
                     if shipRiftBackfire > 0:
                         await Combat.applyRiftBackfire(game, colorOrAI, interaction, pos, shipRiftBackfire,
