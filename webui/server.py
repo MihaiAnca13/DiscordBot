@@ -311,7 +311,7 @@ def _current_prompts(pending, turn_menus=()):
     if not pending:
         return pending
     superseding = [message for message in pending
-                   if _is_phase_prompt(message) or not _is_standing(message)]
+                   if _is_turn_menu(message) or _is_phase_prompt(message)]
     newest = max((message["id"] for message in superseding), default=0)
     turn_starts = {}
     for message in [*pending, *turn_menus]:
@@ -645,6 +645,9 @@ class WebApp:
             init.create_game()
             game_id = init.gamestate["game_id"]
             game = self.game(game_id)
+            for seat, seat_name in players:
+                game.gamestate["players"][str(seat)]["username"] = seat_name  # as /setup does
+            game.update()
             game.setAlliances(body.get("alliances", False))
             game.setup_techs_and_outer_rim(count, body.get("galactic_event_tiles", False), body.get("hyperlanes", False))
             self.store.set_mirror(game_id, False)

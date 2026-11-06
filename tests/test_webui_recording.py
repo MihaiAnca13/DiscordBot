@@ -197,3 +197,13 @@ def test_community_sheet_controls_are_handled_outside_the_feed(run, monkeypatch,
         monkeypatch.setattr(runtime, "record", lambda request: pytest.fail("Sheet controls are not feed prompts"))
         await ButtonListener(None).on_interaction(interaction)
     run(check())
+
+
+def test_unrelated_prompt_does_not_hide_ready_for_upkeep():
+    from webui.server import _current_prompts
+    upkeep = {"id": 1, "room": "r", "content": "Ready", "buttons": [{"custom_id": "readyForUpkeep"}]}
+    private = {"id": 2, "room": "p", "content": "Pick a faction", "buttons": [{"custom_id": "pick"}]}
+    menu = {"id": 3, "room": "r", "content": "Turn", "buttons": [{"custom_id": "FCIDblue_passForRound"}]}
+
+    assert upkeep in _current_prompts([upkeep, private])
+    assert upkeep not in _current_prompts([upkeep, private, menu])
