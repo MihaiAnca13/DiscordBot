@@ -372,6 +372,15 @@ the human it must pass all four checks; otherwise the agent settles it and lists
 3. **Precedent.** No implemented faction with the same wording or icon settles it (grep
    `data/factions.json` and `helpers/FactionReference.py`).
 4. **It matters.** Both readings fit the verbatim text and lead to different play.
+5. **Not already the natural reading.** If the code does the plain reading and an implemented
+   faction does the same (off-board bonuses work like Planta's; an ability that restates a printed
+   number restates it; "X is worth -4" replaces the base value), it is a reading taken.
+
+A board value read differently from the data is not a bug yet. Readers misread frames, slot
+counts and the tech track; the shared default is usually right. Re-crop the region beside an
+implemented board of the same template, count the cells, and call it a bug only when the
+comparison shows a real printed difference from the default. Timing that the code implements on
+purpose through an existing phase (pre-upkeep for "end of turn") is a reading, not a bug.
 
 Ask in one shape: the quote, reading A, reading B, what the code does now, the recommended
 default. At most three per faction, ranked by how often the difference comes up in play; the rest
