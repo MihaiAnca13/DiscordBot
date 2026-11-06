@@ -207,6 +207,7 @@ class MoveButtons:
             moveCount = buttonID.split("_")[1]
         if buttonID == "startMove":
             reset = player.pop("infinitePossibilitiesUsed", None) is not None
+            reset = player.pop("pulsarMove", None) is not None or reset
             if FactionData.has(player, "raid") or FactionData.has(player, "regroup"):
                 player["herCrossUsed"] = False
                 player["herRaidCharged"] = False
@@ -223,10 +224,12 @@ class MoveButtons:
         for tile in tiles:
             view.add_item(Button(label=game.get_tile_label(tile), style=discord.ButtonStyle.red,
                                  custom_id=f"FCID{player['color']}_moveFrom_{tile}_{moveCount}{suffix}"))
+        raid_offer = (not player.get("passed") and FactionData.has(player, "raid")
+                      and not player.get("pulsarMove") and not player.get("herCrossUsed")
+                      and int(moveCount) <= FactionData.action_apt(player, "move"))
         if nested:
             MoveButtons.addRegroupBackButton(view, player, phase)
-        elif (not player.get("passed") and FactionData.has(player, "raid")
-              and not player.get("herCrossUsed") and int(moveCount) <= FactionData.action_apt(player, "move")):
+        elif raid_offer:
             view.add_item(Button(label="Build Activation (1)", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_herRaidBuild_{moveCount}"))
         if buttonID == "startMove":
@@ -240,8 +243,10 @@ class MoveButtons:
             if moveCount == 1 and not nested:
                 await interaction.channel.send(f"{player['player_name']} is using their turn to move")
             await interaction.message.delete()
-        await interaction.channel.send(f"{player['player_name']} Select the tile you would like to move from",
-                                       view=view)
+        message = f"{player['player_name']} Select the tile you would like to move from"
+        if raid_offer:
+            message += ". Raid: this Move action also includes one Build activation"
+        await interaction.channel.send(message, view=view)
         drawing = DrawHelper(game.gamestate)
         if len(tiles) > 0:
             asyncio.create_task(interaction.followup.send(file=await asyncio.to_thread(drawing.mergeLocationsFile,
@@ -516,11 +521,16 @@ class MoveButtons:
         game.update_player(player_helper)
         if nested:
             phase = buttonID.rsplit("_", 1)[1]
+            from Buttons.Build import BuildButtons
             if phase == "before":
                 await interaction.message.delete()
-                from Buttons.Build import BuildButtons
                 await BuildButtons.startBuild(game, player, interaction, "startBuild2_herRegroupResume",
                                               player_helper)
+            elif BuildButtons.buildsLeft(player_helper.stats, player["build_apt"]) > 0:
+                # Regroup adds the move to the Build action; a finished build must not end it.
+                await interaction.message.delete()
+                await BuildButtons.startBuild(game, player, interaction,
+                                              "startBuild2_herRegroupResumeAfter", player_helper)
             else:
                 from Buttons.Turn import TurnButtons
                 await TurnButtons.finishAction(player, game, interaction, player_helper)
@@ -544,7 +554,8 @@ class MoveButtons:
                                    suffix: str = "", destination_label: str = "", destination: str = ""):
         view = View()
         if (moveCount > 0 and not player.get("passed") and FactionData.has(player, "raid")
-                and not player.get("herCrossUsed") and moveCount <= FactionData.action_apt(player, "move")):
+                and not player.get("pulsarMove") and not player.get("herCrossUsed")
+                and moveCount <= FactionData.action_apt(player, "move")):
             view.add_item(Button(label="Build Activation (1)", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_herRaidBuild_{moveCount + 1}"))
         UpgradeButtons.addInfinitePossibilitiesButton(view, game, player, "finish")
@@ -562,5 +573,7 @@ class MoveButtons:
                              custom_id=f"FCID{player['color']}_finishAction"))
         view.add_item(Button(label="Restart Turn", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{player['color']}_restartTurn"))
+        moves_left = max(0, player["move_apt"] - moveCount)
         await interaction.channel.send(f"{interaction.user.mention} you may move an additional ship"
-                                       " if you still have move activations, or end your action.", view=view)
+                                       f" if you still have move activations ({moves_left} left),"
+                                       " or end your action.", view=view)

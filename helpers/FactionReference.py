@@ -205,6 +205,8 @@ def faction_references(community_factions=True):
                          " the same attack pool into a Hit, or save a reroll for a ship firing later"
                          " in the round.",
                          "- No Interceptors. Cruisers: 6 maximum, one fewer ship part slot, cost 4.",
+                         "- Start with 3 Money / 3 Science / 2 Materials and a Cruiser instead of an"
+                         " Interceptor.",
                          "- Start with Fusion Source in the Grid tech track.",
                          "- 5 reputation slots (2 can hold ambassadors).",
                          "- Home sector Lupis (252)."])
@@ -227,7 +229,9 @@ def faction_references(community_factions=True):
                          " Missiles may instead get -1 to Hit (attacker's choice).",
                          "- Start with a Harvester (Starbase) instead of an Interceptor.",
                          "- Modified ship designs: Slower, offboard Hull & Computer.",
-                         "- Initial Technology: Starbase."])
+                         "- Initial Technology: Starbase.",
+                         "- Home sector Turtuga: the print numbers it 252; the bot uses 253 because"
+                         " 252 is Lupis."])
     send_community_sheet(message, "turtugan_board.png")
 
     message = "\n".join(["# Kurita Prefecture",
@@ -280,10 +284,10 @@ def faction_references(community_factions=True):
                          " **for 1 Power each:** +1 to Hit, +1 Shield; **for 2 Power:** Neutron Bombs if"
                          " researched, +2 Initiative; **for 3 Power:** Ignore Shields. Declare options at the"
                          " start of each combat per blueprint.",
-                         "- **Ships:** +1 Cost, Phase Module. The board prints 1 Diplomat, 1 INF activation and"
-                         " 2 colony ships flipped per Influence action.",
-                         "- The board prints home sector 226; the bot uses the free sector 254"
-                         " (225 is the Terran Union home and 226 is the Planta home)."])
+                         "- **Ships:** +1 Cost, Phase Module. The card prints 1 Diplomat; the board"
+                         " prints 1 INF activation and 2 colony ships flipped per Influence action.",
+                         "- The board prints home sector 225; the bot uses the free sector 254"
+                         " (226 is the Planta home)."])
     send_community_sheet(message, "wraith_board.png")
 
     message = "\n".join(["# Children of Cog",

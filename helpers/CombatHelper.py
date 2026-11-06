@@ -1,4 +1,5 @@
 import asyncio
+import json
 import random
 
 import discord
@@ -175,6 +176,13 @@ class Combat:
         return modes.get(color, {}).get(ship_type, {})
 
     @staticmethod
+    def phase_bombing_ship(game: GamestateHelper, color: str, pos: str):
+        """The blueprint that pays the 2 Power for bombing: the one with the most power left."""
+        player = game.getPlayerObjectFromColor(color)
+        types = Combat.phase_ship_types(game, color, pos)
+        return max(types, key=lambda ship: PlayerShip(player, ship).energy, default=None)
+
+    @staticmethod
     def phase_bombing_cost(game: GamestateHelper, color: str, pos: str):
         player = game.getPlayerObjectFromColor(color)
         energy = max((PlayerShip(player, ship).energy
@@ -206,6 +214,9 @@ class Combat:
             await interaction.followup.send("The Phase Module needs 2 Power for Neutron Bombs.",
                                             ephemeral=True)
             return
+        bomb_ship = Combat.phase_bombing_ship(game, player["color"], pos)
+        await interaction.channel.send(f"{player['player_name']} uses Neutron Bombs from their"
+                                       f" {bomb_ship.capitalize()} (2 blueprint Power).")
         await InfluenceButtons.removeInfluenceFinish(
             game, interaction, f"removeInfluenceFinish_{pos}_graveYard", True, player)
         message = (f"{player['player_name']}, you may place your influence on the tile"
@@ -251,6 +262,7 @@ class Combat:
         tile.pop("nineLivesPending", None)
         tile.pop("lyraRerollPending", None)
         tile.pop("lyraRerollToken", None)
+        tile.pop("rolledSteps", None)
         game.setCurrentRoller(None, pos)
         for side in sides:
             for player in side:
@@ -332,6 +344,8 @@ class Combat:
                 view.add_item(Button(label="Destroy All Population", style=discord.ButtonStyle.green,
                                      custom_id=f"FCID{winner}_removeInfluenceFinish_{pos}_graveYard"))
                 message = f"{playerName}, you may destroy all enemy influence and population automatically."
+                if wraithNeedsDeclaration:
+                    message += " Neutron Bombs (2 blueprint Power) apply here."
                 asyncio.create_task(thread2.send(message, view=view))
                 message = (f"{playerName}, you may place your influence on the tile"
                            " after destroying the enemy population.")
@@ -349,10 +363,12 @@ class Combat:
                 message = f"{playerName}, you may roll to attempt to kill enemy population."
                 if wraithNeedsDeclaration:
                     if Combat.phase_bombing_cost(game, winner, pos) == 0:
+                        bomb_ship = Combat.phase_bombing_ship(game, winner, pos)
                         view.add_item(Button(label="Use Phase Module: Neutron Bombs (2 Power)",
                                              style=discord.ButtonStyle.blurple,
                                              custom_id=f"FCID{winner}_phaseBombing_{pos}_{game.gamestate['roundNum']}"))
-                        message += " You may use 2 blueprint Power for Neutron Bombs on the population."
+                        message += (f" You may use 2 blueprint Power from your"
+                                    f" {bomb_ship.capitalize()} for Neutron Bombs on the population.")
                     else:
                         message += (" The Phase Module needs 2 Power for Neutron Bombs,"
                                     " so only the roll is available here.")
@@ -537,15 +553,31 @@ class Combat:
         return 1 if colorOrAI in tile["pounceSide"] else 0
 
     @staticmethod
-    def computer_message(game: GamestateHelper, pos: str, colorOrAI: str, speed: int, computer):
+    def computer_message(game: GamestateHelper, pos: str, colorOrAI: str, speed: int, computer,
+                         shipModel=None):
         """The computer total with the parts that make it up, and why Pounce is missing."""
         solitary = Combat.solitary_hunter_bonus(game, pos, colorOrAI)
         pounce = Combat.pounce_hit(game, pos, colorOrAI, speed)
         msg = f"\nThis ship type has a +{computer} computer"
-        if solitary or pounce:
-            parts = [f"+{computer - solitary - pounce} from the blueprint"]
-            parts += [f"+{value} from {name}" for name, value in
-                      (("Solitary Hunter", solitary), ("Pounce", pounce)) if value]
+        parts = []
+        if shipModel is None:
+            if solitary or pounce:
+                parts.append(f"+{computer - solitary - pounce} from the blueprint")
+        else:
+            from_parts = shipModel.computer - shipModel.base_computer
+            if from_parts:
+                electron = shipModel.ship_parts.count("elc")
+                parts.append(f"+{from_parts} Electron Computer"
+                             if electron and from_parts == electron else f"+{from_parts} ship parts")
+            if shipModel.base_computer:
+                label = FactionData.of(shipModel.player).get("offboard_computer_label", "off-board")
+                parts.append(f"+{shipModel.base_computer} {label}")
+            phase = computer - shipModel.computer - solitary - pounce
+            if phase:
+                parts.append(f"+{phase} Phase Module")
+        parts += [f"+{value} from {name}" for name, value in
+                  (("Solitary Hunter", solitary), ("Pounce", pounce)) if value]
+        if parts:
             msg += ": " + ", ".join(parts[:-1]) + " and " + parts[-1]
         msg += "."
         if (speed < 90 and not pounce and game.gamestate["board"][pos].get("engagementRound", 1) == 1
@@ -838,24 +870,29 @@ class Combat:
                 # Each ship rolls for its own colour, even when its side is an Alliance.
                 checker = "" if owner == "ai" else f"FCID{owner}_"
                 suffix, emoji = Combat.getCombatantTag(game, pos, owner)
-                if owner in defender:
-                    if speed < 90:
-                        view.add_item(Button(label=f"(Defender) Roll Initative {speed} Ships{suffix}",
-                                            style=discord.ButtonStyle.green, emoji=emoji,
-                                            custom_id=f"{checker}rollDice_{pos}_{owner}_{str(speed)}_defender"))
-                    else:
-                        view.add_item(Button(label=f"(Defender) Roll Initative {speed-99} Missiles{suffix}",
-                                            style=discord.ButtonStyle.green, emoji=emoji,
-                                            custom_id=f"{checker}rollDice_{pos}_{owner}_{str(speed)}_defender"))
+                spine_modes = False
+                if owner not in ("ai", "") and speed < 90:
+                    playerObj = game.getPlayerObjectFromColor(owner)
+                    spine_modes = FactionData.has(playerObj, "spine_cannons") and any(
+                        speed2 == speed
+                        and len(PlayerHelper.get_spine_cannon_slots(playerObj, shipType)) > 1
+                        for speed2, shipType, _count in Combat.getCombatantShipsBySpeed(
+                            game, owner, ships, pos))
+                side = "Defender" if owner in defender else "Attacker"
+                style = discord.ButtonStyle.green if owner in defender else discord.ButtonStyle.red
+                if speed < 90:
+                    label = f"({side}) Roll Initative {speed} Ships{suffix}"
+                    roll_id = f"{checker}rollDice_{pos}_{owner}_{str(speed)}_{side.lower()}"
                 else:
-                    if speed < 90:
-                        view.add_item(Button(label=f"(Attacker) Roll Initative {speed} Ships{suffix}",
-                                            style=discord.ButtonStyle.red, emoji=emoji,
-                                            custom_id=f"{checker}rollDice_{pos}_{owner}_{str(speed)}_attacker"))
-                    else:
-                        view.add_item(Button(label=f"(Attacker) Roll Initative {speed-99} Missiles{suffix}",
-                                            style=discord.ButtonStyle.red, emoji=emoji,
-                                            custom_id=f"{checker}rollDice_{pos}_{owner}_{str(speed)}_attacker"))
+                    label = f"({side}) Roll Initative {speed-99} Missiles{suffix}"
+                    roll_id = f"{checker}rollDice_{pos}_{owner}_{str(speed)}_{side.lower()}"
+                if spine_modes:
+                    view.add_item(Button(label=label + " (+X to Hit)", style=style, emoji=emoji,
+                                         custom_id=roll_id + "_spinehit"))
+                    view.add_item(Button(label=label + " (+X Damage)", style=style, emoji=emoji,
+                                         custom_id=roll_id + "_spinedmg"))
+                else:
+                    view.add_item(Button(label=label, style=style, emoji=emoji, custom_id=roll_id))
         view.add_item(Button(label="Refresh Image", style=discord.ButtonStyle.blurple, custom_id=f"refreshImage_{pos}"))
         view.add_item(Button(label="Remove Units", style=discord.ButtonStyle.gray, custom_id=f"removeUnits_{pos}"))
         if Combat.canResolveStalemate(game, pos) and attacker:
@@ -1233,6 +1270,13 @@ class Combat:
                 return
         if speed != 1000:
             Carapace.close_controls(game, pos)
+            step = [speed, colorOrAI]
+            if step in tile.get("rolledSteps", []):
+                await interaction.channel.send(
+                    "That initiative step has already rolled this engagement round. Use the current prompt.")
+                return
+            tile.setdefault("rolledSteps", []).append(step)
+            game.update()
         if colorOrAI == "ai":
             await Combat.rollDiceAI(game, buttonID, interaction)
             return
@@ -1335,10 +1379,14 @@ class Combat:
                         for hit in hits:
                             dieNums.append([random_number, hit, die, source, roll_id, die_total])
                 if computerVal > 0:
-                    msg += Combat.computer_message(game, pos, colorOrAI, speed, computerVal)
+                    msg += Combat.computer_message(game, pos, colorOrAI, speed, computerVal, shipModel)
                 if spine_bonus:
-                    msg += (f"\nSpine Cannon augment: +{spine_bonus} to "
-                            f"{'Hit' if spine_mode == 'spinehit' else 'Damage'}.")
+                    gun = Combat.part_name(shipModel.ship_parts[cannon_index])
+                    if spine_mode == "spinehit":
+                        msg += f"\nSpine Cannon augment: the {gun} adds +{spine_bonus} to Hit for its dice."
+                    else:
+                        msg += (f"\nSpine Cannon augment: the {gun} adds +{spine_bonus} Damage"
+                                " to its dice (die damage + augment).")
 
                 if len(dice) > 0:
                     # await interaction.channel.send(msg,file=drawing.append_images(dieFiles))
@@ -1366,7 +1414,11 @@ class Combat:
                         computer_val = computerVal + hit_bonus
                         die_hits = [entry[1] for entry in dieNums if entry[4] == die_roll_id]
                         hittableShips = []
-                        if incoming_shield and dieColor != "pink":
+                        # A die that cannot hit even before the shield penalty has no choice to make.
+                        shield_choice = (incoming_shield and dieColor != "pink"
+                                         and Combat.getOpponentUnitsThatCanBeHit(
+                                             game, colorOrAI, player_ships, dieNum, computerVal, pos, speed))
+                        if shield_choice:
                             update = True
                             await Carapace.prompt_missile(game, interaction, pos, colorOrAI,
                                                           shipModel.ship_type, computerVal,
@@ -1660,6 +1712,9 @@ class Combat:
             banks = tile.setdefault("wolfPackRerolls", {})
             banks[color] = banks.get(color, 0) + 1
             save()
+            await interaction.channel.send(
+                f"{player['player_name']} used Wolf Pack: saved a reroll for a ship firing later"
+                f" this round ({banks[color]} saved).")
             await Combat.wolfPackPrompt(game, pos, interaction)
         elif kind == "wolfPackDone":
             state["sixes"] = {pool: [] for pool in state["sixes"]}
@@ -2108,7 +2163,8 @@ class Combat:
         if (cube.replace("adv", "") in ("money", "science", "material", "orbital", "disc")
                 and PlayerHelper.capture_wraith_soul(player, game.gamestate["board"][pos])):
             game.update_player(PlayerHelper(game.get_player_from_color(player["color"]), player))
-            await interaction.channel.send(f"{player['player_name']} captured a soul from the destroyed sector.")
+            await interaction.channel.send(
+                PlayerHelper.wraith_soul_message(player, game.get_tile_label(pos)))
         await interaction.message.delete()
         if len(PopulationButtons.findFullPopulation(game, pos)) == 0:
             game.remove_control(owner, pos)
@@ -2228,6 +2284,7 @@ class Combat:
             # Wolf Pack saved rerolls only last for the engagement round they were earned in
             game.gamestate["board"][pos].pop("wolfPackRerolls", None)
         if nextSpeed == -20:
+            game.gamestate["board"][pos].pop("rolledSteps", None)
             await Combat.checkForMorphShield(game, pos, channel, ships, list(attacker) + list(defender))
             await Carapace.offer(game, channel, pos)
             for speed, owner in sortedSpeeds:
@@ -2246,12 +2303,12 @@ class Combat:
         initiative = f"Initiative {nextSpeed}"
         if nextSpeed > 90:
             initiative = "Initiative " + str(nextSpeed-99)+" missiles"
-        spine_modes = False
+        spine_options = []
         if nextOwner not in ("", "ai") and nextSpeed < 99:
             playerObj = game.getPlayerObjectFromColor(nextOwner)
-            spine_modes = FactionData.has(playerObj, "spine_cannons") and any(
-                speed2 == nextSpeed and len(PlayerHelper.get_spine_cannon_slots(playerObj, shipType)) > 1
-                for speed2, shipType, _count in Combat.getCombatantShipsBySpeed(game, nextOwner, ships, pos))
+            if FactionData.has(playerObj, "spine_cannons"):
+                spine_options = Combat.spine_mode_options(game, nextOwner, pos, nextSpeed)
+        spine_modes = bool(spine_options)
 
         if [nextSpeed, nextOwner] in game.getRetreatingUnits(pos):
             checker = "FCID" + nextOwner + "_"
@@ -2272,14 +2329,17 @@ class Combat:
                 msg = f"{playerObj['player_name']}, it is your turn to roll your ships with {initiative}. "
 
                 if spine_modes:
-                    view.add_item(Button(label=f"Roll {initiative} (+X to Hit)", style=discord.ButtonStyle.green,
+                    bonuses = {bonus for _ship, _gun, bonus in spine_options}
+                    tag = f"+{bonuses.pop()}" if len(bonuses) == 1 else "+X"
+                    view.add_item(Button(label=f"Roll {initiative} ({tag} to Hit)", style=discord.ButtonStyle.green,
                                          custom_id=(f"{checker}rollDice_{pos}_{nextOwner}_{str(nextSpeed)}"
                                                     "_deleteMsg_spinehit")))
-                    view.add_item(Button(label=f"Roll {initiative} (+X Damage)", style=discord.ButtonStyle.green,
+                    view.add_item(Button(label=f"Roll {initiative} ({tag} Damage)", style=discord.ButtonStyle.green,
                                          custom_id=(f"{checker}rollDice_{pos}_{nextOwner}_{str(nextSpeed)}"
                                                     "_deleteMsg_spinedmg")))
-                    msg += ("Your Spine Cannon augment weapons can add to hit or damage this roll. "
-                            "Choose the mode before rolling. ")
+                    listing = ", ".join(f"{ship} {gun} +{bonus}" for ship, gun, bonus in spine_options)
+                    msg += (f"Spine Cannon augments this roll: {listing}. The value is the augment"
+                            " gun's damage; choose +Hit or +Damage before rolling. ")
                 else:
                     view.add_item(Button(label=f"Roll {initiative} Ships", style=discord.ButtonStyle.green,
                                          custom_id=(f"{checker}rollDice_{pos}_{nextOwner}_{str(nextSpeed)}"
@@ -2584,9 +2644,38 @@ class Combat:
                 game.update()
 
     @staticmethod
+    def spine_mode_options(game: GamestateHelper, color: str, pos: str, speed: int):
+        """The Spine Cannon ships firing at this initiative and the bonus each augment gives."""
+        player = game.get_player_from_color(color)
+        with open("data/parts.json", "r") as part_file:
+            part_data = json.load(part_file)
+        options = []
+        for speed2, ship_type, _count in Combat.getCombatantShipsBySpeed(
+                game, color, game.gamestate["board"][pos].get("player_ships", []), pos):
+            if speed2 != speed:
+                continue
+            ship = PlayerShip(game.gamestate["players"][player], ship_type)
+            augment = ship.spine_augment()
+            if not augment:
+                continue
+            gun = part_data.get(ship.ship_parts[augment[0]], {}).get("name", ship.ship_parts[augment[0]])
+            options.append((Combat.translateShipAbrToName(ship_type), gun,
+                            Combat.translateColorToDamage(augment[2], 6)))
+        return options
+
+    @staticmethod
+    def part_name(part_id: str):
+        with open("data/parts.json", "r") as part_file:
+            return json.load(part_file).get(part_id, {}).get("name", part_id)
+
+    @staticmethod
     def phase_option_cost(mode):
-        return sum(cost for option, (_label, cost) in Combat.PHASE_OPTIONS.items()
-                   if mode.get(option))
+        """The printed 2-Power line buys Neutron Bombs and +2 Initiative together."""
+        cost = sum(price for option, (_label, price) in Combat.PHASE_OPTIONS.items()
+                   if mode.get(option) and option not in ("speed", "planets"))
+        if mode.get("speed") or mode.get("planets"):
+            cost += 2
+        return cost
 
     @staticmethod
     def phase_ship_types(game: GamestateHelper, color: str, pos: str):
@@ -2618,9 +2707,15 @@ class Combat:
                              custom_id=f"FCID{color}_phaseModuleDone_{pos}_{color}"))
         view.add_item(Button(label="Clear All & Start Combat", style=discord.ButtonStyle.red,
                              custom_id=f"FCID{color}_phaseModuleNone_{pos}_{color}"))
+        power = ", ".join(f"{ship_type.capitalize()} {max(0, PlayerShip(player, ship_type).energy)}"
+                          for ship_type in types)
         content = (f"{player['player_name']}, declare Phase Module options for this combat. "
+                   f"Blueprint power: {power}. "
+                   "Options: +1 to Hit (1), +1 Shield (1), +2 Initiative (2), "
+                   "Neutron Bombs (2, needs the technology), Ignore Shields (3). "
+                   "Neutron Bombs and +2 Initiative cost 2 power together. "
                    f"Each blueprint includes +{player.get('wraithSouls', 0)} permanent offboard power. "
-                   "Options use available blueprint energy. Cloaking Device is always on.")
+                   "Cloaking Device is always on.")
         return content, view
 
     @staticmethod
@@ -2641,8 +2736,9 @@ class Combat:
                              custom_id=f"FCID{color}_phaseModuleReset_{pos}_{color}_{ship_type}"))
         view.add_item(Button(label="Back", style=discord.ButtonStyle.gray,
                              custom_id=f"FCID{color}_phaseModuleBack_{pos}_{color}"))
+        remaining = max(0, PlayerShip(player, ship_type).energy - mode.get("cost", 0))
         content = (f"{player['player_name']}, {ship_type.capitalize()}: "
-                   f"{max(0, PlayerShip(player, ship_type).energy)} unused blueprint energy; "
+                   f"{remaining} unused blueprint energy; "
                    f"Declared: {mode.get('cost', 0)} power.")
         return content, view
 
@@ -2931,6 +3027,8 @@ class Combat:
                     view.add_item(Button(label="Destroy All Population", style=discord.ButtonStyle.green,
                                          custom_id=f"FCID{winner}_removeInfluenceFinish_{pos}_graveYard"))
                     message = f"{playerName}, you may destroy all enemy influence and population automatically."
+                    if wraithPlanets:
+                        message += " Neutron Bombs were declared (2 blueprint Power)."
                     asyncio.create_task(interaction.channel.send(message, view=view))
                     message = (f"{playerName}, you may place your influence on the"
                                " tile after destroying the enemy population.")
@@ -3126,19 +3224,27 @@ class Combat:
         await interaction.message.delete()
 
     @staticmethod
+    def battle_rep_suffix(adjustment):
+        return f" ({adjustment:+d} for the battle)" if adjustment else ""
+
+    @staticmethod
     async def drawReputation(game: GamestateHelper, buttonID: str, interaction: discord.Interaction, player_helper):
         num_options = int(buttonID.split("_")[1])
         system = int(buttonID.split("_")[2])
         drawOrder = int(buttonID.split("_")[3])
         color = buttonID.split("_")[4]
         if "tilesToResolve" in game.gamestate:
+            adjustment = game.gamestate.get("battleRepAdjustments", {}).get(
+                f"{system}-{drawOrder}-{color}", 0)
             game.removeFromKey("queuedQuestions", [system, drawOrder, color])
             game.addToKey("queuedDraws", [system, drawOrder, color, num_options])
             await Combat.resolveQueue(game, interaction)
             if [system, drawOrder, color, num_options] in game.gamestate["queuedDraws"]:
                 asyncio.create_task(interaction.channel.send(f"{interaction.user.name}, your reputation draw has been queued"))
             else:
-                asyncio.create_task(interaction.channel.send(f"{interaction.user.name} drew {num_options} reputation tiles."))
+                asyncio.create_task(interaction.channel.send(
+                    f"{interaction.user.name} drew {num_options} reputation tiles"
+                    + Combat.battle_rep_suffix(adjustment) + "."))
             try:
                 await interaction.message.delete()
             except discord.NotFound:
@@ -3148,7 +3254,9 @@ class Combat:
                 f"{system}-{drawOrder}-{color}", 0)
             await ReputationButtons.resolveGainingReputation(game, num_options, interaction, player_helper, False,
                                                              battle_rep_adjustment=adjustment)
-            asyncio.create_task(interaction.channel.send(f"{interaction.user.name} drew {num_options} reputation tiles."))
+            asyncio.create_task(interaction.channel.send(
+                f"{interaction.user.name} drew {num_options} reputation tiles"
+                + Combat.battle_rep_suffix(adjustment) + "."))
             try:
                 await interaction.message.delete()
             except discord.NotFound:
