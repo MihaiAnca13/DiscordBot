@@ -426,7 +426,9 @@ class WebApp:
                 color, move_count = match.groups()
                 player = game.getPlayerObjectFromColor(color)
                 view, tiles = MoveButtons.buildMoveOriginView(game, player, move_count, "all", "")
-                message["buttons"].extend(buttons_from_view(view))
+                shown = {button.get("custom_id") for button in message["buttons"]}
+                message["buttons"].extend(button for button in buttons_from_view(view)
+                                          if button.get("custom_id") not in shown)
         for message in pending:
             for button in message["buttons"]:
                 match = re.fullmatch(r"FCID([^_]+)_moveQueueDone_(.+)", button.get("custom_id") or "")
@@ -545,13 +547,16 @@ class WebApp:
         self._snapshots[cache_key] = (stamp, payload)
         return payload
 
-    def _retire_combat_rolls(self, game_id, room, color, before_id):
+    def _retire_combat_rolls(self, game_id, room, color, before_id, pressed_id=""):
         """A combat overview keeps offering rolls after that player rolled.
 
         The engine answers a roll with a newer prompt; the old roll button must
         not be able to roll the same ships again. Only that colour's roll buttons
-        are retired, so the other side's shortcut stays usable.
+        are retired, and only a roll makes them stale: a Carapace or hit choice
+        must leave the pending roll alone. The other side's shortcut stays usable.
         """
+        if "rolldice" not in (pressed_id or "").lower():
+            return
         if not color or ("combat" not in (room or "").lower()
                          and "bombing" not in (room or "").lower()):
             return
@@ -759,7 +764,7 @@ class WebApp:
                                  self.store.prompts_in_room(game_id, room)), default=0)
                 await ButtonListener(None).resolveButton(interaction)
                 pressed_color = _button_color({"custom_id": custom_id})
-                self._retire_combat_rolls(game_id, room, pressed_color, before_id)
+                self._retire_combat_rolls(game_id, room, pressed_color, before_id, custom_id)
                 self._prune_research_options(game, room, pressed_color, game_id)
             except Exception as exc:  # the Discord cog reports these to #bot-log; we answer the browser
                 LOG.error("press failed: %s\n%s", exc, traceback.format_exc())

@@ -205,7 +205,8 @@ def test_combat_overview_stops_offering_a_rolled_colour(store, app, run, tmp_pat
     app.mirror = DiscordMirror(None, 1, store, tmp_path)
 
     async def retire():
-        app._retire_combat_rolls("aeb1", "aeb1-Round 1, Tile 102, Combat", "blue", blue)
+        app._retire_combat_rolls("aeb1", "aeb1-Round 1, Tile 102, Combat", "blue", blue,
+                                 "FCIDblue_rollDice_102_blue_3_defender")
 
     run(retire())
 
@@ -423,3 +424,23 @@ def test_ended_game_is_hidden_from_list(start_game, app, run):
     game.gamestate["gameEnded"] = True
     game.update()
     assert all(row["id"] != game.game_id for row in json.loads(run(app.api_games(None)).text)["games"])
+
+
+def test_a_carapace_press_leaves_the_pending_roll_alone(store, app, run):
+    blue = store.record("aeb1", "aeb1-Round 1, Tile 102, Combat", content="Combat",
+                        buttons=[
+                            {"label": "(Defender) Roll Initative 3 Ships",
+                             "custom_id": "FCIDblue_rollDice_102_blue_3_defender",
+                             "style": 3, "disabled": False, "url": None},
+                            {"label": "Carapace Shields", "custom_id": "FCIDblue_carapaceToggle_102_interceptor",
+                             "style": 1, "disabled": False, "url": None},
+                        ])
+
+    async def retire():
+        app._retire_combat_rolls("aeb1", "aeb1-Round 1, Tile 102, Combat", "blue", blue,
+                                 "FCIDblue_carapaceToggle_102_interceptor")
+
+    run(retire())
+
+    assert [button["custom_id"] for button in store.get(blue)["buttons"]] == [
+        "FCIDblue_rollDice_102_blue_3_defender", "FCIDblue_carapaceToggle_102_interceptor"]

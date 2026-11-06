@@ -48,6 +48,9 @@ class PulsarButtons:
         if action == "upgrade":
             await UpgradeButtons.startUpgrade(game, player, interaction, False, "dummy","dum")
         if action == "move":
+            # A free move from a discovery tile is not a Move action, so Raid does not add a build.
+            player_helper.stats["pulsarMove"] = True
+            game.update_player(player_helper)
             # The last move activation: one ship, and startMove does not reject the count.
             apt = FactionData.action_apt(player, "move")
             await MoveButtons.startMove(game, player, interaction, f"startMove_{apt}", False)
