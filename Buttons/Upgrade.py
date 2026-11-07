@@ -356,6 +356,13 @@ class UpgradeButtons:
                 and discTileUpgrade == "dummy":
             view.add_item(Button(label="Adaptive Transformation", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_adaptiveStart_{actions}_{discTileUpgrade}"))
+        if discTileUpgrade == "phase":
+            build_apt = FactionData.action_apt(player_helper.stats, "build")
+            if player_helper.stats.get("passed") or player_helper.stats.get("pulsarBuild"):
+                build_apt = 1
+            if player_helper.stats.get("phaseBuildsThisAction", 0) < build_apt:
+                view.add_item(Button(label="Build Activation", style=discord.ButtonStyle.green,
+                                     custom_id=f"FCID{player['color']}_phaseTechResume"))
         if discTileUpgrade == "free":
             if cog_free:
                 view.add_item(Button(label="Finish Upgrade", style=discord.ButtonStyle.red,
@@ -388,7 +395,7 @@ class UpgradeButtons:
             await interaction.channel.send(f"{player['player_name']}, choose which ship you would like to upgrade "
                                            "or finish your action.", view=view)
         elif discTileUpgrade == "phase":
-            await interaction.channel.send(f"{player['player_name']}, you may finish the action"
+            await interaction.channel.send(f"{player['player_name']}, you may continue the Build action"
                                            " or undo this part swap.", view=view)
         elif discTileUpgrade.startswith("tm"):
             view = UpgradeButtons.getTechnoMagicView(game, player, discTileUpgrade[2:])
