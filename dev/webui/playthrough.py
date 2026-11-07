@@ -226,7 +226,9 @@ def play_combat():
 # GAME=aeb2 python3 -m dev.webui.playthrough state                     (every player's resources and tiles)
 
 def print_message(message):
-    print(f"\n#{message['id']} [{message['room']}]{' private' if message['private'] else ''}")
+    # A public prompt can be another seat's turn menu; the API only lists buttons the seat may press.
+    foreign = "" if message.get("for_you", True) else "  (not this seat's: no buttons for it)"
+    print(f"\n#{message['id']} [{message['room']}]{' private' if message['private'] else ''}{foreign}")
     if message["content"]:
         print(message["content"])
     for button in message["buttons"]:
