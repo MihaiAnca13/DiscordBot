@@ -1421,7 +1421,7 @@ class Combat:
                     "That initiative step has already rolled this engagement round. Use the current prompt.")
                 return
             pending = [tile.get("currentSpeed"), tile.get("currentRoller")]
-            if (None not in pending and step != pending and pending not in rolled):
+            if (not auto and None not in pending and step != pending and pending not in rolled):
                 await interaction.channel.send(
                     "That initiative step is not current. Roll the pending step in the combat view first.")
                 return
