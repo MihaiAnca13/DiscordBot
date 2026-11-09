@@ -648,13 +648,6 @@ class Combat:
         sides = Combat.currentPairing(game, pos)
         if len(sides) != 2:
             return False
-        manual_abilities = ("carapace_shields", "spine_cannons", "wolf_pack", "phase_module",
-                            "nine_lives", "pounce", "first_shot", "regenerative_hull",
-                            "adaptive_transformation", "battle_focus")
-        for color in (color for side in sides for color in side if color != "ai"):
-            player = game.getPlayerObjectFromColor(color)
-            if any(FactionData.has(player, ability) for ability in manual_abilities):
-                return False
         return any("ai" in side for side in sides) and any(color != "ai" for side in sides for color in side)
 
     @staticmethod
@@ -996,6 +989,16 @@ class Combat:
         return "; ".join(f"{label}: {', '.join(names)}" for label, names in sides.items())
 
     @staticmethod
+    def hasPendingCombatChoices(game: GamestateHelper, pos: str):
+        tile = game.gamestate["board"][pos]
+        return bool(tile.get("unresolvedHits", 0) > 0 or tile.get("pendingRiftDice")
+                    or any(tile.get("pendingRiftBackfire", {}).values())
+                    or tile.get("wolfPack") or tile.get("carapacePendingMissiles")
+                    or tile.get("ghostsRetreatPending")
+                    or (tile.get("phaseModuleColors") and not tile.get("phaseModulePrompted"))
+                    or any(not state.get("done") for state in tile.get("carapaceShields", {}).values()))
+
+    @staticmethod
     async def autoRollCombat(game: GamestateHelper, buttonID: str, interaction: discord.Interaction, player):
         """Roll both sides of a fight against the AI until it ends, then report
         the salvos fired and show the survivors.
@@ -1015,9 +1018,8 @@ class Combat:
             await channel.send("Finish your Techno-Magic upgrades before auto-rolling.")
             return
         tile = game.gamestate["board"][pos]
-        if (tile.get("unresolvedHits", 0) > 0 or tile.get("pendingRiftDice")
-                or any(tile.get("pendingRiftBackfire", {}).values())):
-            await channel.send("Resolve the pending hits and Rift Cannon effects before auto-rolling.")
+        if Combat.hasPendingCombatChoices(game, pos):
+            await channel.send("Resolve the pending combat choices before auto-rolling.")
             return
         key = (game.game_id, pos)
         if key in AUTO_ROLLING:
@@ -1042,7 +1044,13 @@ class Combat:
                     break
                 if Combat.canResolveStalemate(game, pos):
                     break
-                nextSpeed, nextOwner, wrapped = Combat.nextInitiative(game, pos)
+                tile = game.gamestate["board"][pos]
+                pending = [tile.get("currentSpeed"), tile.get("currentRoller")]
+                if None not in pending and pending not in tile.get("rolledSteps", []):
+                    nextSpeed, nextOwner = pending
+                    wrapped = False
+                else:
+                    nextSpeed, nextOwner, wrapped = Combat.nextInitiative(game, pos)
                 if nextOwner is None:
                     break
                 # A retreat is a player decision; hand the destination prompt back.
@@ -1053,12 +1061,19 @@ class Combat:
                     await Combat.checkForMorphShield(game, pos, channel, tile["player_ships"][:],
                                                      Combat.sideOf(tile["attacker"])
                                                      + Combat.sideOf(tile["defender"]))
+                    await Carapace.offer(game, channel, pos)
+                    if Combat.hasPendingCombatChoices(game, pos):
+                        game.setCurrentRoller(nextOwner, pos)
+                        game.setCurrentSpeed(nextSpeed, pos)
+                        await channel.send("Auto-roll paused: set Carapace Shields, then press Auto-Roll again.")
+                        break
                 shots["ai" if nextOwner == "ai" else "players"] += 1
+                game.setCurrentRoller(nextOwner, pos)
+                game.setCurrentSpeed(nextSpeed, pos)
                 await Combat.rollDice(game, f"rollDice_{pos}_{nextOwner}_{nextSpeed}_deleteMsg",
                                       interaction, auto=True)
                 tile = game.gamestate["board"][pos]
-                if (tile.get("unresolvedHits", 0) > 0 or tile.get("pendingRiftDice")
-                        or any(tile.get("pendingRiftBackfire", {}).values())):
+                if Combat.hasPendingCombatChoices(game, pos):
                     await channel.send("Auto-roll paused: a manual choice is needed here."
                                        " Resolve it, then press Auto-Roll again.")
                     break
@@ -1071,8 +1086,7 @@ class Combat:
         tile = game.gamestate["board"][pos]
         if len(Combat.currentPairing(game, pos)) == 2:
             # Stopped before the end: hand the normal prompt (retreat, stalemate) back.
-            if not (tile.get("unresolvedHits", 0) > 0 or tile.get("pendingRiftDice")
-                    or any(tile.get("pendingRiftBackfire", {}).values())):
+            if not Combat.hasPendingCombatChoices(game, pos):
                 await Combat.promptNextSpeed(game, pos, channel, False)
             return
         summary = (f"**Auto-Roll Summary — system {int(tile['sector'])}, position {pos}**\n"
@@ -1542,6 +1556,9 @@ class Combat:
                     # await interaction.channel.send(msg,file=drawing.append_images(dieFiles))
                     await interaction.channel.send(msg + msg2)
                     oldNumPeeps = len(Combat.findPlayersInTile(game, pos))
+                    # A rift die defers the salvo's combat-end check, so every hit in
+                    # the same salvo must defer too or the kill is declared twice.
+                    salvo_defer = is_wolf or any(die[2] == "pink" for die in dieNums)
                     allocation = None
                     if auto:
                         # Pool this salvo the way the bot already allocates the AI's hits.
@@ -1549,9 +1566,6 @@ class Combat:
                                        for die in dieNums]
                         allocation = Combat.getAIHitAllocation(game, colorOrAI, pos, speed,
                                                               dice_for_ai, shipModel.computer)
-                    # A rift die defers the salvo's combat-end check, so every hit in
-                    # the same salvo must defer too or the kill is declared twice.
-                    salvo_defer = is_wolf or any(die[2] == "pink" for die in dieNums)
                     for die_index, die in enumerate(dieNums):
                         if die[4] in deferred_nine_lives:
                             continue
@@ -1572,14 +1586,16 @@ class Combat:
                         die_hits = [entry[1] for entry in dieNums if entry[4] == die_roll_id]
                         hittableShips = []
                         # A die that cannot hit even before the shield penalty has no choice to make.
-                        shield_choice = (incoming_shield and dieColor != "pink"
-                                         and Combat.getOpponentUnitsThatCanBeHit(
-                                             game, colorOrAI, player_ships, dieNum, computerVal, pos, speed))
+                        shield_choice = (incoming_shield and dieColor != "pink" and any(
+                            Carapace.engaged(game, pos, target.split("-")[0],
+                                             Combat.translateShipAbrToName(target.split("-")[1]))
+                            for target in Combat.getOpponentUnitsThatCanBeHit(
+                                game, colorOrAI, player_ships, dieNum, computer_val, pos, speed, ignoreShields)))
                         if shield_choice:
                             update = True
                             await Carapace.prompt_missile(game, interaction, pos, colorOrAI,
                                                           shipModel.ship_type, computerVal,
-                                                          speed, dieNum, dieDam, counter)
+                                                          speed, dieNum, dieDam, counter, ignoreShields)
                             continue
                         if dieColor != "pink":
                             hittableShips = Combat.getOpponentUnitsThatCanBeHit(game, colorOrAI, player_ships,
@@ -1602,13 +1618,13 @@ class Combat:
                                            " cancelled by the shields on each of the opponents ships.")
                                 asyncio.create_task( interaction.channel.send(message))
                             if len(hittableShips) == 0 or oldNumPeeps > len(Combat.findPlayersInTile(game, pos)):
-
                                 if (die_roll_id not in wolf_miss_ids and dieNum < 6
                                         and oldNumPeeps == len(Combat.findPlayersInTile(game, pos))):
                                     wolf_miss_ids.add(die_roll_id)
                                     wolf_misses.append([rollerType, dieNum, die_wolf_damage, dieColor,
                                                         computer_val, die_source, hit_bonus, die_damage_bonus])
-                                if all([not auto, player is not None,
+                                if all([not auto,
+                                        player is not None,
                                         FactionData.has(game.gamestate["players"][player],
                                                         "reroll_dice_with_colony_ships"),
                                         game.gamestate["players"][player]["colony_ships"] > 0,
@@ -1685,10 +1701,15 @@ class Combat:
                                     ship = allocation[die_index]
                                     if ship is None:
                                         continue
-                                    hittableShips = [ship]
-                                await Combat.offerHitPrompt(game, interaction, pos, colorOrAI, hittableShips,
-                                                            dieNum, dieDam, counter=counter,
-                                                            deferEnd=salvo_defer, reports=reports)
+                                    buttonID = f"assignHitTo_{pos}_{colorOrAI}_{ship}_{dieNum}_{dieDam}"
+                                    if salvo_defer:
+                                        buttonID += "_defer"
+                                    await Combat.assignHitTo(game, buttonID, interaction, False,
+                                                             deferEnd=salvo_defer, reports=reports)
+                                else:
+                                    await Combat.offerHitPrompt(game, interaction, pos, colorOrAI, hittableShips,
+                                                                dieNum, dieDam, counter=counter,
+                                                                deferEnd=salvo_defer, reports=reports)
                                 deferredEnd = deferredEnd or salvo_defer
                     await Combat.sendCombatReports(interaction.channel, reports)
                     if shipRiftBackfire > 0:
@@ -2408,39 +2429,31 @@ class Combat:
         sortedSpeeds = Combat.getBothCombatantShipsBySpeed(
             game, defender, attacker, tile["player_ships"], pos)
 
-        nextPair = Combat.nextSpeedPair(sortedSpeeds, currentSpeed, currentRoller)
-        phase = game.gamestate["board"][pos].get("firstShotPhase")
+        phase = tile.get("firstShotPhase")
         if phase is not None and not repeat:
-            firstShotSide = game.gamestate["board"][pos].get("firstShotSide") or []
+            firstShotSide = tile.get("firstShotSide") or []
             phaseSpeeds = [pair for pair in sortedSpeeds
                            if (pair[1] in firstShotSide) == (phase == "kurita")]
             nextPair = Combat.nextSpeedPair(phaseSpeeds, currentSpeed, currentRoller)
             if nextPair is None:
                 # The delayed side only starts after the other side's whole first pass.
-                game.gamestate["board"][pos]["firstShotPhase"] = (
-                    "kurita" if phase == "opponent" else None)
+                tile["firstShotPhase"] = "kurita" if phase == "opponent" else None
                 game.setCurrentRoller(None, pos)
                 game.setCurrentSpeed(None, pos)
-                currentSpeed = currentRoller = None
-                if game.gamestate["board"][pos]["firstShotPhase"] == "kurita":
+                if tile["firstShotPhase"] == "kurita":
                     nextPair = next((pair for pair in sortedSpeeds if pair[1] in firstShotSide), None)
-        if (nextPair is None and not repeat
-                and game.gamestate["board"][pos].get("firstShotPhase") is None):
+        elif repeat and currentSpeed is not None and currentRoller is not None:
+            nextPair = (currentSpeed, currentRoller)
+        else:
+            nextPair = Combat.nextSpeedPair(sortedSpeeds, currentSpeed, currentRoller)
+        if nextPair is None and not repeat and tile.get("firstShotPhase") is None:
             # a fresh engagement round: Pounce only applies in the first one
-            game.gamestate["board"][pos]["engagementRound"] = (
-                game.gamestate["board"][pos].get("engagementRound", 1) + 1)
-            game.gamestate["board"][pos].pop("pounceRound", None)
-        nextSpeed = -20
-        nextOwner = ""
-        if repeat and currentSpeed is not None and currentRoller is not None:
-            nextSpeed, nextOwner = currentSpeed, currentRoller
-        elif nextPair is not None:
-            nextSpeed, nextOwner = nextPair
-        if nextSpeed == -20 or (currentSpeed is not None and currentSpeed > 90 and 0 <= nextSpeed < 90):
-            game.gamestate["board"][pos].pop("wolfPackRerolls", None)
+            tile["engagementRound"] = tile.get("engagementRound", 1) + 1
+            tile.pop("pounceRound", None)
+        nextSpeed, nextOwner = nextPair if nextPair is not None else (-20, "")
         wrapped = nextSpeed == -20
         if wrapped:
-            game.gamestate["board"][pos].pop("rolledSteps", None)
+            tile.pop("rolledSteps", None)
             for speed, owner in sortedSpeeds:
                 if speed < 90:
                     nextSpeed = speed
@@ -2454,20 +2467,21 @@ class Combat:
     async def promptNextSpeed(game: GamestateHelper, pos: str, channel, update: bool, repeat: bool = False):
         if len(Combat.currentPairing(game, pos)) != 2:
             return
-        if Combat.technoMagicPending(game, pos):
+        tile = game.gamestate["board"].get(pos, {})
+        if (Carapace.has_pending_missiles(game, pos) or Combat.has_pending_nine_lives(game, pos)
+                or tile.get("lyraRerollPending") or Combat.technoMagicPending(game, pos)
+                or (tile.get("phaseModuleColors") and not tile.get("phaseModulePrompted"))):
             return
         if (game.game_id, pos) in AUTO_ROLLING:
-            return
-        tile = game.gamestate["board"][pos]
-        if tile.get("phaseModuleColors") and not tile.get("phaseModulePrompted"):
-            return
-        if (Carapace.has_pending_missiles(game, pos) or Combat.has_pending_nine_lives(game, pos)
-                or tile.get("lyraRerollPending")):
             return
         attacker = Combat.sideOf(game.gamestate["board"][pos]["attacker"])
         defender = Combat.sideOf(game.gamestate["board"][pos]["defender"])
         ships = game.gamestate["board"][pos]["player_ships"]
+        previousSpeed = game.gamestate["board"][pos].get("currentSpeed")
         nextSpeed, nextOwner, wrapped = Combat.nextInitiative(game, pos, repeat)
+        if wrapped or (previousSpeed is not None and previousSpeed > 90 and 0 <= nextSpeed < 90):
+            # Wolf Pack saved rerolls only last for the engagement round they were earned in
+            game.gamestate["board"][pos].pop("wolfPackRerolls", None)
         if wrapped:
             await Combat.checkForMorphShield(game, pos, channel, ships, list(attacker) + list(defender))
             await Carapace.offer(game, channel, pos)
@@ -3099,9 +3113,9 @@ class Combat:
         return [pos for pos in game.gamestate["board"] if Combat.discoveryClaimant(game, pos) is not None]
 
     @staticmethod
-    async def offerDiscoveryTile(game: GamestateHelper, channel, pos: str, color: str):
+    async def offerDiscoveryTile(game: GamestateHelper, channel, pos: str, color: str, force=False):
         offered = game.gamestate.setdefault("discoveryOffers", {})
-        if offered.get(pos) == color:
+        if offered.get(pos) == color and not force:
             return
         player = game.getPlayerObjectFromColor(color)
         view = View()
@@ -3112,12 +3126,12 @@ class Combat:
         game.update()
 
     @staticmethod
-    async def settleDiscoveryTiles(game: GamestateHelper, channel):
+    async def settleDiscoveryTiles(game: GamestateHelper, channel, force=False):
         """Offer every claimable Discovery Tile to the player the FAQ gives it to."""
         for pos in game.gamestate["board"]:
             color = Combat.discoveryClaimant(game, pos)
             if color is not None:
-                await Combat.offerDiscoveryTile(game, channel, pos, color)
+                await Combat.offerDiscoveryTile(game, channel, pos, color, force=force)
 
     @staticmethod
     async def declareAWinner(game: GamestateHelper, interaction: discord.Interaction, pos: str):

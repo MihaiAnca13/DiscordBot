@@ -234,6 +234,10 @@ class ButtonListener(commands.Cog):
             return
         if player is None:
             return
+        if interaction.message.id in game.gamestate.get("obsoleteDiscoveryPrompts", []):
+            await interaction.followup.send("This discovery choice was already answered or re-sent."
+                                            " Use the latest prompt.", ephemeral=True)
+            return
         if not await PreGameButtons.canResolve(game, interaction, player, customID):
             return
         if (customID.split("_", 1)[0] in {"startExplore", "startResearch", "startBuild", "startUpgrade",
@@ -344,8 +348,7 @@ class ButtonListener(commands.Cog):
         elif customID.startswith("gain3resource"):
             await ResearchButtons.gain3resource(game, player, player_helper, interaction, customID)
             if len(customID.split("_")) > 2:
-                game.gamestate.get("pendingDiscoveryResolutions", {}).pop(customID.split("_")[2], None)
-                game.update()
+                DiscoveryTileButtons.clearPendingResolution(game, customID.split("_")[2])
             task_result = True
         elif customID.startswith("startBuild"):
             if "2" not in customID:
