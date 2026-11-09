@@ -169,7 +169,7 @@ class ButtonListener(commands.Cog):
             if not any(substring in customID for substring in ["showGame", "AtRatio", "gain5",
                                                                "showReputation", "rollDice", "magColShip",
                                                                "rerollDie", "readyForUpkeep", "draftFaction",
-                                                               "buildShip", "wolfPack"]):
+                                                               "autoRollCombat", "buildShip", "wolfPack"]):
                 await interaction.followup.send(f"{interaction.user.mention}, this button ({customID}) was pressed"
                                                 " most recently, and we are attempting to prevent an accidental"
                                                 " double press. Try hitting show reputation first and then hitting this"
@@ -225,6 +225,10 @@ class ButtonListener(commands.Cog):
             await Combat.refreshImage(game, customID, interaction)
             return
         if player is None:
+            return
+        if interaction.message.id in game.gamestate.get("obsoleteDiscoveryPrompts", []):
+            await interaction.followup.send("This discovery choice was already answered or re-sent."
+                                            " Use the latest prompt.", ephemeral=True)
             return
         if not await PreGameButtons.canResolve(game, interaction, player, customID):
             return
@@ -289,7 +293,7 @@ class ButtonListener(commands.Cog):
         elif customID.startswith("discardTile"):
             await ExploreButtons.discardTile(game, interaction, player, customID)
         elif customID.startswith("keepDiscForPoints"):
-            await DiscoveryTileButtons.keepDiscForPoints(game, player_helper, interaction)
+            await DiscoveryTileButtons.keepDiscForPoints(game, player_helper, interaction, customID)
             task_result = True
         elif customID.startswith("exploreDiscoveryTile"):
             await DiscoveryTileButtons.exploreDiscoveryTile(game, customID.split("_")[1], interaction, player)
@@ -329,6 +333,8 @@ class ButtonListener(commands.Cog):
             await ResearchButtons.gain5resource(game, player, player_helper, interaction, customID)
         elif customID.startswith("gain3resource"):
             await ResearchButtons.gain3resource(game, player, player_helper, interaction, customID)
+            if len(customID.split("_")) > 2:
+                DiscoveryTileButtons.clearPendingResolution(game, customID.split("_")[2])
             task_result = True
         elif customID.startswith("startBuild"):
             if "2" not in customID:
@@ -519,6 +525,8 @@ class ButtonListener(commands.Cog):
             await game.endGame(interaction)
         elif customID.startswith("declareWinner"):
             await game.declareWinner(interaction)
+        elif customID.startswith("autoRollCombat"):
+            await Combat.autoRollCombat(game, customID, interaction, player)
         elif customID.startswith("rollDice"):
             await Combat.rollDice(game, customID, interaction)
         elif customID.startswith("wolfPack"):

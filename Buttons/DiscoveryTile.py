@@ -18,6 +18,39 @@ class DiscoveryTileButtons:
                    for track in tracks)
 
     @staticmethod
+    async def sendPendingPrompt(game: GamestateHelper, tile, channel, content, view, **kwargs):
+        prompts = game.gamestate.setdefault("pendingDiscoveryPrompts", {})
+        previous = prompts.get(tile, {})
+        if previous.get("message_id"):
+            game.gamestate.setdefault("obsoleteDiscoveryPrompts", []).append(previous["message_id"])
+        prompts[tile] = {"content": content, "buttons": [
+            {"label": button.label, "style": button.style.value, "custom_id": button.custom_id}
+            for button in view.children]}
+        game.update()
+        message = await channel.send(content, view=view, **kwargs)
+        prompts[tile]["message_id"] = message.id
+        game.update()
+
+    @staticmethod
+    async def reofferPendingPrompts(game: GamestateHelper, channel, position=None):
+        for tile, prompt in list(game.gamestate.get("pendingDiscoveryPrompts", {}).items()):
+            if position is not None and tile != position:
+                continue
+            view = View()
+            for button in prompt["buttons"]:
+                view.add_item(Button(label=button["label"], style=discord.ButtonStyle(button["style"]),
+                                     custom_id=button["custom_id"]))
+            await DiscoveryTileButtons.sendPendingPrompt(game, tile, channel, prompt["content"], view)
+
+    @staticmethod
+    def clearPendingResolution(game: GamestateHelper, tile):
+        game.gamestate.get("pendingDiscoveryResolutions", {}).pop(tile, None)
+        prompt = game.gamestate.get("pendingDiscoveryPrompts", {}).pop(tile, {})
+        if prompt.get("message_id"):
+            game.gamestate.setdefault("obsoleteDiscoveryPrompts", []).append(prompt["message_id"])
+        game.update()
+
+    @staticmethod
     def drawDiscoveryChoices(game: GamestateHelper, tile=None):
         """Draw two choices, discarding Material Gain and Ancient Cruiser."""
         game.replenishDiscTiles()
@@ -48,6 +81,8 @@ class DiscoveryTileButtons:
         with open("data/discoverytiles.json") as f:
             discTile_data = json.load(f)
         discName = discTile_data[disc]["name"]
+        game.gamestate.setdefault("pendingDiscoveryResolutions", {})[tile] = player["color"]
+        game.update()
         drawing = DrawHelper(game.gamestate)
         file = await asyncio.to_thread(drawing.show_disc_tile, discName)
         msg = (f"{player['player_name']} you explored a discovery tile and found a {discName}. "
@@ -56,21 +91,26 @@ class DiscoveryTileButtons:
         view = View()
         view.add_item(Button(label="Use it for its ability", style=discord.ButtonStyle.green,
                              custom_id=f"FCID{player['color']}_usedDiscForAbility_{disc}_{tile}"))
-        view.add_item(Button(label="Get 2 Points", style=discord.ButtonStyle.red, custom_id=f"FCID{player['color']}_keepDiscForPoints"))
-        asyncio.create_task(interaction.channel.send(msg, view=view, file=file))
+        view.add_item(Button(label="Get 2 Points", style=discord.ButtonStyle.red, custom_id=f"FCID{player['color']}_keepDiscForPoints_{tile}"))
+        await DiscoveryTileButtons.sendPendingPrompt(game, tile, interaction.channel, msg, view, file=file)
 
     @staticmethod
     async def exploreDiscoveryTile(game: GamestateHelper, tile: str, interaction: discord.Interaction, player):
-        # if "discTiles" not in game.gamestate:
-        #    game.fillInDiscTiles()
+        if tile in game.gamestate.get("pendingDiscoveryPrompts", {}):
+            await DiscoveryTileButtons.reofferPendingPrompts(game, interaction.channel, tile)
+            return True
         if game.gamestate["board"][tile]["disctile"] == 0:
             await interaction.followup.send("No discovery tile in tile " + tile)
             return False
+        game.gamestate.get("discoveryOffers", {}).pop(tile, None)
         if FactionData.has(player, "two_discovery_choices"):
             drawn = DiscoveryTileButtons.drawDiscoveryChoices(game, tile)
             # identical draws collapse to one choice
             choices = list(dict.fromkeys(drawn))
             if not choices:
+                # shortcut: the claim is freed when no tiles remain, revisit if a dry deck should award something.
+                game.gamestate["board"][tile]["disctile"] = 0
+                game.update()
                 await interaction.channel.send("No eligible discovery tiles remain in the deck.")
                 return False
             game.gamestate["board"][tile]["disctile"] = 0
@@ -78,6 +118,8 @@ class DiscoveryTileButtons:
             if len(drawn) > len(choices):
                 game.discardDiscTile(choices[0])
             if len(choices) > 1:
+                game.gamestate.setdefault("pendingDiscChoices", {})[tile] = choices
+                game.update()
                 view = View()
                 with open("data/discoverytiles.json") as f:
                     discTile_data = json.load(f)
@@ -88,9 +130,9 @@ class DiscoveryTileButtons:
                     view.add_item(Button(label=choice_data["name"], style=discord.ButtonStyle.green,
                                          custom_id=f"FCID{player['color']}_selectDiscTile_{choice}_{other}_{tile}"))
                     files.append(await asyncio.to_thread(drawing.show_disc_tile, choice_data["name"]))
-                await interaction.channel.send(
+                await DiscoveryTileButtons.sendPendingPrompt(game, tile, interaction.channel,
                     f"{player['player_name']} drew two discovery tiles. Choose one to resolve;"
-                    " the other is discarded.", view=view, files=files)
+                    " the other is discarded.", view, files=files)
                 return True
             disc = choices[0]
         else:
@@ -105,19 +147,28 @@ class DiscoveryTileButtons:
         return True
 
     @staticmethod
+    def pendingDiscChoices(game: GamestateHelper):
+        """Atlantians draws still waiting on the player to pick one of the two tiles."""
+        return list(game.gamestate.get("pendingDiscChoices", {}))
+
+    @staticmethod
     async def selectDiscTile(game: GamestateHelper, interaction: discord.Interaction, buttonID: str, player):
         parts = buttonID.split("_")
         disc, tile = parts[1], parts[-1]
         # Existing Discord prompts predate the unchosen tile in the button ID.
         if len(parts) == 4:
             game.discardDiscTile(parts[2])
+        game.gamestate.get("pendingDiscChoices", {}).pop(tile, None)
+        game.update()
         await interaction.message.edit(view=None)
         await DiscoveryTileButtons.sendDiscoveryTileOptions(game, tile, interaction, player, disc)
 
     @staticmethod
-    async def keepDiscForPoints(game: GamestateHelper, player_helper: PlayerHelper, interaction: discord.Interaction):
+    async def keepDiscForPoints(game: GamestateHelper, player_helper: PlayerHelper, interaction: discord.Interaction, buttonID: str = "keepDiscForPoints"):
         player_helper.acquire_disc_tile_for_points()
         game.update_player(player_helper)
+        if len(buttonID.split("_")) > 1:
+            DiscoveryTileButtons.clearPendingResolution(game, buttonID.split("_")[1])
         await interaction.message.edit(view=None)
         await interaction.channel.send(f"{player_helper.stats['player_name']} chose to keep the tile for 2 points")
 
@@ -170,12 +221,13 @@ class DiscoveryTileButtons:
                 for tech in cheapestTechs:
                     tech_details = tech_data.get(tech)
                     view.add_item(Button(label=tech_details["name"], style=discord.ButtonStyle.green,
-                                         custom_id=f"FCID{player['color']}_getFreeTech_{tech}"))
-                await interaction.channel.send("Choose the tech you would like to gain", view=view)
+                                         custom_id=f"FCID{player['color']}_getFreeTech_{tech}_tile-{tile}"))
+                await DiscoveryTileButtons.sendPendingPrompt(
+                    game, tile, interaction.channel, "Choose the tech you would like to gain", view)
                 pending_task = "discovery_tech"
             else:
                 pending_task = await DiscoveryTileButtons.getFreeTech(
-                    game, interaction, "spoof_" + cheapestTechs[0], player)
+                    game, interaction, "spoof_" + cheapestTechs[0] + "_tile-" + tile, player)
         elif discTile_data[disc]["spawn"] != 0:
             if discTile_data[disc]["spawn"] == "cruiser":
                 game.add_units([player["color"] + "-cru"], tile)
@@ -203,42 +255,51 @@ class DiscoveryTileButtons:
                                                     ("science", discord.ButtonStyle.green)]:
                     view.add_item(Button(label=f"Gain 3 {resource_type.capitalize()}",
                                          style=button_style,
-                                         custom_id=f"FCID{player_helper.stats['color']}_gain3resource_{resource_type}"))
-                await interaction.channel.send("You may gain 3 of any type of resource.", view=view)
+                                         custom_id=f"FCID{player_helper.stats['color']}_gain3resource_{resource_type}_{tile}"))
+                await DiscoveryTileButtons.sendPendingPrompt(
+                    game, tile, interaction.channel, "You may gain 3 of any type of resource.", view)
                 pending_task = "discovery_resource"
         game.update_player(player_helper)
+        if pending_task is True or pending_task == "discovery_upgrade":
+            DiscoveryTileButtons.clearPendingResolution(game, tile)
         return pending_task
 
     @staticmethod
     async def getFreeTech(game: GamestateHelper, interaction: discord.Interaction, buttonID: str, player):
         tech = buttonID.split("_")[1]
+        tile = next((part[5:] for part in buttonID.split("_") if part.startswith("tile-")), None)
+        track = next((part for part in buttonID.split("_") if part in ("military", "grid", "nano")), None)
         with open("data/techs.json", "r") as f:
             tech_data = json.load(f)
         tech_type = tech_data.get(tech)["track"]
         if "spoof" not in buttonID:
             await interaction.message.delete()
         if tech_type == "any":
-            if len(buttonID.split("_")) == 3:
-                tech_type = buttonID.split("_")[2]
+            if track:
+                tech_type = track
             else:
                 view = View()
-                for track, label, style in (("military", "Military (Pink)", discord.ButtonStyle.red),
-                                            ("grid", "Grid (Green)", discord.ButtonStyle.green),
-                                            ("nano", "Nano (Yellow)", discord.ButtonStyle.gray)):
-                    if len(player[f"{track}_tech"]) >= FactionData.tech_track_max(player):
+                for track_name, label, style in (("military", "Military (Pink)", discord.ButtonStyle.red),
+                                                 ("grid", "Grid (Green)", discord.ButtonStyle.green),
+                                                 ("nano", "Nano (Yellow)", discord.ButtonStyle.gray)):
+                    if len(player[f"{track_name}_tech"]) >= FactionData.tech_track_max(player):
                         continue
                     view.add_item(Button(label=label, style=style,
-                                         custom_id=f"FCID{player['color']}_getFreeTech_{tech}_{track}"))
+                                         custom_id=f"FCID{player['color']}_getFreeTech_{tech}_{track_name}"
+                                                   + (f"_tile-{tile}" if tile else "")))
                 if not view.children:
                     await interaction.channel.send("Every technology tray is full.")
                     return True
-                await interaction.channel.send(f"{player['player_name']} please choose the track this ancient tech should go on.",
-                                           view=view)
+                await DiscoveryTileButtons.sendPendingPrompt(
+                    game, tile, interaction.channel,
+                    f"{player['player_name']} please choose the track this ancient tech should go on.", view)
                 return "discovery_tech"
         if len(player[f"{tech_type}_tech"]) >= FactionData.tech_track_max(player):
             await interaction.channel.send("That technology tray is full.")
             return True
         game.playerResearchTech(game.get_player_from_color(player["color"]), tech, tech_type)
+        if tile:
+            DiscoveryTileButtons.clearPendingResolution(game, tile)
         tech_details = tech_data.get(tech)
         image = DrawHelper.show_tech_ref_image(tech_details["name"], tech_details['track'])
         await interaction.channel.send(f"{player['player_name']} acquired the tech {tech_details['name']}.",

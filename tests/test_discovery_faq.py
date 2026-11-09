@@ -9,10 +9,11 @@ Combat Phase.
 """
 import pytest
 
+from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Influence import InfluenceButtons
 from Buttons.Turn import TurnButtons
 from helpers.CombatHelper import Combat
-from tests.fakes import FakeInteraction, POS, board_tile, offered_ids, players
+from tests.fakes import FakeChannel, FakeInteraction, POS, board_tile, buttons, offered_ids, players, reload
 
 
 def _game(make_game, colors, ships, owner=0, extra=None, names=None):
@@ -29,6 +30,22 @@ def _game(make_game, colors, ships, owner=0, extra=None, names=None):
 
 def _explore_offer(color):
     return f"FCID{color}_exploreDiscoveryTile_{POS}_deleteMsg"
+
+
+def _stub_upkeep(game, monkeypatch):
+    """Keep upkeep off Discord and off the filesystem, recording whether it ran."""
+    ran = []
+
+    async def upkeep(*_args, **_kwargs):
+        ran.append(True)
+
+    async def noop(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(game, "upkeep", upkeep)
+    monkeypatch.setattr(game, "showUpdate", noop)
+    monkeypatch.setattr(game, "saveEndRound", lambda: None)
+    return ran
 
 
 class TestNoShipsRemain:
@@ -130,14 +147,98 @@ class TestRunUpkeepWiring:
         game = _game(make_game, ("blue", "red"), [], owner="blue", extra={"disctile": 1})
         game.gamestate["roundNum"] = 9
         inter = FakeInteraction()
-
-        async def noop(*_args, **_kwargs):
-            return None
-
-        monkeypatch.setattr(game, "upkeep", noop)
-        monkeypatch.setattr(game, "showUpdate", noop)
-        monkeypatch.setattr(game, "saveEndRound", lambda: None)
+        _stub_upkeep(game, monkeypatch)
 
         run(TurnButtons.runUpkeep(game, inter))
 
         assert _explore_offer("blue") in offered_ids(inter)
+
+
+class TestUpkeepWaitsForDiscoveryTiles:
+    """The round cannot end while a Discovery Tile is unclaimed or an Atlantians draw is
+    unpicked, otherwise the draw would happen after the next round's techs are revealed."""
+
+    def test_an_unclaimed_tile_blocks_upkeep(self, make_game, run, monkeypatch):
+        game = _game(make_game, ("blue", "red"), [], owner="blue", extra={"disctile": 1})
+        game.gamestate["roundNum"] = 9
+        inter = FakeInteraction()
+        ran = _stub_upkeep(game, monkeypatch)
+
+        run(TurnButtons.runUpkeep(game, inter))
+
+        assert "Discovery tiles still have to be claimed" in inter.channel.sent[-1][0]
+        assert "Tile 101: blue" in inter.channel.sent[-1][0]
+        assert ran == []
+
+    def test_upkeep_waits_for_the_drawn_tile_to_be_resolved(self, make_game, run, monkeypatch):
+        game = _game(make_game, ("blue", "red"), [], owner="blue", extra={"disctile": 1})
+        game.gamestate["roundNum"] = 9
+        blue = game.getPlayerObjectFromColor("blue")
+        inter = FakeInteraction()
+        ran = _stub_upkeep(game, monkeypatch)
+
+        run(DiscoveryTileButtons.exploreDiscoveryTile(game, POS, inter, blue))
+        run(TurnButtons.runUpkeep(game, inter))
+
+        assert ran == []
+
+    def test_an_unpicked_atlantians_draw_blocks_upkeep(self, make_game, run, monkeypatch):
+        game = _game(make_game, ("blue", "red"), [], owner="blue", extra={"disctile": 1},
+                     names={"blue": "Atlantians"})
+        game.gamestate["roundNum"] = 9
+        game.gamestate["discTiles"] = ["som", "jud"]
+        blue = game.getPlayerObjectFromColor("blue")
+        inter = FakeInteraction()
+        ran = _stub_upkeep(game, monkeypatch)
+
+        run(DiscoveryTileButtons.exploreDiscoveryTile(game, POS, inter, blue))
+        run(TurnButtons.runUpkeep(game, inter))
+
+        assert "the Atlantians still have to choose" in inter.channel.sent[-1][0]
+        assert ran == []
+
+        run(DiscoveryTileButtons.selectDiscTile(game, inter, "selectDiscTile_som_jud_101", blue))
+        run(TurnButtons.runUpkeep(game, inter))
+
+        assert ran == []
+
+
+@pytest.mark.parametrize("faction, deck", [("hyd", ["som"]), ("atl", ["som", "jud"])])
+def test_upkeep_reoffers_lost_discovery_choices_without_redrawing(start_game, run, press, faction, deck):
+    game, channel = start_game(factions=[faction, "eri"])
+    tile = "201"
+    game.gamestate["discTiles"] = list(deck)
+    game.addDiscTile(tile)
+    run(DiscoveryTileButtons.exploreDiscoveryTile(game, tile, FakeInteraction(channel), game.get_player(1)))
+    old_id = next(cid for cid in buttons(channel) if "keepDiscForPoints" in cid or "selectDiscTile" in cid)
+    old_message = channel.message_with(old_id)
+    state = reload(game)
+    for player in state.gamestate["players"].values():
+        player["passed"] = True
+    state.update()
+    remaining_deck = list(state.gamestate["discTiles"])
+
+    press(channel, 1, "runUpkeep")
+
+    assert channel.message_with(old_id).id != old_message.id
+    assert reload(game).gamestate["discTiles"] == remaining_deck
+    inter = press(channel, 1, old_id, message=old_message)
+    assert "latest prompt" in inter.followup.sent[0][0]
+    press(channel, 1, old_id)
+    if faction == "atl":
+        press(channel, 1, "FCIDblue_keepDiscForPoints_201")
+    state = reload(game)
+    assert state.get_player(1)["disc_tiles_for_points"] == 1
+    assert not state.gamestate.get("pendingDiscoveryResolutions")
+    assert not state.gamestate.get("pendingDiscoveryPrompts")
+
+
+def test_upkeep_reoffers_an_unclaimed_tile_after_its_offer_was_lost(make_game, run):
+    game = _game(make_game, ("blue", "red"), [], owner="blue", extra={"disctile": 1})
+    original_channel = FakeChannel("t-old")
+    run(Combat.settleDiscoveryTiles(game, original_channel))
+    new_channel = FakeChannel("t-actions")
+
+    run(TurnButtons.runUpkeep(game, FakeInteraction(new_channel)))
+
+    assert _explore_offer("blue") in buttons(new_channel)
