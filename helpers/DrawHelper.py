@@ -457,8 +457,8 @@ class DrawHelper:
                             pop_image = self.use_image(pop_path)
                             if resource_type == "orbital":
                                 coords = tile["orb_snap"]
-                            elif resource_type == "disc":
-                                coords = disc_center
+                            elif resource_type == "disc" or (tile.get("sector") == "277" and resource_type == "moneyadv"):
+                                coords = disc_center if resource_type == "disc" else tile[f"{resource_type}{x + 1}_snap"]
                                 alpha = pop_image.getchannel("A")
                                 outlined_cube = Image.new("RGBA", pop_image.size, (235, 235, 235))
                                 outlined_cube.putalpha(alpha.filter(ImageFilter.MaxFilter(9)))
@@ -672,6 +672,8 @@ class DrawHelper:
             return "+1 BUI"
         if action in ("build", "move") and FactionData.has(player, "infinite_possibilities"):
             return "+1 UPG"
+        if action == "research" and FactionData.has(player, "organic_tech"):
+            return "1* UPG"
         return None
 
     @staticmethod
@@ -1053,6 +1055,13 @@ class DrawHelper:
         # the Horde's four slots sit on every other printed position
         step = 6 // (len(FactionData.tech_track_display(player)) - 1)
         for row, tech_type in enumerate(("military", "grid", "nano")):
+            if FactionData.has(player, "tech_masters"):
+                # The supplied Vorlons board overprints 6 and 9 in the last discount badge.
+                center = (origin[0] + int(2293 * scale), origin[1] + int((275 + 386 * row) * scale))
+                draw.ellipse((center[0] - 27, center[1] - 27, center[0] + 27, center[1] + 27),
+                             fill="black", outline=(225, 160, 190), width=3)
+                draw.text(center, "-9", fill="white", font=ImageFont.truetype("images/resources/arial.ttf", 35),
+                          anchor="mm")
             printed = FactionData.BY_NAME.get(player["name"], {}).get(f"{tech_type}_tech", [])
             for index, tech in enumerate(player[f"{tech_type}_tech"]):
                 if index < len(printed) and printed[index] == tech:
@@ -1161,6 +1170,12 @@ class DrawHelper:
             letX = letX -15
         text_drawable_image.text((letX, 165), str(publicPoints), color, font=font,
                                  stroke_width=stroke_width, stroke_fill=stroke_color)
+        bonus = self.centre_bonus(player)
+        if bonus:
+            ability = "Pride" if FactionData.has(player, "solitary_hunter") else "Centre"
+            text_drawable_image.text((280, 235), f"{ability}: +{bonus} VP", fill="white",
+                                     font=ImageFont.truetype("images/resources/arial.ttf", size=26),
+                                     stroke_width=1, stroke_fill="black")
         
         colonyPath = "images/resources/components/all_boards/colony_ship.png"
         colonyShip = self.use_image(colonyPath)
@@ -1560,6 +1575,24 @@ class DrawHelper:
 
         
 
+    def centre_bonus(self, player):
+        color = player["color"]
+        vp = FactionData.of(player)
+        tile_map = self.gamestate["board"]
+        centre = next((tile for tile in tile_map.values() if tile.get("sector") == "001"), None)
+        if centre and isinstance(centre.get("owner"), str):
+            owner = centre["owner"]
+            allied = owner == color
+            if not allied:
+                owner_player = next((p for p in self.gamestate.get("players", {}).values()
+                                     if p.get("color") == owner), None)
+                if owner_player:
+                    from helpers.GamestateHelper import areAlliedByPlayer
+                    allied = areAlliedByPlayer(player, owner_player)
+            if allied and (owner == color or vp.get("vp_per_centre_allies", True)):
+                return vp.get("vp_per_centre", 0)
+        return 0
+
     def get_public_points(self, player, showPrivateRegardless:bool):
         points = 0
         tile_map = self.gamestate["board"]
@@ -1596,18 +1629,7 @@ class DrawHelper:
             count = len(player.get(tType, []))
             if count < len(tech_vp):
                 points += tech_vp[count]
-        centre = next((tile for tile in tile_map.values() if tile.get("sector") == "001"), None)
-        if centre and isinstance(centre.get("owner"), str):
-            owner = centre["owner"]
-            allied = owner == color
-            if not allied:
-                owner_player = next((p for p in self.gamestate.get("players", {}).values()
-                                     if p.get("color") == owner), None)
-                if owner_player:
-                    from helpers.GamestateHelper import areAlliedByPlayer
-                    allied = areAlliedByPlayer(player, owner_player)
-            if allied and (owner == color or vp.get("vp_per_centre_allies", True)):
-                points += vp.get("vp_per_centre", 0)
+        points += self.centre_bonus(player)
         if "disc_tiles_for_points" in player:
             points += player["disc_tiles_for_points"] * 2
         points += vp.get("discovery_part_vp", 0) * PlayerHelper.installed_discovery_part_count(player)

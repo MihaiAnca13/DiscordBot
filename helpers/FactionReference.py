@@ -329,8 +329,8 @@ def faction_references(community_factions=True):
                          " not control: Interceptor 1, Cruiser 2, Dreadnought 3.",
                          "- **Battle Focus:** Upgrade activations must be spent on different ship classes.",
                          "- **Alternative Tech Board:** 4 slots per track, with discounts -1, -3, -5.",
-                         "- The board prints home sector 255; the bot uses the free sector 288"
-                         " (255 is the Remnants of Ra home)."])
+                         "- Home sector 288"
+                         " (Kassus Gar Rift)."])
     send_community_sheet(message, "horde_board.png")
 
     message = "\n".join(["# Vorlons",

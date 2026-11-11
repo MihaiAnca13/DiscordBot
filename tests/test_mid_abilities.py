@@ -1,5 +1,6 @@
 """Legion of Midas: Midas Touch and All That Glitters."""
 from Buttons.Turn import TurnButtons
+from Buttons.Explore import ExploreButtons
 from helpers import FactionData
 from helpers.GamestateHelper import GamestateHelper
 from tests.fakes import FakeInteraction, buttons, reload
@@ -85,3 +86,25 @@ def test_all_that_glitters_gives_one_money_for_passing_first(start_game, press):
     after = reload(game).get_player(1)
     assert after["money"] == 1
     assert after["firstPlayer"] is True
+
+
+def test_second_explore_retires_the_first_finish_prompt(start_game, run, press):
+    game, channel = start_game(factions=["mid", "eri"])
+    game.get_player(1)["money"] = 10
+    game.update()
+    press(channel, 1, "FCIDblue_midasTouch")
+    press(channel, 1, "FCIDblue_midasAction_explore")
+    state = reload(game)
+    interaction = FakeInteraction(channel)
+    run(ExploreButtons.discardTile(state, interaction, state.get_player(1), "discardTile_101"))
+    first_finish = state.get_player(1)["exploreFinishMessage"]
+    assert first_finish not in channel.deleted
+    press(channel, 1, "FCIDblue_startExplore2")
+    assert first_finish in channel.deleted
+    state = reload(game)
+    run(ExploreButtons.discardTile(state, interaction, state.get_player(1), "discardTile_102"))
+    finish_prompts = [message.id for (content, kwargs), message in zip(channel.sent, channel.messages)
+                      if any(item.custom_id == "FCIDblue_finishAction"
+                             for item in getattr(kwargs.get("view"), "children", []))
+                      and message.id not in channel.deleted]
+    assert len(finish_prompts) == 1

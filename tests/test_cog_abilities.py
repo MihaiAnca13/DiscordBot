@@ -60,7 +60,7 @@ def _press_edited(press, channel, interaction, prefix):
     return press(channel, 1, custom_id, interaction.message)
 
 
-def test_infinite_possibilities_can_be_the_last_activation_of_a_partial_build(start_game, press):
+def test_infinite_possibilities_resumes_a_partial_build(start_game, press, run):
     game, channel = start_game(factions=["cog", "eri"])
     game.get_player(1)["materials"] = 8
     game.update()
@@ -74,7 +74,31 @@ def test_infinite_possibilities_can_be_the_last_activation_of_a_partial_build(st
                                    if cid.startswith("FCIDblue_spendMaterial_")))
     _press_edited(press, channel, inter, "FCIDblue_finishSpendForBuild_")
 
-    assert "FCIDblue_infiniteUpgrade_finish" in buttons(channel)
+    assert "FCIDblue_infiniteUpgrade_build" in buttons(channel)
+    before = reload(game).get_player(1)["influence_discs"]
+    press(channel, 1, "FCIDblue_infiniteUpgrade_build")
+    state = reload(game)
+    run(UpgradeButtons.chooseUpgrade(state, state.get_player(1), FakeInteraction(channel),
+                                    "chooseUpgrade_1_interceptor_empty_hul_3_free", player_helper(state, "blue")))
+    press(channel, 1, "FCIDblue_finishInfiniteUpgrade")
+    player = reload(game).get_player(1)
+    assert player["buildsThisAction"] == 1
+    assert player["influence_discs"] == before
+    assert "FCIDblue_buildIn_201" in buttons(channel)
+    assert not any(cid.startswith("FCIDblue_infiniteUpgrade") for cid in buttons(channel))
+
+
+def test_infinite_possibilities_resumes_the_next_move_activation(start_game, press, run):
+    game, channel = start_game(factions=["cog", "eri"])
+    run(MoveButtons.sendMoveContinuation(game, game.get_player(1), FakeInteraction(channel), 1))
+    assert "FCIDblue_infiniteUpgrade_move2" in buttons(channel)
+    press(channel, 1, "FCIDblue_infiniteUpgrade_move2")
+    state = reload(game)
+    run(UpgradeButtons.chooseUpgrade(state, state.get_player(1), FakeInteraction(channel),
+                                    "chooseUpgrade_1_interceptor_empty_hul_3_free", player_helper(state, "blue")))
+    press(channel, 1, "FCIDblue_finishInfiniteUpgrade")
+    assert any(cid.startswith("FCIDblue_moveFrom_") and cid.endswith("_2") for cid in buttons(channel))
+    assert not any(cid.startswith("FCIDblue_moveFrom_") and cid.endswith("_1") for cid in buttons(channel))
 
 
 def test_pulsar_build_does_not_earn_the_extra_upgrade(start_game, press, run):

@@ -572,7 +572,9 @@ class MoveButtons:
                 and moveCount <= FactionData.action_apt(player, "move")):
             view.add_item(Button(label="Build Activation (1)", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_herRaidBuild_{moveCount + 1}"))
-        UpgradeButtons.addInfinitePossibilitiesButton(view, game, player, "finish")
+        return_to = f"move{moveCount + 1}" if moveCount < FactionData.action_apt(player, "move") else "finish"
+        if not player.get("pulsarMove"):
+            UpgradeButtons.addInfinitePossibilitiesButton(view, game, player, return_to)
         if moveCount > 0 and FactionData.action_apt(player, "move") > moveCount and not player.get("passed"):
             view.add_item(Button(label="Move an additional ship", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_startMove_{moveCount + 1}"))

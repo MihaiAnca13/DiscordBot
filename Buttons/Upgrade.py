@@ -25,11 +25,11 @@ STOCK_INDEX = {"int": 0, "cru": 1, "drd": 2}
 class UpgradeButtons:
     @staticmethod
     def addInfinitePossibilitiesButton(view: View, game: GamestateHelper, player, return_to: str):
-        """Children of Cog: one free Upgrade activation at the start or end of a Build/Move action."""
+        """Children of Cog: one free Upgrade activation accompanying a Build/Move action."""
         if (FactionData.has(player, "infinite_possibilities")
                 and not player.get("infinitePossibilitiesUsed") and not player.get("passed")
                 and game.getShipsWithParts(player)):
-            view.add_item(Button(label="Upgrade Activation (extra)", style=discord.ButtonStyle.green,
+            view.add_item(Button(label="Infinite Possibilities: Upgrade", style=discord.ButtonStyle.green,
                                  custom_id=f"FCID{player['color']}_infiniteUpgrade_{return_to}"))
 
     @staticmethod
@@ -131,8 +131,12 @@ class UpgradeButtons:
                 if actions == str(FactionData.action_apt(player, "upgrade")):
                     await interaction.channel.send(f"{player['player_name']} is using their turn to upgrade")
 
-        await interaction.channel.send(
-            f"{interaction.user.mention}, choose which ship you would like to upgrade.", view=view)
+        message = f"{interaction.user.mention}, choose which ship you would like to upgrade."
+        if player.get("infiniteUpgradeReturn") is not None:
+            message += " Infinite Possibilities: one free Upgrade activation, then return to Build/Move if any remain."
+        if FactionData.has(player, "battle_focus") and discTileUpgrade == "dummy":
+            message += f" Battle Focus: {actions} Upgrade activations left; each must use a different ship class."
+        await interaction.channel.send(message, view=view)
 
     @staticmethod
     async def finishInfiniteUpgrade(game: GamestateHelper, player, interaction: discord.Interaction,
@@ -148,9 +152,10 @@ class UpgradeButtons:
         if return_to == "build":
             from Buttons.Build import BuildButtons
             await BuildButtons.startBuild(game, player, interaction, "startBuild2", player_helper)
-        elif return_to == "move":
+        elif return_to.startswith("move"):
             from Buttons.Move import MoveButtons
-            await MoveButtons.startMove(game, player, interaction, "startMove_1", False)
+            move_count = return_to.removeprefix("move") or "1"
+            await MoveButtons.startMove(game, player, interaction, f"startMove_{move_count}", False)
         else:
             from Buttons.Turn import TurnButtons
             await TurnButtons.finishAction(player, game, interaction, player_helper)
@@ -255,7 +260,7 @@ class UpgradeButtons:
             view.add_item(Button(label="Restart Techno-Magic", style=discord.ButtonStyle.red,
                                  custom_id=f"FCID{player['color']}_restartTechnoMagic_{discTileUpgrade[2:]}"))
         removal_note = "" if discTileUpgrade.startswith("tm") or spine_slot \
-            else " Remove as a free action by selecting 'Empty'."
+            else " Selecting 'Empty' removes an installed tile for free, revealing the printed blueprint part."
         await UpgradeButtons.showMenu(interaction, f"{interaction.user.mention}, replace "
                                       f"{part_stats[oldPart]['name']} on your {ship} with which part?"
                                       f"{removal_note}{slot_note}", view)
@@ -297,6 +302,10 @@ class UpgradeButtons:
         isFreeRemoval = newPart == "empty" and discTileUpgrade != "free"
         if isFreeRemoval:
             newPart = player[f"old_{ship}_parts"][index]
+            if newPart == oldPart:
+                await interaction.followup.send("That is the printed blueprint part; there is no installed tile to remove.",
+                                                ephemeral=True)
+                return False
         if (FactionData.has(player, "battle_focus") and discTileUpgrade == "dummy"
                 and PlayerHelper.blueprint_key(ship) in player.get("battleFocusUsed", [])):
             await interaction.followup.send("That ship class already used this action's upgrade.", ephemeral=True)
@@ -386,14 +395,16 @@ class UpgradeButtons:
                                        file=await asyncio.to_thread(drawing.show_player_ship,
                                                                     image, ship, player_helper.stats["name"]))
         if discTileUpgrade == "free" and cog_free:
-            await interaction.channel.send(f"{player['player_name']}, the free upgrade activation is complete.",
+            await interaction.channel.send(f"{player['player_name']}, Infinite Possibilities: the free upgrade is complete.",
                                            view=view)
         elif discTileUpgrade == "free":
             await interaction.channel.send(f"{player['player_name']}, choose which ship you would like to upgrade "
                                            "or finish your action.", view=view)
         elif discTileUpgrade == "dummy":
+            focus = (f" Battle Focus: {actions} Upgrade activations left; used classes: {', '.join(sorted(used)) or 'none'}."
+                     if FactionData.has(player, "battle_focus") else "")
             await interaction.channel.send(f"{player['player_name']}, choose which ship you would like to upgrade "
-                                           "or finish your action.", view=view)
+                                           f"or finish your action.{focus}", view=view)
         elif discTileUpgrade == "phase":
             await interaction.channel.send(f"{player['player_name']}, you may continue the Build action"
                                            " or undo this part swap.", view=view)
@@ -452,7 +463,7 @@ class UpgradeButtons:
                          f" (+{materials} Materials)")
             else:
                 label = (f"{source_count} {names[source]} -> {target_count} {names[target]}s"
-                         f" ({-materials} Materials)")
+                         f" ({materials} Materials)")
             view.add_item(Button(label=label, style=discord.ButtonStyle.blurple,
                                  custom_id=(f"FCID{player['color']}_adaptiveSwap_{source}_{target}_{pos}"
                                             f"_{actions}_{mode}")))
@@ -510,7 +521,8 @@ class UpgradeButtons:
         game.update_player(player_helper)
         await interaction.message.delete()
         await interaction.channel.send(f"{player['player_name']} used Adaptive Transformation in {pos}:"
-                                       f" {source_count} {source} became {target_count} {target}.")
+                                       f" {source_count} {source} became {target_count} {target};"
+                                       f" {'gained' if materials > 0 else 'paid'} {abs(materials)} materials.")
         view = View()
         if mode == "free":
             if player.get("infiniteUpgradeReturn") is not None:
