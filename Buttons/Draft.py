@@ -249,6 +249,12 @@ class DraftButtons:
             game.setup_finished()
         # game.fillInDiscTiles()
         await interaction.channel.send("Done With Setup!")
+        for player_id in temp_player_list:
+            player = game.get_player(player_id, interaction)
+            if player is not None and FactionData.has(player, "battle_focus"):
+                await interaction.channel.send(f"{player['player_name']} is ready: Neutron Bombs and Nanorobots,"
+                                               " a four-slot Tech Track, and reduced ship Initiative."
+                                               " Battle Focus upgrades must use different ship classes.")
 
         if is_initial_setup:
             for player_id in temp_player_list:

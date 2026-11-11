@@ -55,6 +55,26 @@ def test_pressing_a_web_prompt_changes_the_game(start_game, store, run):
     assert store.get(menu.id)["deleted"]
 
 
+def test_influence_refresh_removes_web_button_and_cannot_be_replayed(start_game, store, run):
+    game, _channel = start_game(factions=["vor", "eri"])
+    game.get_player(1)["colony_ships"] = 0
+    game.update()
+    menu = turn_menu(run, store, game, "1", "blue")
+    press(run, store, game, "1", "FCIDblue_startInfluence", menu.id)
+    refresh = next(message for message in store.open_messages(game.game_id, "1")
+                   if any(button["custom_id"] == "FCIDblue_refreshPopShips" for button in message["buttons"]))
+    press(run, store, game, "1", "FCIDblue_refreshPopShips", refresh["id"])
+    remaining = store.get(refresh["id"])["buttons"]
+    assert not any(button["custom_id"] == "FCIDblue_refreshPopShips" for button in remaining)
+    assert any(button["custom_id"] == "FCIDblue_finishInfluenceAction" for button in remaining)
+    state = GamestateHelper(None, game.game_id)
+    assert state.get_player(1)["colony_ships"] == 1
+    state.gamestate["lastButtonTime"] -= 10
+    state.update()
+    press(run, store, game, "1", "FCIDblue_refreshPopShips", refresh["id"])
+    assert GamestateHelper(None, game.game_id).get_player(1)["colony_ships"] == 1
+
+
 def test_a_private_prompt_is_only_offered_to_its_seat(start_game, store, run):
     game, _channel = start_game()
     menu = turn_menu(run, store, game, "1", "blue")

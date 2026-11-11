@@ -166,6 +166,14 @@ def test_faction_rendering(start_game, monkeypatch, faction):
         texts = {text for text, _bounds in player_labels}
         assert "+1 CMP" in texts
         assert "+1 HULL" in texts
+    if faction == "vor":
+        texts = [text for text, bounds in player_labels]
+        assert texts.count("-9") == 3
+        assert "1* UPG" in texts
+    if faction == "heg":
+        game.gamestate["board"]["000"]["owner"] = player["color"]
+        drawing.player_area(player)
+        assert "Pride: +2 VP" in {text for text, bounds in labels}
     if faction == "kur":
         assert "3 PWR" in {text for text, _bounds in player_labels}
     if faction == "wul":

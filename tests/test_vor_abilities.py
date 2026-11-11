@@ -38,6 +38,15 @@ def test_tech_masters_charges_2_3_4_more_for_the_wrong_tray():
     assert ResearchButtons.calculate_cost(TECH, "military", player_stats("hyd")) == 5
 
 
+@pytest.mark.parametrize("uses, extra", [(0, 2), (1, 3), (2, 4)])
+def test_tech_masters_adds_the_full_surcharge_after_discounts_and_minimum(uses, extra):
+    player = player_stats("vor")
+    player["techMasterUses"] = uses
+    player["military_tech"] = ["neb", "stb", "plc", "phs", "adm", "tas"]
+    tech = {"track": "grid", "base_cost": 6, "min_cost": 4}
+    assert ResearchButtons.calculate_cost(tech, "military", player) == 4 + extra
+
+
 def test_tech_masters_offers_every_tray_and_records_a_wrong_one(run):
     player = player_stats("vor", science=20)
     interaction = FakeInteraction()
@@ -51,7 +60,7 @@ def test_tech_masters_offers_every_tray_and_records_a_wrong_one(run):
         "FCIDblue_getTech_gas_grid_tm",
         "FCIDblue_getTech_gas_nano_tm",
     }
-    assert buttons(interaction.channel)["FCIDblue_getTech_gas_military_tm"] == "Military (4)"
+    assert buttons(interaction.channel)["FCIDblue_getTech_gas_military_tm"] == "Military (2 + 2 = 4)"
     assert player["grid_tech"] == []
 
     run(ResearchButtons.getTech(game, player, PlayerHelper("1", player), interaction,
@@ -75,8 +84,10 @@ def test_tech_masters_menu_uses_the_cheapest_open_tray(make_game, run, grid_coun
     assert buttons(interaction.channel)["FCIDblue_getTech_qug_grid"] == "Quantum Grid (10)"
     run(ResearchButtons.getTech(game, player, PlayerHelper("1", player), interaction,
                                 "getTech_qug_grid"))
-    assert buttons(interaction.channel)["FCIDblue_getTech_qug_military_tm"] == "Military (10)"
-    assert ("FCIDblue_getTech_qug_grid_tm" in buttons(interaction.channel)) == (grid_count == 0)
+    assert buttons(interaction.channel)["FCIDblue_getTech_qug_military_tm"] == "Military (8 + 2 = 10)"
+    assert "FCIDblue_getTech_qug_grid_tm" not in buttons(interaction.channel)
+    expected = "Grid is full" if grid_count == 7 else "Grid costs 15 science and is unaffordable"
+    assert expected in interaction.channel.sent[-1][0]
 
 
 def test_organic_tech_gives_a_free_upgrade_after_research(start_game, press):

@@ -80,6 +80,10 @@ class TurnButtons:
     async def endTurn(player, game: GamestateHelper, interaction: discord.Interaction):
         if await ResearchButtons.has_unpaid_research(player, interaction):
             return
+        if player["color"] not in game.gamestate.get("activePlayerColor", []):
+            await interaction.message.delete()
+            await interaction.followup.send("That turn has already ended.", ephemeral=True)
+            return
         from helpers.CombatHelper import Combat
         from Buttons.Influence import InfluenceButtons
         await InfluenceButtons.declinePendingInfluence(game, player, interaction)
@@ -148,7 +152,8 @@ class TurnButtons:
             if TurnButtons.noOneElsePassed(player, game):
                 gain = 1 if FactionData.has(player, "all_that_glitters") else 2
                 player_helper.adjust_money(gain)
-                await interaction.channel.send(f"{player['player_name']} you gained {gain} money"
+                ability = "All That Glitters: " if FactionData.has(player, "all_that_glitters") else ""
+                await interaction.channel.send(f"{ability}{player['player_name']} you gained {gain} money"
                                                " and the first player marker for next round for passing first.")
                 player_helper.setFirstPlayer(True)
                 for p2 in game.gamestate["players"]:
@@ -452,6 +457,7 @@ class TurnButtons:
     def startNewTurn(player, game: GamestateHelper):
         """Open Alliance leaving until the player takes an action or passes."""
         player["allianceLeaveClosed"] = False
+        player.pop("actionFinished", None)
         game.gamestate["activePlayerColor"] = [player["color"]]
         game.update()
 
@@ -631,6 +637,8 @@ class TurnButtons:
         player_helper.adjust_money(-cost)
         player_helper.stats["midasBoost"] = action
         game.update_player(player_helper)
+        await interaction.channel.send(f"{player['player_name']} paid {cost} money for Midas Touch:"
+                                       f" +1 {action.capitalize()} activation.")
         if action == "explore":
             await ExploreButtons.startExplore(game, player, player_helper, interaction, "startExplore")
         elif action == "research":
@@ -700,16 +708,22 @@ class TurnButtons:
                 await interaction.message.delete()
             except discord.NotFound:
                 print(f"Message {interaction.message.id} was already deleted.")
+        if player.get("actionFinished"):
+            await interaction.followup.send("That action has already finished. Use the End Turn prompt.",
+                                            ephemeral=True)
+            return
+        player_helper.stats["actionFinished"] = True
         player_helper.stats["allianceLeaveClosed"] = True
         player_helper.stats.pop("influenceActionActive", None)
         player_helper.stats.pop("influenceActionUsed", None)
         player_helper.stats.pop("influenceActionReturned", None)
+        player_helper.stats.pop("influenceColonyShipsRefreshed", None)
         if FactionData.has(player, "phase_technology"):
             player_helper.stats.pop("phaseBuildsThisAction", None)
             player_helper.stats.pop("phaseSwappedThisAction", None)
         for key in ("midasBoost", "infinitePossibilitiesUsed", "battleFocusUsed",
                     "adaptiveUndo", "upgradeUndo", "infiniteUpgradeReturn", "infiniteUpgradeAvailable",
-                    "researchUpgrade"):
+                    "researchUpgrade", "exploreFinishMessage"):
             player_helper.stats.pop(key, None)
         game.update_player(player_helper)
         await TurnButtons.checkTraitor(game, player, interaction, player_helper)

@@ -219,6 +219,7 @@ class InfluenceButtons:
             p1["influenceActionActive"] = True
             p1["influenceActionUsed"] = 0
             p1["influenceActionReturned"] = 0
+            p1["influenceColonyShipsRefreshed"] = False
             game.update()
         await interaction.channel.send(f"{p1['player_name']} is using their turn to influence.")
         view.add_item(Button(label="Remove Influence", style=discord.ButtonStyle.red,
@@ -297,14 +298,21 @@ class InfluenceButtons:
 
     @staticmethod
     async def refreshPopShips(game: GamestateHelper, player, interaction: discord.Interaction, buttonID: str):
+        if not player.get("influenceActionActive") or player.get("influenceColonyShipsRefreshed"):
+            await interaction.followup.send("Colony ships can only be refreshed once per Influence action.",
+                                            ephemeral=True)
+            return
         count = FactionData.of(player).get("influence_colony_ships", 2)
+        player["influenceColonyShipsRefreshed"] = True
         numShips = game.refresh_colony_ships(game.get_player_from_color(player["color"]), count)
         view = View.from_message(interaction.message)
         for button in view.children:
             if buttonID in button.custom_id:
                 view.remove_item(button)
-        await interaction.channel.send(f"{player['player_name']} now has {numShips}"
-                                       f" colony ship{'s' if numShips == 1 else ''} available to use.")
+        ability = "Few in Number: " if FactionData.of(player).get("artwork") == "vorlons" else ""
+        await interaction.channel.send(f"{ability}{player['player_name']} now has {numShips}"
+                                       f" colony ship{'s' if numShips != 1 else ''} available to use."
+                                       f" This action's refresh allowance ({count}) has been used.")
         await interaction.message.edit(view=view)
 
     @staticmethod
@@ -313,6 +321,7 @@ class InfluenceButtons:
         player_helper.stats.pop("influenceActionActive", None)
         player_helper.stats.pop("influenceActionUsed", None)
         player_helper.stats.pop("influenceActionReturned", None)
+        player_helper.stats.pop("influenceColonyShipsRefreshed", None)
         player_helper.spend_influence_on_action("influence")
         game.update_player(player_helper)
         await TurnButtons.finishAction(player, game, interaction, player_helper)

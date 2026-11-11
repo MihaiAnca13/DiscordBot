@@ -97,15 +97,6 @@ def combat_context(game_id, room, content, buttons, custom_id=None, game=None):
     return {"color": color, "side": side}
 
 
-class _ButtonRow:
-    """Enough of a discord component row for the handlers that inspect children."""
-
-    def __init__(self, buttons):
-        self.children = [SimpleNamespace(label=b["label"], custom_id=b["custom_id"],
-                                         disabled=b["disabled"], url=b["url"])
-                         for b in buttons]
-
-
 class _Flags:
     def __init__(self, ephemeral):
         self.ephemeral = ephemeral
@@ -199,7 +190,10 @@ class WebMessage:
     @property
     def components(self):
         row = self._row()
-        return [_ButtonRow(row["buttons"])] if row and row["buttons"] else []
+        buttons = row["buttons"] if row else []
+        return [discord.components.ActionRow({"type": 1, "components": [
+            {**button, "type": 2} for button in buttons[index:index + 5]]})
+            for index in range(0, len(buttons), 5)]
 
     @property
     def jump_url(self):

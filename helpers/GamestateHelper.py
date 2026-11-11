@@ -460,6 +460,8 @@ class GamestateHelper:
         gained = 0
         owner = ship.split("-")[0]
         tile = self.gamestate["board"][position]
+        if ship not in tile["player_ships"] and ship + "adv" not in tile["player_ships"]:
+            return 0
         if "orb" not in ship:
             self.remove_units([ship], position)
         else:

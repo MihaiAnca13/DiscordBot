@@ -1,5 +1,8 @@
 """The Horde: Built for War, Raid, Call To Arms, Battle Focus and initiative."""
 
+import discord
+from unittest.mock import AsyncMock
+
 from Buttons.DiscoveryTile import DiscoveryTileButtons
 from Buttons.Research import ResearchButtons
 from Buttons.Upgrade import UpgradeButtons
@@ -110,6 +113,47 @@ def test_call_to_arms_pays_materials_for_ships_lost_outside_your_sector(make_gam
         before = game.get_player(1)["materials"]
         assert game.destroy_ship(f"blue-{ship}", "101", "red") == gain
         assert game.get_player(1)["materials"] == before + gain
+        assert game.destroy_ship(f"blue-{ship}", "101", "red") == 0
+        assert game.get_player(1)["materials"] == before + gain
+
+
+def test_stale_hit_keeps_other_targets_without_paying_for_a_destroyed_ship(make_game, run):
+    game = _combat_game(make_game, ["ioc", "nus", "nud", "hul", "hul"])
+    tile = game.gamestate["board"]["101"]
+    tile["player_ships"].append("blue-int")
+    interaction = FakeInteraction()
+    run(Combat.offerHitPrompt(game, interaction, "101", "red", ["blue-int", "blue-cru"], 6, 1))
+    view = interaction.channel.sent[-1][1]["view"]
+    interaction.message.components = [discord.components.ActionRow(row) for row in view.to_components()]
+    game.destroy_ship("blue-int", "101", "red")
+    before = game.get_player(1)["materials"]
+
+    run(Combat.assignHitTo(game, "assignHitTo_101_red_blue-int_6_1", interaction, True))
+
+    assert game.get_player(1)["materials"] == before
+    assert tile["unresolvedHits"] == 1
+    assert [item.custom_id for item in interaction.message.edited["view"].children] == [
+        "FCIDred_assignHitTo_101_red_blue-cru_6_1"]
+
+
+def test_stale_hit_with_no_targets_does_not_leave_combat_waiting(make_game, run, monkeypatch):
+    game = _combat_game(make_game, ["ioc", "nus", "nud", "hul", "hul"])
+    tile = game.gamestate["board"]["101"]
+    tile["player_ships"].append("blue-int")
+    interaction = FakeInteraction()
+    run(Combat.offerHitPrompt(game, interaction, "101", "red", ["blue-int", "blue-int"], 6, 1))
+    view = interaction.channel.sent[-1][1]["view"]
+    interaction.message.components = [discord.components.ActionRow(row) for row in view.to_components()]
+    game.destroy_ship("blue-int", "101", "red")
+    before = game.get_player(1)["materials"]
+    prompt = AsyncMock()
+    monkeypatch.setattr(Combat, "promptNextSpeed", prompt)
+
+    run(Combat.assignHitTo(game, "assignHitTo_101_red_blue-int_6_1", interaction, True))
+
+    assert game.get_player(1)["materials"] == before
+    assert tile["unresolvedHits"] == 0
+    prompt.assert_awaited_once()
 
 
 def test_call_to_arms_does_not_pay_in_a_sector_you_control(make_game):

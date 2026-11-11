@@ -583,7 +583,7 @@ class Combat:
         parts += [f"+{value} from {name}" for name, value in
                   (("Solitary Hunter", solitary), ("Pounce", pounce)) if value]
         if parts:
-            msg += ": " + ", ".join(parts[:-1]) + " and " + parts[-1]
+            msg += ": " + (", ".join(parts[:-1]) + " and " + parts[-1] if len(parts) > 1 else parts[0])
         msg += "."
         if (speed < 90 and not pounce and game.gamestate["board"][pos].get("engagementRound", 1) == 1
                 and FactionData.has(game.getPlayerObjectFromColor(colorOrAI), "pounce")):
@@ -1544,6 +1544,9 @@ class Combat:
                             dieNums.append([random_number, hit, die, source, roll_id, die_total])
                 if computerVal > 0:
                     msg += Combat.computer_message(game, pos, colorOrAI, speed, computerVal, shipModel)
+                if (FactionData.has(game.getPlayerObjectFromColor(colorOrAI), "built_for_war")
+                        and any(die[0] == 6 and die[2] != "pink" for die in dieNums)):
+                    msg += "\nBuilt for War: each unmodified non-Rift 6 in this roll deals +1 damage."
                 if spine_bonus:
                     gun = Combat.part_name(shipModel.ship_parts[cannon_index])
                     if spine_mode == "spinehit":
@@ -2279,9 +2282,8 @@ class Combat:
         dieNum, hits = entry["dieNum"], list(entry["hits"])
         if mode == "reroll":
             if player_helper is None or player_helper.adjust_colony_ships(1) is False:
-                await interaction.followup.send(
-                    f"{interaction.user.mention}, you have no colony ships left to reroll with.",
-                    ephemeral=True)
+                await interaction.channel.send(
+                    f"{interaction.user.mention}, Nine Lives: no colony ships remain; the original die stands.")
                 mode = "pass"
             else:
                 game.update_player(player_helper)
@@ -2289,8 +2291,8 @@ class Combat:
                 hits = Combat.die_damage(game, entry["roller"], entry["dieColor"], dieNum,
                                          entry["damageBonus"], entry["split"], entry["shielded"])
                 await interaction.channel.send(
-                    f"{interaction.user.mention} flipped a Colony Ship for Nine Lives: the die is"
-                    f" rerolled into a"
+                    f"{interaction.user.mention} flipped a Colony Ship for Nine Lives: the die that rolled"
+                    f" {Combat.die_face(interaction, entry['dieColor'], entry['dieNum'])} is rerolled into a"
                     f" {Combat.die_face(interaction, entry['dieColor'], dieNum)}.")
         hittable = Combat.getOpponentUnitsThatCanBeHit(
             game, entry["roller"], tile["player_ships"][:], dieNum, entry["computer"],
@@ -2522,6 +2524,8 @@ class Combat:
                 checker = "FCID" + nextOwner + "_"
                 playerObj = game.getPlayerObjectFromColor(nextOwner)
                 msg = f"{playerObj['player_name']}, it is your turn to roll your ships with {initiative}. "
+                if Combat.solitary_hunter_bonus(game, pos, nextOwner):
+                    msg += "Solitary Hunter: +1 Initiative and +1 to Hit while this is your only ship. "
 
                 if spine_modes:
                     bonuses = {bonus for _ship, _gun, bonus in spine_options}
@@ -3319,6 +3323,26 @@ class Combat:
         carapace_bypass = dieDam.endswith("!")
         dieDam = dieDam.rstrip("!")
         deferEnd = deferEnd or buttonID.endswith("_defer")
+        tile = game.gamestate["board"][pos]
+        if ship not in tile["player_ships"] and ship + "adv" not in tile["player_ships"]:
+            if not button:
+                return
+            view = View.from_message(interaction.message)
+            for item in list(view.children):
+                custom_id = item.custom_id.split("_", 1)[1] if item.custom_id.startswith("FCID") else item.custom_id
+                target = custom_id.split("_")[3]
+                if target not in tile["player_ships"] and target + "adv" not in tile["player_ships"]:
+                    view.remove_item(item)
+            if view.children:
+                await interaction.message.edit(content="That ship was destroyed. Choose a remaining target for this hit.",
+                                               view=view)
+            else:
+                game.setUnresolvedHits(max(0, tile.get("unresolvedHits", 0) - 1), pos)
+                await interaction.message.delete()
+                await interaction.channel.send("This hit has no remaining eligible targets; no additional ship was destroyed.")
+                if not tile.get("unresolvedHits", 0) and len(Combat.findSidesInTile(game, pos)) >= 2:
+                    await Combat.promptNextSpeed(game, pos, interaction.channel, True)
+            return
         shipType = ship.split("-")[1]
         shipOwner = ship.split("-")[0]
         suffix, _emoji = Combat.getCombatantTag(game, pos, shipOwner)
@@ -3363,7 +3387,7 @@ class Combat:
                     gained = game.destroy_ship(ship, pos, dummyKiller)
                 if gained:
                     owner = game.getPlayerObjectFromColor(shipOwner)
-                    msg += f" Call To Arms: {owner['player_name']} gained {gained} materials."
+                    msg += f" Call To Arms: {owner['player_name']} gained {gained} materials. "
                 if colorOrAI != "ai":
                     msg += (f"{interaction.user.name} destroyed the"
                             f" {Combat.translateShipAbrToName(shipType)}{suffix}"
