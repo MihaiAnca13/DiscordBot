@@ -3298,6 +3298,10 @@ class Combat:
             defender = Combat.sideOf(tile.get("defender"))
             present = set(players)
             if not attacker or not defender or not (set(attacker) & present) or not (set(defender) & present):
+                # The pairing that just ended repairs at the end of its last round.
+                # shortcut: an Ancient killed in that round no longer blocks the heal.
+                await Combat.checkForMorphShield(game, pos, interaction.channel,
+                                                 tile["player_ships"], attacker + defender)
                 drawing = DrawHelper(game.gamestate)
                 image = await asyncio.to_thread(drawing.board_tile_image_file, pos)
                 asyncio.create_task(interaction.channel.send("Updated view",
