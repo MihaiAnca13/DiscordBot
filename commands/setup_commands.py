@@ -342,7 +342,7 @@ class SetupCommands(commands.GroupCog, name="setup"):
         factionThread = await actions.create_thread(name=FACTION_REFERENCE_THREAD,
                                                     auto_archive_duration=10080)
 
-        for message, board_file in faction_references(community_factions):
+        for message, board_file in faction_references(False):
             await factionThread.send(message, file=drawing.get_file(BOARD_DIR + board_file))
 
         message = "\n".join(["Rift Reference"])
@@ -353,9 +353,8 @@ class SetupCommands(commands.GroupCog, name="setup"):
 
         message = "\n".join(["Discovery Reference"])
         await factionThread.send(message, file=drawing.get_file(BOARD_DIR + "Discovery_Reference.png"))
-        await factionThread.send(role.mention + " pinging you here, which contains all the faction sheets")
-        if not community_factions:
-            await factionThread.send("Need a community faction sheet?", view=FactionSheet.request_button())
+        await factionThread.send(role.mention + " pinging you here, which contains the standard faction sheets")
+        await factionThread.send("Need a community faction sheet?", view=FactionSheet.request_button())
         await interaction.followup.send("\n".join(["New game created! Here are the channels:",
                                                    tabletalk.jump_url, actions.jump_url]))
         if isinstance(interaction.channel, discord.Thread):
