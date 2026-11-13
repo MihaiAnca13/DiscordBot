@@ -668,6 +668,16 @@ class Combat:
         return f"Hit {Combat.translateShipAbrToName(shipType)}{suffix}", emoji
 
     @staticmethod
+    def getPopulationTargetView(colorOrAI: str, pos: str, cubes):
+        view = View()
+        for count, cube in enumerate(cubes):
+            advanced = "advanced " if "adv" in cube else ""
+            label = f"Hit {advanced}{cube.replace('adv', '')} population"
+            view.add_item(Button(label=label, style=discord.ButtonStyle.gray,
+                                 custom_id=f"FCID{colorOrAI}_killPop_{pos}_{cube}_{count}"))
+        return view
+
+    @staticmethod
     def getOpponentUnitsThatCanBeHit(game: GamestateHelper, colorOrAI: str, playerShipsList,
                                      dieVal: int, computerVal: int, pos: str, speed: int,
                                      ignore_shields: bool = False):
@@ -901,7 +911,7 @@ class Combat:
                     playerObj = game.getPlayerObjectFromColor(owner)
                     spine_modes = FactionData.has(playerObj, "spine_cannons") and any(
                         speed2 == speed
-                        and len(PlayerHelper.get_spine_cannon_slots(playerObj, shipType)) > 1
+                        and PlayerShip(playerObj, shipType).spine_augment() is not None
                         for speed2, shipType, _count in Combat.getCombatantShipsBySpeed(
                             game, owner, ships, pos))
                 side = "Defender" if owner in defender else "Attacker"
@@ -1332,14 +1342,7 @@ class Combat:
             if speed == 1000:
                 msg = (f"{interaction.user.name}, choose what population to hit"
                         f" with the die that rolled a {dieNum}.")
-
-                view = View()
-                for count, cube in enumerate(hittableShips):
-                    advanced = "advanced " if "adv" in cube else ""
-                    label = f"Hit {advanced}{cube.replace('adv', '')} population"
-                    buttonID = f"FCID{colorOrAI}_killPop_{pos}_{cube}_{count}"
-                    view.add_item(Button(label=label, style=discord.ButtonStyle.gray,
-                                            custom_id=buttonID))
+                view = Combat.getPopulationTargetView(colorOrAI, pos, hittableShips)
                 asyncio.create_task(interaction.channel.send(msg, view=view))
             else:
                 update = True
@@ -1539,6 +1542,15 @@ class Combat:
                             split = True
                         hits = Combat.die_damage(game, colorOrAI, die, random_number,
                                                  damage_bonus, split, shielded)
+                        # A die that hits nothing is one miss, not one prompt per point of
+                        # damage. Ships may have died to an earlier ship type in this salvo.
+                        if len(hits) > 1 and die != "pink" and not Combat.getOpponentUnitsThatCanBeHit(
+                                game, colorOrAI, game.gamestate["board"][pos]["player_ships"][:],
+                                random_number,
+                                computerVal + (spine_bonus if spine_mode == "spinehit"
+                                               and source == cannon_index else 0),
+                                pos, speed, ignoreShields):
+                            hits = [sum(hits)]
                         die_total = sum(hits)
                         for hit in hits:
                             dieNums.append([random_number, hit, die, source, roll_id, die_total])
@@ -1635,7 +1647,9 @@ class Combat:
                                     await Combat.offerLyraReroll(game, interaction, pos, {
                                         "roller": colorOrAI, "computer": computer_val, "speed": speed,
                                         "dieColor": dieColor, "damageBonus": die_damage_bonus,
-                                        "split": len(die_hits) > 1, "shielded": shielded,
+                                        # bombing splits every die, so a reroll kills one cube per damage
+                                        "split": len(die_hits) > 1 or speed == 1000,
+                                        "shielded": shielded,
                                         "ignore": ignoreShields, "shipType": shipModel.ship_type,
                                         "counter": counter})
                                 continue
@@ -1689,14 +1703,7 @@ class Combat:
                             if speed == 1000:
                                 msg = (f"{interaction.user.name}, choose what population to hit"
                                        f" with the die that rolled a {dieNum}.")
-
-                                view = View()
-                                for count, cube in enumerate(hittableShips):
-                                    advanced = "advanced " if "adv" in cube else ""
-                                    label = f"Hit {advanced}{cube.replace('adv', '')} population"
-                                    buttonID = f"FCID{colorOrAI}_killPop_{pos}_{cube}_{count}"
-                                    view.add_item(Button(label=label, style=discord.ButtonStyle.gray,
-                                                         custom_id=buttonID))
+                                view = Combat.getPopulationTargetView(colorOrAI, pos, hittableShips)
                                 asyncio.create_task(interaction.channel.send(msg, view=view))
                             else:
                                 update = True
@@ -2205,7 +2212,13 @@ class Combat:
         hittable = Combat.getOpponentUnitsThatCanBeHit(
             game, roller, tile["player_ships"][:], dieNum, entry["computer"], pos,
             entry["speed"], entry["ignore"])
-        if hittable:
+        if hittable and entry["speed"] == 1000:
+            for _damage in hits:
+                await interaction.channel.send(
+                    f"{interaction.user.name}, choose what population to hit"
+                    f" with the die that rolled a {dieNum}.",
+                    view=Combat.getPopulationTargetView(roller, pos, hittable))
+        elif hittable:
             nineLives = Combat.nine_lives_target(game, pos, roller, hittable)
             if nineLives:
                 await Combat.offerNineLives(game, interaction, pos, nineLives, {
@@ -2479,9 +2492,8 @@ class Combat:
         attacker = Combat.sideOf(game.gamestate["board"][pos]["attacker"])
         defender = Combat.sideOf(game.gamestate["board"][pos]["defender"])
         ships = game.gamestate["board"][pos]["player_ships"]
-        previousSpeed = game.gamestate["board"][pos].get("currentSpeed")
         nextSpeed, nextOwner, wrapped = Combat.nextInitiative(game, pos, repeat)
-        if wrapped or (previousSpeed is not None and previousSpeed > 90 and 0 <= nextSpeed < 90):
+        if wrapped:
             # Wolf Pack saved rerolls only last for the engagement round they were earned in
             game.gamestate["board"][pos].pop("wolfPackRerolls", None)
         if wrapped:
@@ -3457,6 +3469,7 @@ class Combat:
         drawOrder = int(buttonID.split("_")[2])
         color = buttonID.split("_")[3]
         game.gamestate.get("battleRepAdjustments", {}).pop(f"{system}-{drawOrder}-{color}", None)
+        game.update()
         if "tilesToResolve" in game.gamestate:
             game.removeFromKey("queuedQuestions", [system, drawOrder, color])
             await Combat.resolveQueue(game, interaction)

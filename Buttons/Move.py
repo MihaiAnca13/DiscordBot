@@ -223,7 +223,9 @@ class MoveButtons:
         ship_filter = "all"
         if "_" in buttonID:
             moveCount = buttonID.split("_")[1]
-        if not nested and int(moveCount) > FactionData.action_apt(player, "move"):
+        # 8 is the free-move sentinel a discovery tile starts; it spends no activation.
+        if (not nested and int(moveCount) > FactionData.action_apt(player, "move")
+                and int(moveCount) != 8):
             if button:
                 await interaction.message.delete()
             await MoveButtons.sendMoveContinuation(game, player, interaction, int(moveCount) - 1)

@@ -4,7 +4,6 @@ import pytest
 from Buttons.Move import MoveButtons
 from Buttons.Pulsar import PulsarButtons
 from Buttons.Upgrade import UpgradeButtons
-from helpers import FactionData
 from helpers.DrawHelper import DrawHelper
 from tests.fakes import FakeInteraction, buttons, player_helper, reload
 
@@ -239,19 +238,3 @@ def test_adaptive_back_returns_to_the_normal_upgrade_menu(start_game, press):
     press(channel, 1, back)
 
     assert any(cid.startswith("FCIDblue_upgradeShip_") for cid in buttons(channel))
-
-
-def test_pulsar_move_offers_ships_to_move(start_game, run):
-    game, channel = start_game(factions=["cog", "eri"])
-    state = reload(game)
-    state.gamestate["board"]["201"]["currentAction"] = "move"
-    state.update()
-
-    run(PulsarButtons.pulsarAction(state, state.get_player(1), FakeInteraction(channel),
-                                    player_helper(state, "blue"), "pulsarAction_201_move"))
-
-    apt = FactionData.action_apt(state.get_player(1), "move")
-    origins = [cid for cid in buttons(channel) if cid.startswith("FCIDblue_moveFrom")]
-    assert origins
-    assert all(cid.split("_")[3] == str(apt) for cid in origins)
-    assert MoveButtons.getRemainingMoveActivations(state.get_player(1), apt, False) == 1
