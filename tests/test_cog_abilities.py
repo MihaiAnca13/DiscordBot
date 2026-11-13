@@ -1,6 +1,7 @@
 """Children of Cog: Infinite Possibilities and Adaptive Transformation."""
 import pytest
 
+from Buttons.Move import MoveButtons
 from Buttons.Pulsar import PulsarButtons
 from Buttons.Upgrade import UpgradeButtons
 from helpers.DrawHelper import DrawHelper
