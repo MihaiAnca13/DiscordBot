@@ -172,6 +172,30 @@ def test_regenerative_hull_does_not_repair_against_ancients(make_game, run):
     assert reload(game).gamestate["board"]["101"]["damage_tracker"]["blue-cru"] == 1
 
 
+def test_regenerative_hull_repairs_the_last_round_before_the_next_pairing(make_game, run):
+    """Game aeb45 tile 206: the Vorlon cruiser (3 damage) killed the Turtugan cruiser
+    sitting next to an Ancient. The pairing restarted against the Ancient, where heal
+    is off, so the repair for the round that just ended was never applied."""
+    vor = player_stats("vor", color="purple")
+    vor["cruiser_parts"] = ["elc", "ioc", "nus", "reh", "hul", "hul", "nud"]
+    game = make_game({
+        "advanced_ai": 0, "wa_ai": 0, "player_count": 2,
+        "players": {"1": vor, "2": player_stats("tur", color="teal")},
+        "board": {"206": {"owner": 0, "sector": 211, "disctile": 0,
+                          "player_ships": ["ai-anc", "teal-cru", "purple-cru"],
+                          "attacker": ["purple"], "defender": ["teal"],
+                          "combatants": ["teal", "purple"], "engagementRound": 2,
+                          "damage_tracker": {"purple-cru": 3}}},
+    })
+
+    run(Combat.assignHitTo(game, "assignHitTo_206_purple_teal-cru_6_6",
+                           FakeInteraction(FakeChannel()), False))
+
+    tile = reload(game).gamestate["board"]["206"]
+    assert tile["defender"] == ["ai"]
+    assert tile["damage_tracker"]["purple-cru"] == 2
+
+
 def test_regenerative_hull_does_not_repair_a_ship_that_lost_the_part(make_game, run):
     game = _damaged_vorlons_cruiser(make_game, ["blue-cru", "red-cru"], ("red", "blue"))
     state = reload(game)
