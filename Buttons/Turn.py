@@ -669,6 +669,7 @@ class TurnButtons:
     @staticmethod
     async def finishAction(player, game: GamestateHelper, interaction: discord.Interaction,
                            player_helper: PlayerHelper):
+        player_helper.stats.pop("pulsarBuild", None)
         if interaction.message is not None:
             try:
                 await interaction.message.delete()
