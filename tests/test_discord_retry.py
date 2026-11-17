@@ -1,7 +1,8 @@
-"""A Discord call must survive the socket Discord closed between requests."""
+"""A Discord call must survive a dropped connection or a 503."""
 from types import SimpleNamespace
 
 import aiohttp
+import discord
 import discord.webhook.async_
 import pytest
 
@@ -9,21 +10,30 @@ from helpers import DiscordRetry
 
 
 class Call:
-    """A request that drops its connection `drops` times, then answers."""
+    """A request that fails its first `drops` calls, then answers."""
 
-    def __init__(self, drops):
+    def __init__(self, drops, error=aiohttp.ClientOSError(104, "Connection reset by peer")):
         self.drops = drops
+        self.error = error
         self.calls = 0
 
     async def __call__(self, *args, **kwargs):
         self.calls += 1
         if self.calls <= self.drops:
-            raise aiohttp.ClientOSError(104, "Connection reset by peer")
+            raise self.error
         return "answer"
 
 
 def test_a_dropped_connection_is_retried_once(run):
     call = Call(drops=1)
+    assert run(DiscordRetry._retrying(call)()) == "answer"
+    assert call.calls == 2
+
+
+def test_a_503_is_retried_once(run):
+    unavailable = discord.DiscordServerError(
+        SimpleNamespace(status=503, reason="Service Unavailable"), "503: Service Unavailable")
+    call = Call(drops=1, error=unavailable)
     assert run(DiscordRetry._retrying(call)()) == "answer"
     assert call.calls == 2
 
