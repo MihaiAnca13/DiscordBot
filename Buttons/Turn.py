@@ -81,7 +81,10 @@ class TurnButtons:
         if await ResearchButtons.has_unpaid_research(player, interaction):
             return
         if player["color"] not in game.gamestate.get("activePlayerColor", []):
-            await interaction.message.delete()
+            try:
+                await interaction.message.delete()
+            except discord.NotFound:
+                pass
             await interaction.followup.send("That turn has already ended.", ephemeral=True)
             return
         from helpers.CombatHelper import Combat
