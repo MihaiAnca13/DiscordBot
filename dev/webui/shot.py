@@ -31,7 +31,7 @@ def main():
             page.wait_for_function("document.querySelector('#board').naturalWidth > 0", timeout=120000)
             page.wait_for_timeout(400)
             page.screenshot(path=str(artifacts / f"{name}-{label}.png"), full_page=True)
-            print(label, page.locator("#players .player").count(), "players",
+            print(label, page.locator("#players .rendered-player").count(), "players",
                   page.locator("#action-dock .prompt").count(), "prompts",
                   page.locator(".hotspot").count(), "hotspots")
             page.close()

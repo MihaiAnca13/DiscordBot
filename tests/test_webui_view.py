@@ -32,6 +32,11 @@ def turn_menu(run, store, game, seat, color):
         game, game.getPlayerObjectFromColor(color), color)))
 
 
+def test_first_round_before_the_first_upkeep_is_round_one(start_game, app):
+    start_game()
+    assert app.snapshot("aeb1", "1")["game"]["round"] == 1
+
+
 def test_pending_choices_do_not_fall_off_the_history_page(start_game, store, app, run):
     game, _channel = start_game()
     menu = turn_menu(run, store, game, "1", "blue")

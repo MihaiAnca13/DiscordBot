@@ -655,7 +655,7 @@ button.battle-image-zoom, button.battle-image-zoom:hover:not(:disabled) {
 .history-content { font-size: 12.5px; color: #c6d7e8; white-space: pre-wrap; margin-top: 3px; }
 .history-content h3 { font-size: 13px; margin: 2px 0; }
 .history-content img.emoji { height: 1.1em; vertical-align: -.15em; }
-.history-content img.attachment { display: block; max-height: 220px; margin-top: 5px; border-radius: 6px; }
+#history-list .history-content img.attachment { display: block; max-height: 220px; margin-top: 5px; border-radius: 6px; cursor: zoom-in; }
 .sheet-foot { padding: 10px 16px; border-top: 1px solid var(--line); text-align: center; }
 .faction-body { padding: 16px; overflow: auto; max-height: 70vh; }
 .faction-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -671,8 +671,9 @@ button.battle-image-zoom, button.battle-image-zoom:hover:not(:disabled) {
   background: #0a111b;
 }
 .ability b { color: #eaf7ff; text-transform: capitalize; }
-.lightbox { width: 96vw; max-width: 96vw; background: transparent; border: 0; box-shadow: none; }
+.lightbox { width: 96vw; max-width: 96vw; background: transparent; border: 0; box-shadow: none; overflow: auto; }
 .lightbox img { display: block; width: 100%; height: 88vh; object-fit: contain; border-radius: 10px; border: 1px solid var(--line2); }
+.lightbox img.wide { width: 300vw; max-width: none; height: auto; object-fit: fill; }
 .lightbox .close { position: fixed; right: 18px; top: 14px; }
 
 /* ---------------------------------------------------------------- toasts */
@@ -684,6 +685,7 @@ button.battle-image-zoom, button.battle-image-zoom:hover:not(:disabled) {
 }
 .toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.bad { background: #2b1619; border-color: #8e3a3a; color: #ffdada; }
+body.resolving #action-dock, body.resolving #tech-market, body.resolving #board-overlay { pointer-events: none; }
 
 /* ---------------------------------------------------------------- narrow */
 @media (max-width: 1180px) {

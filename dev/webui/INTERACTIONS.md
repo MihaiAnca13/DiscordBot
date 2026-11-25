@@ -37,7 +37,8 @@ object carries that button.
 - Tile rotations (`placeTile_*`) become a preview of the real tile image at the
   target slot, cycling only the rotations the engine offered, with keyboard
   left/right, click-to-rotate and an explicit Place/Discard action.
-- Blueprint ship/slot buttons attach to the blueprint in the player panel.
+- Blueprint slot buttons attach to the chosen ship's blueprint preview in the dock;
+  the ship type is chosen from the dock because the player panel is one rendered image.
 - Tech and part buttons attach to the existing tech-market and part cards.
 - Buttons with no board object (roll dice, quantity, pass, trade, end turn) stay in
   the dock, styled by their role, never removed.
@@ -60,7 +61,8 @@ object carries that button.
 5. Population: click empty planet/orbital square; resource-type pick where the
    engine asks.
 6. Build: click a system; unit cards with art/cost/affordability; explicit finish.
-7. Upgrade: click blueprint ship, click slot, choose part; undo/back preserved.
+7. Upgrade: choose the ship in the dock, click its blueprint slot, choose part; undo/back
+   preserved.
 8. Research: single surface (market); affordable/owned/too-expensive states.
 9. Discoveries: card art with Use / Keep.
 10. Combat: click enemy ship to assign a hit; roll prominence; battle room unchanged.
@@ -78,10 +80,10 @@ Verified with `python -m dev.webui.direct_checks <flow>` inside the container:
 |---|---|---|
 | movement | ship token, then destination world | ship in 101; refresh and second seat agree; a replayed move changes nothing |
 | movement-drag | drag the real ship token onto the world | ship in 101 |
-| movement-stack | ship token + stack stepper | two interceptors moved |
+| movement-stack | ship token + the on-board ship-count buttons | two interceptors moved |
 | explore | ring slot + rotated tile preview + arrow keys | the engine's sector is on the board in the chosen rotation |
 | build | system marker + unit picture cards | the second interceptor is in the save |
-| upgrade | blueprint ship + slot + part card | the installed part changed |
+| upgrade | dock ship choice + blueprint slot + part card | the installed part changed |
 | influence | world click adds, own disc click removes | owner blue → 0 |
 | population | empty planet ghost | money cube saved on the tile |
 | population-neutral | grey planet + cube type choice | neutral planet holds the chosen cube |
@@ -91,7 +93,7 @@ Verified with `python -m dev.webui.direct_checks <flow>` inside the container:
 | nebula | subsector B ship, then the A/C wedge label | the ship is in exactly 207c; A and C targets do not overlap |
 | retreat | controlled neighbour in a mid-retreat prompt | the retreating ship left the battle for 201; a replay moves nothing |
 | bankrupt | bankruptcy prompt's trade, then Run Upkeep | money covers the shortfall, upkeep runs into round 2 |
-| combat | enemy ship token in the hit prompt | the hit target was accepted by the engine |
+| combat | combat room rolls, then the enemy ship token in the hit prompt | the hit changes the engine's combat prompts |
 
 Choices with no visible object (roll dice, trade, pass, end turn, quantity) stay in
 the dock; they are not forced into the board.

@@ -80,6 +80,7 @@ const state = {
   gameId: null,
   isDevMode: false,
   collapsedBoards: new Set(),
+  marketBeforeResearch: null,
   seat: '',
   view: null,
   catalog: { techs: {}, parts: {} },
@@ -154,6 +155,13 @@ function showToast(text, bad = false) {
 function closeDialog(id) {
   const dialog = document.getElementById(id);
   if (dialog && dialog.open) dialog.close();
+}
+
+function openZoom(src, alt = '', wide = false) {
+  el.zoomImage.src = src;
+  el.zoomImage.alt = alt;
+  el.zoomImage.classList.toggle('wide', wide);
+  el.zoomDialog.showModal();
 }
 
 // --------------------------------------------------------------- button map
@@ -286,12 +294,12 @@ function objectAction(customId) {
   return null;
 }
 
-const DISCOVERY_RE = /_(usedDiscForAbility|selectDiscTile)_([a-z0-9]+)_(\d{3})/;
+const DISCOVERY_RE = /_(usedDiscForAbility|selectDiscTile)_([a-z0-9]+)(?:_([a-z0-9]+))?_(\d{3})/;
 
 function discoveryChoice(customId) {
   const match = customId.match(DISCOVERY_RE);
   if (!match) return null;
-  return { action: match[1], disc: match[2], tile: match[3] };
+  return { action: match[1], disc: match[2], tile: match[4] };
 }
 
 
@@ -415,9 +423,9 @@ function pressNode(node, action, ship = null) {
   node.dataset.position = action.tile || '';
   node.dataset.customId = action.button.custom_id;
   node.dataset.messageId = action.message.id;
-  const select = async () => {
+  const select = async (advance = false) => {
     await press(action.message.id, action.button.custom_id, node);
-    if (action.kind === 'move-from' && ship) {
+    if (advance && action.kind === 'move-from' && ship) {
       const next = spatialActions(state.view).find((entry) =>
         entry.kind === 'move-ship' && entry.tile === action.tile && entry.ship === ship);
       if (next) await press(next.message.id, next.button.custom_id, null);
@@ -431,7 +439,8 @@ function pressNode(node, action, ship = null) {
       window.addEventListener('pointerup', async (end) => {
         dragged = Math.hypot(end.clientX - start.x, end.clientY - start.y) > 5;
         if (!dragged) return;
-        await select();
+        // A drag picks the ship type for the player so one gesture reaches a destination.
+        await select(true);
         const destination = hotspotAt(end.clientX, end.clientY, '.hotspot.move-dest');
         if (destination) await press(Number(destination.dataset.messageId), destination.dataset.customId, destination);
       }, { once: true });
@@ -844,12 +853,10 @@ function panelImage(view, panel, seat, label) {
   image.src = `/api/games/${encodeURIComponent(view.game.id)}/${panel}.webp`
     + `?v=${encodeURIComponent(view.version)}&seat=${encodeURIComponent(seat || '')}`;
   image.title = ['ai', 'species', 'player'].includes(panel) ? label : 'Click to enlarge';
-  if (panel === 'player') image.style.cursor = 'default';
-  if (!['ai', 'species', 'player'].includes(panel)) image.addEventListener('click', () => {
+  if (panel === 'player') image.title = 'Click to enlarge';
+  if (!['ai', 'species'].includes(panel)) image.addEventListener('click', () => {
     if (panel === 'market' && image.closest('.researching')) return;
-    el.zoomImage.src = image.src;
-    el.zoomImage.alt = label;
-    el.zoomDialog.showModal();
+    openZoom(image.src, label, panel === 'player');
   });
   return image;
 }
@@ -890,11 +897,22 @@ function renderMarket(view) {
   const wasChoosing = card.classList.contains('researching');
   card.classList.toggle('researching', choosing);
   if (choosing) {
-    if (!wasChoosing) document.querySelector('.table').insertBefore(card, document.querySelector('.players-card'));
+    if (!wasChoosing) {
+      state.marketBeforeResearch =
+        document.getElementById('market-toggle').getAttribute('aria-expanded') === 'true';
+      document.querySelector('.table').insertBefore(card, document.querySelector('.players-card'));
+    }
     document.getElementById('market-toggle').setAttribute('aria-expanded', 'true');
     document.getElementById('market-content').classList.remove('collapsed');
     document.getElementById('market-content').inert = false;
   } else {
+    if (wasChoosing && state.marketBeforeResearch === false) {
+      // Research expanded the market; put it back when the choices finish.
+      document.getElementById('market-toggle').setAttribute('aria-expanded', 'false');
+      document.getElementById('market-content').classList.add('collapsed');
+      document.getElementById('market-content').inert = true;
+    }
+    state.marketBeforeResearch = null;
     const expanded = document.getElementById('market-toggle').getAttribute('aria-expanded') === 'true';
     const wide = expanded && !(view.battles || []).length;
     card.classList.toggle('expanded-market', wide);
@@ -932,6 +950,7 @@ function renderMarket(view) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'market-target';
+      button.dataset.tech = region.tech;
       button.style.left = `${100 * region.x / layout.width}%`;
       button.style.top = `${100 * region.y / layout.height}%`;
       button.style.width = `${100 * width / layout.width}%`;
@@ -1291,7 +1310,7 @@ function promptCard(message, index) {
   const previewing = (message.buttons || [])
     .some((button) => objectAction(button.custom_id || '')?.kind === 'explore-place');
   const discovering = (message.buttons || []).some((button) =>
-    discoveryChoice(button.custom_id || '') || /_keepDiscForPoints$/.test(button.custom_id || ''));
+    discoveryChoice(button.custom_id || '') || /_keepDiscForPoints(_|$)/.test(button.custom_id || ''));
   const researching = (message.buttons || []).some((button) =>
     techButton(button.custom_id || '') || freeTechChoice(button.custom_id || ''));
   if (!previewing && !discovering && !researching) {
@@ -1361,7 +1380,7 @@ function promptCard(message, index) {
 
   const discoveries = buttons.map((button) => ({ button, ...(discoveryChoice(button.custom_id || '') || {}) }))
     .filter((entry) => entry.action);
-  const keep = buttons.find((button) => /_keepDiscForPoints$/.test(button.custom_id || ''));
+  const keep = buttons.find((button) => /_keepDiscForPoints(_|$)/.test(button.custom_id || ''));
   if (discoveries.length || keep) {
     discoveries.forEach((entry) => handled.add(entry.button.custom_id));
     if (keep) handled.add(keep.custom_id);
@@ -1503,11 +1522,7 @@ function battlePanel(battle, messages, view) {
       zoom.setAttribute('aria-label', 'Enlarge combat image');
       image.replaceWith(zoom);
       zoom.appendChild(image);
-      zoom.addEventListener('click', () => {
-        el.zoomImage.src = image.src;
-        el.zoomImage.alt = image.alt;
-        el.zoomDialog.showModal();
-      });
+      zoom.addEventListener('click', () => openZoom(image.src, image.alt));
     });
     chat.appendChild(event);
   }
@@ -1600,20 +1615,18 @@ function historyItem(message) {
     ${message.deleted || (message.buttons && message.buttons.length === 0 && message.content) ? '<span class="used">resolved</span>' : ''}
     ${message.for_you === false ? '<span>another seat</span>' : ''}`;
   wrap.appendChild(meta);
-  if (message.content) {
-    const body = document.createElement('div');
-    body.className = 'history-content';
-    body.innerHTML = bodyHtml(message.content);
-    wrap.appendChild(body);
-  }
+  const body = document.createElement('div');
+  body.className = 'history-content';
+  if (message.content) body.innerHTML = bodyHtml(message.content);
   for (const attachment of message.attachments || []) {
     const image = document.createElement('img');
     image.className = 'attachment';
     image.src = attachment.url;
     image.alt = attachment.name || '';
     image.loading = 'lazy';
-    wrap.appendChild(image);
+    body.appendChild(image);
   }
+  if (body.childNodes.length) wrap.appendChild(body);
   return wrap;
 }
 
@@ -1674,10 +1687,7 @@ function renderFaction() {
     ${faction.image ? `<img id="faction-image" class="rendered-panel" src="${faction.image}" alt="${escapeHtml(faction.name)} board" title="Click to enlarge">` : ''}`;
   const image = document.getElementById('faction-image');
   if (image) {
-    image.addEventListener('click', () => {
-      el.zoomImage.src = image.src;
-      el.zoomDialog.showModal();
-    });
+    image.addEventListener('click', () => openZoom(image.src, image.alt));
   }
 }
 
@@ -1700,6 +1710,7 @@ async function followActiveSeat(view) {
 async function press(messageId, customId, node) {
   if (!customId || state.rendering) return;
   state.rendering = true;
+  document.body.classList.add('resolving');
   if (node) node.disabled = true;
   showToast('Resolving…');
   try {
@@ -1718,6 +1729,7 @@ async function press(messageId, customId, node) {
     showToast(`press failed: ${error}`, true);
   } finally {
     state.rendering = false;
+    document.body.classList.remove('resolving');
     if (node && node.isConnected) node.disabled = false;
   }
 }
@@ -1730,7 +1742,8 @@ function renderSeats(view) {
   const wanted = [...(view.authenticated ? [] : [['', 'Spectator']]), ...options.map((player) => [player.id,
     `${player.name}${player.color ? ` (${player.color})` : ''}`])];
   const current = viewedSeat(view);
-  const key = options.map((player) => player.id).join(',');
+  const key = [view.game.id, ...options.map((player) =>
+    `${player.id}:${player.name}:${player.color || ''}`)].join(',');
   if (el.seat.dataset.for === key) {
     if (el.seat.value !== current) el.seat.value = current;
     return;
@@ -1963,6 +1976,11 @@ function bind() {
     await loadHistory(true);
   });
   el.historyMore.addEventListener('click', () => loadHistory(false));
+  el.historyList.addEventListener('click', (event) => {
+    const image = event.target.closest('img.attachment');
+    if (!image) return;
+    openZoom(image.src, image.alt);
+  });
   el.historyRoom.addEventListener('change', () => {
     state.historyRoom = el.historyRoom.value;
     renderHistory();

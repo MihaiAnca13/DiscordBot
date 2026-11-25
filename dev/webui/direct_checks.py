@@ -77,8 +77,9 @@ def open_page(browser, seat="1", errors=None, viewport=None, prompt=True):
     if prompt:
         page.wait_for_selector("#action-dock .prompt")
     else:
-        page.wait_for_selector("#players .player")
+        page.wait_for_selector("#players .rendered-player")
         page.wait_for_timeout(800)
+    page.wait_for_timeout(400)  # let the first render settle before the flow clicks
     return page
 
 
@@ -160,16 +161,12 @@ def flow_movement_stack(page):
     page.locator(".piece.move-from").first.click()
     page.wait_for_selector(".piece.move-ship")
     page.locator(".piece.move-ship").first.click()
-    page.wait_for_selector(".stack-choice")
-    head = page.locator(".stack-choice .tray-head").inner_text()
-    check("the stack asks how many of the visible ships move", "1" in head and "2" in head, head)
+    page.wait_for_selector(".move-count")
+    counts = sorted(node.inner_text().strip() for node in page.locator(".move-count").all())
+    check("the stack asks how many of the visible ships move",
+          "1" in counts and "2" in counts, str(counts))
     shot(page, "movement-stack")
-    page.locator(".stack-choice .icon").filter(has_text="+").click()
-    page.wait_for_timeout(1800)
-    check("adding a ship raises the stack count",
-          "2" in page.locator(".stack-choice .tray-head").inner_text(),
-          page.locator(".stack-choice .tray-head").inner_text())
-    page.get_by_role("button", name="Move 2").click()
+    page.locator(".move-count").filter(has_text="2").first.click()
     page.wait_for_selector(".hotspot.move-dest")
     page.locator(".hotspot.move-dest").first.click()
     page.wait_for_timeout(2200)
@@ -257,20 +254,24 @@ def flow_build(page):
 def flow_upgrade(page):
     before = next(player for player in view("1")["game"]["players"] if player["is_you"])
     click_choice(page, "Upgrade (2)")
-    page.wait_for_selector(".ship-mini.target")
-    check("your blueprints become the upgrade targets",
-          page.locator(".ship-mini.target").count() > 0)
+    page.wait_for_function(
+        "!!document.querySelector('#action-dock .choice[title*=\"upgradeShip_\"]')")
+    ships = page.locator("#action-dock .choices .choice").filter(has_text="Interceptor")
+    check("the ship type is offered in the dock", ships.count() > 0,
+          [node.inner_text() for node in page.locator("#action-dock .choices .choice").all()])
     shot(page, "upgrade-ships")
-    page.locator(".ship-mini.target").first.click()
-    page.wait_for_selector(".slot.target")
-    check("the ship's part slots are clickable", page.locator(".slot.target").count() > 0)
+    ships.first.click()
+    page.wait_for_selector("#action-dock .upgrade-blueprint .market-target")
+    check("the ship's part slots are clickable",
+          page.locator("#action-dock .upgrade-blueprint .market-target").count() > 0)
     shot(page, "upgrade-slots")
-    page.locator(".slot.target").first.click()
-    page.wait_for_selector(".part-card")
-    check("replacement parts are cards", page.locator(".part-card").count() > 0)
+    page.locator("#action-dock .upgrade-blueprint .market-target").first.click()
+    page.wait_for_selector("#action-dock .upgrade-parts .part-option")
+    check("replacement parts are cards",
+          page.locator("#action-dock .upgrade-parts .part-option").count() > 0)
     shot(page, "upgrade-parts")
-    part = page.locator(".part-card", has_text="Hull")
-    (part if part.count() else page.locator(".part-card")).first.click()
+    part = page.locator("#action-dock .part-option", has_text="Hull")
+    (part if part.count() else page.locator("#action-dock .part-option")).first.click()
     page.wait_for_timeout(2200)
     after = next(player for player in view("1")["game"]["players"] if player["is_you"])
     old_slots = [slot["part"]["id"] for slot in before["blueprints"][0]["slots"]]
@@ -456,12 +457,16 @@ def flow_bankrupt(page):
 def flow_research(page):
     click_choice(page, "Research (2)")
     page.wait_for_timeout(1200)
-    page.wait_for_selector(".tech-chip.playable")
+    page.wait_for_selector(".market-target")
     check("the tech market itself is the research choice",
-          page.locator(".tech-chip.playable").count() > 0)
+          page.locator(".market-target").count() > 0)
     shot(page, "research-market")
     before = next(player for player in view("1")["game"]["players"] if player["is_you"])
-    page.locator(".tech-chip.playable").first.click()
+    page.locator(".market-target").first.click()
+    page.wait_for_timeout(600)
+    if page.locator("#tech-track-dialog[open]").count():
+        page.locator(".tech-track-choice").first.click()
+        page.wait_for_timeout(1600)
     page.wait_for_timeout(2200)
     after = next(player for player in view("1")["game"]["players"] if player["is_you"])
     techs = [tech["id"] for track in ("military", "grid", "nano") for tech in after["techs"][track]]
@@ -474,16 +479,22 @@ def flow_research(page):
 def flow_combat(browser, errors):
     one = open_page(browser, "1", errors)
     two = open_page(browser, "2", errors)
+    href = one.locator("#battle-index a[href^='#room=']").first.get_attribute("href")
+    check("the battle index opens the combat room", bool(href), href or "missing")
+    for page in (one, two):
+        page.evaluate("(hash) => { location.hash = hash; }", href[1:])
+        page.wait_for_timeout(1400)
     for _ in range(40):
         acted = False
         for page in (one, two):
             clicked = page.evaluate("""(() => {
-              const prompts = [...document.querySelectorAll('.prompt.combat')]
-                .filter((prompt) => [...prompt.querySelectorAll('button')].some((b) => /Roll/.test(b.textContent)))
-                .sort((a, b) => Number(a.dataset.messageId) - Number(b.dataset.messageId));
+              const prompts = [...document.querySelectorAll('.battle-room .prompt')]
+                .filter((prompt) => [...prompt.querySelectorAll('button')]
+                  .some((button) => /Roll/i.test(button.textContent)));
               const prompt = prompts[prompts.length - 1];
               if (!prompt) return false;
-              const button = [...prompt.querySelectorAll('button')].find((b) => /Roll/.test(b.textContent));
+              const button = [...prompt.querySelectorAll('button')]
+                .find((candidate) => /Roll/i.test(candidate.textContent));
               button.click();
               return true;
             })()""")
@@ -491,19 +502,26 @@ def flow_combat(browser, errors):
                 page.wait_for_timeout(900)
                 acted = True
                 break
-        if one.locator(".piece.combat-hit").count():
+        if not acted and one.evaluate(
+                "[...document.querySelectorAll('.battle-room .prompt .content')]"
+                ".some((node) => /take the hit|assign/i.test(node.textContent))"):
             break
         if not acted:
             one.wait_for_timeout(900)
+    one.locator("#battle-index a[href='#table']").first.click()
+    one.wait_for_timeout(1200)
     if not one.locator(".piece.combat-hit").count():
         check("combat hit assignment is clickable on the enemy ship", True,
               "skipped: no hit prompt in 40 rolls")
         return
     shot(one, "combat-hit-target")
     target = one.locator(".piece.combat-hit").first.get_attribute("aria-label")
+    before = [message["id"] for message in view("1")["pending"] if "Combat" in message["room"]]
     one.locator(".piece.combat-hit").first.click()
     one.wait_for_timeout(2200)
-    check("clicking the enemy ship assigns the hit", target not in (None, ""), target)
+    after = [message["id"] for message in view("1")["pending"] if "Combat" in message["room"]]
+    check("clicking the enemy ship assigns the hit", after != before,
+          f"{target}: combat prompts {before}→{after}")
     shot(one, "combat-hit-done")
 
 

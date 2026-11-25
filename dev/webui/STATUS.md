@@ -4,8 +4,10 @@
 
 Milestones 1–7 of `dev/webui/AGENT.md` are implemented and verified in the Docker
 sandbox, and the direct-interaction pass (audit in `INTERACTIONS.md`) is implemented
-and checked flow by flow. The live preview is http://127.0.0.1:8099/?seat=1 (seat 2 is
-red). No real Discord, production save or remote host was touched.
+and checked flow by flow. A headless-Chromium playtest pass on the merged upstream
+`main` fixed the gaps in "Playtest pass" below. The live preview is
+http://127.0.0.1:8099/?seat=1 (seat 2 is red). No real Discord, production save or
+remote host was touched.
 
 ## Direct interaction pass
 
@@ -22,32 +24,65 @@ same canonical message id.
   cube type as a resource choice.
 - Build: the system is marked on the map; units are picture cards with cost and a
   running materials total (trading still allowed at the spend step).
-- Upgrade: your blueprint ship and each part slot are the targets; replacement parts
-  remain cards.
+- Upgrade: the chosen ship's blueprint in the dock and each part slot are the
+  targets; replacement parts remain cards.
 - Research: the tech market is the only research surface; offered cards are
-  highlighted, others dimmed. The dock keeps a collapsed accessible list.
-- Discoveries: the drawn tile is shown as its card with Use / Keep; the
-  Atlantians' two draws are two separate art cards.
-- Combat: an enemy ship in the hit prompt is clickable; the battle room and log are
-  unchanged, and roll/trade/pass buttons stay in the dock because they have no board
-  object. Retreat destinations are the controlled neighbouring worlds.
+  highlighted. It expands while researching and returns to its previous state
+  (expanded or collapsed) when the choices finish.
+- Discoveries: the drawn tile is shown as its card with Use / Keep. The
+  Atlantians' two draws are separate art cards, including the two-disc
+  `selectDiscTile` ids.
+- Combat: an enemy ship in the hit prompt is clickable in the galaxy view; the
+  battle room keeps the rolls and the log. Retreat destinations are the controlled
+  neighbouring worlds.
 - Nebula sectors: A/B/C are separate targets on the wedge labels the engine paints,
   including when the hex is rotated, so a click cannot land in the wrong subsector.
 - Every spatial prompt keeps a collapsed "choose from a list" fallback and the board
   objects are real buttons, so clicking is also the keyboard/touch alternative to
   dragging.
 
+## Playtest pass (merged upstream main)
+
+Found and fixed while driving the real UI in headless Chromium and reviewing the
+screenshots:
+
+- A new game showed `Round ?` until the first upkeep; a missing `roundNum` now
+  reads as round 1 in the game list and the header.
+- The seat selector kept the previous game's labels when two games used the same
+  player ids; the options now refresh per game.
+- History attachments (tile and market renders) filled the whole dialog; they are
+  capped at 220 px and open enlarged on click.
+- Player boards and the parts reference advertised a zoom cursor but did nothing;
+  both now open the lightbox, which makes the narrow layout readable.
+- The discovery "Keep" action was never merged into the discovery card because
+  its custom id carries the tile suffix; it now stays on the card.
+- The Atlantians' two-tile choice rendered as plain text buttons; the discovery
+  regex now accepts the two disc codes and both cards show their art.
+- Clicks on the board or dock could be silently dropped while an action resolved;
+  action surfaces are now disabled during the press and the resolving toast is
+  visible.
+- A plain click on a ship had been auto-selecting the ship type, so the documented
+  "click ship, click type" step flashed and could not be used reliably. Only a
+  drag collapses the two steps now; clicking still works step by step.
+- Research left the market expanded after the choices finished; it now returns to
+  its pre-research state (including collapsed).
+- Dev checks were updated for the rendered-image UI (player panels, market
+  targets, dock blueprint upgrade, on-board stack counts, Atlantian cards) and the
+  combat flow now enters the battle room, rolls both sides and assigns a hit on
+  the galaxy board. History images, the market restore, player/parts zoom and the
+  first round are covered by the checks.
+
 ## Baseline and final checks
 
 | Check | Result |
 |---|---|
-| `pytest tests -m 'not render' -q` | **630 passed**, 25 deselected |
-| `pytest tests -m render -q` | **25 passed**, 630 deselected |
+| `pytest tests -m 'not render' -q` | **1024 passed**, 45 deselected |
+| `pytest tests -m render -q` | **45 passed**, 1024 deselected |
 | `python -m dev.webui.smoke` | passed; desktop screenshot, Build menu, hotspots |
-| `python -m dev.webui.browser_checks` | **18/18 passed** (real Chromium, HTTP, two seats) |
+| `python -m dev.webui.browser_checks` | **24/24 passed** (real Chromium, HTTP, two seats) |
 | `python -m dev.webui.direct_checks <flow>` | **16/16 flows passed**: movement, movement-drag, movement-stack, explore (click + keyboard), build, upgrade, influence, population, population-neutral, discovery, atlantian-discovery, nebula, retreat, bankrupt, research, combat |
 | `python -m dev.webui.playthrough round` | passed: build, explore, discovery, influence, passing, upkeep → round 2 |
-| `python -m dev.webui.playthrough movement` | passed: click-move 201 → 101 → 201 |
+| `python -m dev.webui.playthrough movement` | passed with the `movement` scenario: click-move 201 → 101 → 201 |
 | `python -m dev.webui.playthrough full` | passed: pass-only game from round 1 to final scores (round 9) |
 | `python -m dev.webui.playthrough combat` | passed: two-sided combat to destruction + reputation draw |
 | scoring scenario + browser | passed: round 8 upkeep → Declare Winner → final scoreboard |
@@ -69,9 +104,10 @@ All commands ran through `compose.webui.yaml`; screenshots and result JSON are i
   real ship token and click destinations remain the touch/keyboard alternative.
   Explored tiles preview through `/api/games/{id}/tile.webp`, painted by the engine's
   own art at the offered rotations.
-- **Player panels**: resources, activation counters, income/upkeep, tech tracks,
-  blueprint slots with part art, public VP, owned systems and reputation. During an
-  Upgrade action your blueprint ship and its slots become the click targets.
+- **Player panels**: the engine's rendered player board (resources, activations,
+  income/upkeep, tech tracks, blueprints, public VP, owned systems and reputation).
+  A board opens enlarged on click, and during an Upgrade action the dock's blueprint
+  preview and its slots become the click targets.
 - **Tech market + faction reference**: engine artwork and discounted costs; the
   faction sheet shows the engine's faction board and starting facts.
 - **Research/upgrade dialogs** (`app.js` + `webui/catalog.py`): tech cards, part

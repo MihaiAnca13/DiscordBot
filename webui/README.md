@@ -75,18 +75,20 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
   and legal destinations are marked worlds, empty planet squares are ghost targets
   and the chosen explored tile previews in place. See
   [dev/webui/INTERACTIONS.md](../dev/webui/INTERACTIONS.md).
-- **Player panels.** Resources, activations, income/upkeep, tech tracks, blueprint
-  slots with installed parts and public victory points, for every seat. During an
-  Upgrade action the seat's own blueprint ship and slot are the click targets.
+- **Player panels.** The engine's own rendered player board, resources, activations,
+  income/upkeep, tech tracks and blueprints, for every seat. A board opens enlarged
+  on click. During an Upgrade action the dock shows the chosen ship's blueprint and
+  its slots are the click targets.
 - **Tech market and faction reference.** Market cards use the engine's artwork and
-  the seat's discounted cost. The faction dialog shows the engine's faction board
-  (rules reference) plus starting setup and ability names.
+  the seat's discounted cost. Research expands the market and returns it to its
+  previous state when the choices finish. The faction dialog shows the engine's
+  faction board (rules reference) plus starting setup and ability names.
 - **Choices.** Pending prompts are fetched separately from history, so the 80-record
   history cap can never hide an unresolved choice. Research is chosen on the tech
-  market; upgrades on the blueprints; build units, replacement parts, discovery
-  cards and movement quantities are picture cards. Spatial choices carry a
-  collapsed "choose from a list" fallback for keyboard and screen-reader use.
-  Finish/navigation buttons sit below the real choices.
+  market; upgrades on the blueprint preview in the dock; build units, replacement
+  parts, discovery cards and movement quantities are picture cards. Spatial choices
+  carry a collapsed "choose from a list" fallback for keyboard and screen-reader
+  use. Finish/navigation buttons sit below the real choices.
 - **Combat rooms.** Every battle keeps its own room name, orders and a collapsible
   battle log. An old combat overview stops offering a colour's roll once that
   colour has rolled.
@@ -107,10 +109,12 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
 
 ## Verified in the Docker sandbox
 
-- 625 non-rendering tests and 24 rendering tests pass; the web-ui view/store tests
-  cover pending-vs-history, seat filtering, private prompts and combat roll cleanup.
-- `dev.webui.browser_checks`: 18 real-Chromium checks (layout, zoom/pan, faction,
-  history, two-seat race, stale replay, refresh, narrow viewport).
+- 1024 non-rendering tests and 45 rendering tests pass; the web-ui view/store tests
+  cover pending-vs-history, seat filtering, private prompts, combat roll cleanup and
+  the first-round fallback.
+- `dev.webui.browser_checks`: 24 real-Chromium checks (layout, zoom/pan, faction,
+  player/parts enlargement, history images, market restore, two-seat race, stale
+  replay, refresh, narrow viewport).
 - `dev.webui.playthrough round`: build, explore, discovery, influence, passing and
   upkeep through live HTTP, ending in round 2.
 - `dev.webui.playthrough combat`: two-sided combat to destruction, reputation draw

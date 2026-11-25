@@ -480,7 +480,7 @@ class WebApp:
             "game": {
                 "id": game_id,
                 "name": game.gamestate.get("game_name", game_id),
-                "round": game.gamestate.get("roundNum"),
+                "round": game.gamestate.get("roundNum") or 1,
                 "round_max": 8,
                 "s3_remaining": len(game.gamestate.get("tile_deck_300", [])) + len(game.gamestate.get("tile_discard_deck_300", [])),
                 "minor_species": game.gamestate.get("minor_species", []),
@@ -674,7 +674,7 @@ class WebApp:
             games.append({
                 "id": game_id,
                 "name": game.gamestate.get("game_name", game_id),
-                "round": game.gamestate.get("roundNum"),
+                "round": game.gamestate.get("roundNum") or 1,
                 "active": game.gamestate.get("activePlayerColor", []),
                 "players": [_clean_name(names[pid]) for pid in game.gamestate["players"]],
             })
