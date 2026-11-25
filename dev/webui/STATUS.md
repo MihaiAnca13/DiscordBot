@@ -209,6 +209,7 @@ before clicking or taking evidence screenshots.
   Nebula subsector targets; `direct_checks` now covers all 16 flows.
 - The sandbox is left freshly seeded at Blue's turn menu (round 1).
   Reset before baseline checks: `seed` → `up` → `smoke`/`browser_checks`.
+- `be6dafd` headless-Chromium playtest fixes (see "Playtest pass" above).
 
 ## Evidence images
 
