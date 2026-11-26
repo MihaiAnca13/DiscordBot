@@ -18,11 +18,13 @@ def test_upkeep_ignores_eliminated_players_but_still_rejects_repeat_presses(star
 
     press(channel, 1, "FCIDblue_passForRound")
     press(channel, 1, "readyForUpkeep")
+    assert reload(game).gamestate["readyForUpkeep"] == ["blue"]
     assert reload(game).is_everyone_passed()
     assert not reload(game).get_player(2).get("passed", False)
 
     press(channel, 1, "runUpkeep")
     assert reload(game).gamestate["roundNum"] == 2
+    assert reload(game).gamestate["readyForUpkeep"] == []
 
     run(TurnButtons.runUpkeep(reload(game), FakeInteraction(channel)))
     assert reload(game).gamestate["roundNum"] == 2

@@ -1020,7 +1020,14 @@ function renderPlayers(view) {
       renderFaction();
       el.factionDialog.showModal();
     });
-    header.append(head, reference);
+    header.append(head);
+    if (player.upkeep_state) {
+      const upkeep = document.createElement('span');
+      upkeep.className = `badge upkeep-${player.upkeep_state}`;
+      upkeep.textContent = player.upkeep_state === 'ready' ? 'ready for upkeep' : 'waiting for upkeep';
+      header.appendChild(upkeep);
+    }
+    header.append(reference);
     article.append(header, content);
     if (player.color) {
       body.appendChild(panelImage(view, 'player', player.id, `${player.name} — player board`));
@@ -1821,9 +1828,15 @@ function render(view, force = false) {
     const player = (view.game.players || []).find((row) => row.color === color);
     return player ? player.name : color;
   });
+  const upkeepWaiting = (view.game.players || [])
+    .filter((player) => player.upkeep_state === 'waiting')
+    .map((player) => player.name);
+  const upkeepReady = (view.game.players || []).some((player) => player.upkeep_state === 'ready');
   el.turn.textContent = view.game.ended ? 'Game over'
     : view.game.setup ? `Faction draft: ${(view.game.players.find((p) => p.id === view.game.drafting_seat) || {}).name || 'finishing setup'}`
-    : activeNames.length ? `Active: ${activeNames.join(', ')}` : 'No active seat';
+    : activeNames.length ? `Active: ${activeNames.join(', ')}`
+    : upkeepWaiting.length ? `Waiting for upkeep: ${upkeepWaiting.join(', ')}`
+    : upkeepReady ? 'All ready for upkeep' : 'No active seat';
   el.turn.classList.toggle('pass', !activeNames.length);
   const order = document.getElementById('turn-order');
   order.classList.toggle('hidden', view.game.setup || !active.length);

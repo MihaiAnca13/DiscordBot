@@ -82,6 +82,8 @@ select:focus-visible, button:focus-visible { outline: 2px solid var(--cyan); out
 .badge.round { color: var(--gold); border-color: #6d5a2b; }
 .badge.turn { color: var(--cyan); border-color: #2c6072; }
 .badge.pass { color: var(--faint); }
+.badge.upkeep-ready { color: #9fe8b4; border-color: #2f6b46; text-transform: none; letter-spacing: .02em; }
+.badge.upkeep-waiting { color: #f0c98a; border-color: #6d5a2b; text-transform: none; letter-spacing: .02em; }
 
 button {
   border: 1px solid var(--line2); border-radius: 8px;

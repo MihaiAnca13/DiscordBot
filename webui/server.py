@@ -160,6 +160,8 @@ def player_state(game, seat, pid, stats):
         tile = board.get(position, {})
         owned.append({"position": position, "name": tile.get("name") or tile.get("sector") or position,
                       "ring": tile.get("ring"), "ships": tile.get("player_ships", [])})
+    waiting = game.gamestate.get("peopleToCheckWith") or []
+    ready = game.gamestate.get("readyForUpkeep") or []
     return {
         "id": pid,
         "name": _clean_name(stats.get("username") or stats.get("player_name") or stats.get("name") or pid),
@@ -171,6 +173,8 @@ def player_state(game, seat, pid, stats):
         "eliminated": bool(stats.get("eliminated")),
         "passed": bool(stats.get("passed")),
         "perma_passed": bool(stats.get("perma_passed")),
+        "upkeep_state": ("waiting" if color in waiting
+                         else "ready" if color in ready else None),
         "is_you": pid == seat,
         "money": stats.get("money"), "science": stats.get("science"),
         "materials": stats.get("materials"),
@@ -498,6 +502,7 @@ class WebApp:
                     "id": row["id"], "name": row["name"], "color": row["color"],
                     "faction_name": row["faction_name"], "artwork": row["artwork"],
                     "portrait": row["portrait"], "passed": row["passed"],
+                    "upkeep_state": row["upkeep_state"],
                     "eliminated": row["eliminated"], "money": row["money"],
                     "science": row["science"], "materials": row["materials"],
                     "influence_discs": row["influence_discs"], "points": row["points"],

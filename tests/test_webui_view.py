@@ -37,6 +37,17 @@ def test_first_round_before_the_first_upkeep_is_round_one(start_game, app):
     assert app.snapshot("aeb1", "1")["game"]["round"] == 1
 
 
+def test_players_show_who_is_ready_for_upkeep(start_game, app):
+    game, _channel = start_game()
+    game.gamestate["peopleToCheckWith"] = ["red"]
+    game.gamestate["readyForUpkeep"] = ["blue"]
+    game.update()
+
+    rows = {row["color"]: row for row in app.snapshot("aeb1", "1")["game"]["players"]}
+    assert rows["blue"]["upkeep_state"] == "ready"
+    assert rows["red"]["upkeep_state"] == "waiting"
+
+
 def test_pending_choices_do_not_fall_off_the_history_page(start_game, store, app, run):
     game, _channel = start_game()
     menu = turn_menu(run, store, game, "1", "blue")

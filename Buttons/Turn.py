@@ -277,7 +277,10 @@ class TurnButtons:
                 f"{', '.join(pending)} before marking ready for upkeep. "
                 "Use the buttons in that sector's thread.")
             return
-        game.removeFromKey("peopleToCheckWith", color)
+        if color in game.gamestate.get("peopleToCheckWith", []):
+            game.removeFromKey("peopleToCheckWith", color)
+            game.gamestate.setdefault("readyForUpkeep", []).append(color)
+            game.update()
         if p1.checkBankrupt():
             await TurnButtons.offerBankruptcyResolution(interaction, p1)
         msg = f"{player['player_name']} has marked themselves as ready for upkeep."
@@ -376,6 +379,7 @@ class TurnButtons:
             for thread in interaction.channel.threads:
                 if "Round" in thread.name:
                     asyncio.create_task(thread.edit(archived=True))
+        game.gamestate["readyForUpkeep"] = []
         await game.upkeep(interaction)
         drawing = DrawHelper(game.gamestate)
         game.saveEndRound()

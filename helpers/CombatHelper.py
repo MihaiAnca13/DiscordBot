@@ -308,6 +308,7 @@ class Combat:
         game.initilizeKey("queuedQuestions")
         game.initilizeKey("queuedDraws")
         game.initilizeKey("peopleToCheckWith")
+        game.initilizeKey("readyForUpkeep")
 
         for tile in tiles:
 
