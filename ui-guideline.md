@@ -50,6 +50,21 @@ Enable zoom where it materially helps, such as parts reference and the compact t
 Disable it where it adds little or conflicts with selecting an action.
 Keep popups sized to their contents and avoid unnecessarily obscuring the page.
 
+## Support touch and small screens
+
+- Keep the phone header short and let secondary actions scroll sideways; a sticky
+  three-row header costs more than the status it shows.
+- Support two-finger pinch and pan on the board. A pinch must not also press the
+  world under a finger, and a tap must still work when the pinch ends.
+- Fit the board by height with a sensible minimum, and refit after rotation unless
+  the player has chosen their own zoom.
+- Grow chrome buttons (~40 px) and choices (~42 px) on coarse pointers, but keep the
+  board targets' measured geometry.
+- Let the market keep a readable minimum width and scroll sideways instead of
+  shrinking into an unreadable thumbnail.
+- Fill reference and history sheets with the phone screen, respect safe-area insets,
+  and use dynamic viewport units around mobile browser toolbars.
+
 ## Watch shared styles and rendering behavior
 
 Check how generic button, hover and dialog styles affect specialized controls.

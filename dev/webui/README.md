@@ -32,8 +32,9 @@ docker compose -f compose.webui.yaml logs --tail=60 webui
 Reset before repeating the smoke test: it changes the demo game. Screenshots and the
 result JSON appear under `dev/webui/artifacts/` (ignored by Git). The browser checks
 run inside the app container, using real HTTP and Chromium, and cover layout,
-zoom/pan, faction/history dialogs, two-seat races, stale replay, refresh and a narrow
-viewport.
+zoom/pan, faction/history dialogs, two-seat races, stale replay, refresh, a narrow
+viewport and a 390×844 touch phone (compact header, pinch zoom, rotation refit,
+full-screen history).
 
 ## Scripted play and fabricated saves
 

@@ -75,6 +75,11 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
   and legal destinations are marked worlds, empty planet squares are ghost targets
   and the chosen explored tile previews in place. See
   [dev/webui/INTERACTIONS.md](../dev/webui/INTERACTIONS.md).
+- **Phones and tablets.** The header compacts (secondary actions scroll sideways);
+  the board pinch-zooms, two-finger pans, uses larger touch targets and refits after
+  rotation; the market fills the card on tablets and scrolls sideways on phones;
+  history, faction, reference and new-game dialogs fill a phone screen. Safe-area
+  insets and dynamic viewport units are respected.
 - **Player panels.** The engine's own rendered player board, resources, activations,
   income/upkeep, tech tracks and blueprints, for every seat. A board opens enlarged
   on click. During an Upgrade action the dock shows the chosen ship's blueprint and
@@ -112,14 +117,16 @@ Open `http://127.0.0.1:8099/?seat=<discord id>` or pick a seat in the header.
 - 1024 non-rendering tests and 45 rendering tests pass; the web-ui view/store tests
   cover pending-vs-history, seat filtering, private prompts, combat roll cleanup and
   the first-round fallback.
-- `dev.webui.browser_checks`: 24 real-Chromium checks (layout, zoom/pan, faction,
+- `dev.webui.browser_checks`: 36 real-Chromium checks (layout, zoom/pan, faction,
   player/parts enlargement, history images, market restore, two-seat race, stale
-  replay, refresh, narrow viewport).
+  replay, refresh, narrow/tablet/phone layout, pinch zoom, rotation refit,
+  full-screen phone history, phone reference zoom).
 - `dev.webui.playthrough round`: build, explore, discovery, influence, passing and
   upkeep through live HTTP, ending in round 2.
 - `dev.webui.playthrough combat`: two-sided combat to destruction, reputation draw
   and battle-room logs.
-- Screenshots in `dev/webui/artifacts/` were inspected for desktop and narrow views.
+- Screenshots in `dev/webui/artifacts/` were inspected for desktop, narrow and phone
+  views (390×844 touch, landscape 844×390).
 
 ## Not done (deliberately)
 

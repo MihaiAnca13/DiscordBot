@@ -91,6 +91,9 @@ const state = {
   panX: 0,
   panY: 0,
   fitPending: true,
+  fitted: false,
+  pinching: false,
+  gestureUntil: 0,
   rendering: false,
   lastKey: null,
   history: [],
@@ -107,6 +110,8 @@ const state = {
 };
 
 // ------------------------------------------------------------------ helpers
+const coarsePointer = window.matchMedia('(pointer: coarse)');
+const phoneScreen = window.matchMedia('(max-width: 700px)');
 const escapeHtml = (text) => (text || '')
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;');
@@ -312,15 +317,18 @@ function fitBoard() {
   state.zoom = Math.max(0.05, zoom);
   state.panX = (box.width - meta.width * state.zoom) / 2;
   state.panY = (box.height - meta.height * state.zoom) / 2;
+  state.fitted = true;
   applyTransform();
 }
 
 function applyTransform() {
   el.stage.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
   el.stage.style.setProperty('--inv', String(1 / state.zoom));
-  // Labels and hit rings keep a usable screen size when the whole map is fitted.
-  el.stage.style.setProperty('--ui', String(Math.min(3, 1 / state.zoom)));
-  el.stage.style.setProperty('--ui-piece', String(Math.min(1.8, 1 / state.zoom)));
+  // Labels and hit rings keep a usable screen size when the whole map is fitted;
+  // touch screens need larger pieces because they cannot hover for a tooltip.
+  const coarse = coarsePointer.matches;
+  el.stage.style.setProperty('--ui', String(Math.min(coarse ? 3.4 : 3, 1 / state.zoom)));
+  el.stage.style.setProperty('--ui-piece', String(Math.min(coarse ? 2.2 : 1.8, 1 / state.zoom)));
 }
 
 function zoomAt(factor, clientX, clientY) {
@@ -332,28 +340,94 @@ function zoomAt(factor, clientX, clientY) {
   state.panX = x - (x - state.panX) * ratio;
   state.panY = y - (y - state.panY) * ratio;
   state.zoom = next;
+  state.fitted = false;
   applyTransform();
 }
 
 function bindBoardPan() {
   let panning = null;
+  let pinch = null;
+  const pointers = new Map();
+  const interactive = (target) => target.closest('.drag-token') || target.closest('.hotspot')
+    || target.closest('.piece') || target.closest('.move-count')
+    || target.closest('.tile-preview') || target.closest('.map-preview-tools');
+
+  // Capture phase: a second finger may land on a game object, and the object's own
+  // pointerdown stops bubbling. Pinch still needs to see both fingers.
   el.viewport.addEventListener('pointerdown', (event) => {
-    if (event.target.closest('.drag-token') || event.target.closest('.hotspot')
-        || event.target.closest('.piece') || event.target.closest('.move-count')
-        || event.target.closest('.tile-preview')) return;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.size === 2) {
+      const [first, second] = [...pointers.values()];
+      pinch = {
+        distance: Math.max(1, Math.hypot(first.x - second.x, first.y - second.y)),
+        midX: (first.x + second.x) / 2,
+        midY: (first.y + second.y) / 2,
+        zoom: state.zoom, panX: state.panX, panY: state.panY, moved: false,
+      };
+      panning = null;
+      state.pinching = true;
+      el.viewport.classList.add('grabbing');
+      return;
+    }
+    if (pointers.size > 2 || pinch || interactive(event.target)) return;
     panning = { x: event.clientX, y: event.clientY, panX: state.panX, panY: state.panY };
     el.viewport.classList.add('grabbing');
     el.viewport.setPointerCapture(event.pointerId);
-  });
+  }, { capture: true });
+
   el.viewport.addEventListener('pointermove', (event) => {
+    if (!pointers.has(event.pointerId)) return;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch) {
+      const [first, second] = [...pointers.values()];
+      if (!first || !second) return;
+      const distance = Math.hypot(first.x - second.x, first.y - second.y);
+      const midX = (first.x + second.x) / 2;
+      const midY = (first.y + second.y) / 2;
+      pinch.moved = pinch.moved
+        || Math.abs(distance - pinch.distance) > 4
+        || Math.hypot(midX - pinch.midX, midY - pinch.midY) > 6;
+      const box = el.viewport.getBoundingClientRect();
+      const next = Math.min(3, Math.max(0.05, pinch.zoom * distance / pinch.distance));
+      const ratio = next / pinch.zoom;
+      const anchorX = pinch.midX - box.left;
+      const anchorY = pinch.midY - box.top;
+      // Keep the content under the initial midpoint and follow the fingers.
+      state.panX = anchorX - (anchorX - pinch.panX) * ratio + midX - pinch.midX;
+      state.panY = anchorY - (anchorY - pinch.panY) * ratio + midY - pinch.midY;
+      state.zoom = next;
+      state.fitted = false;
+      applyTransform();
+      return;
+    }
     if (!panning) return;
     state.panX = panning.panX + event.clientX - panning.x;
     state.panY = panning.panY + event.clientY - panning.y;
+    state.fitted = false;
     applyTransform();
   });
-  const end = () => { panning = null; el.viewport.classList.remove('grabbing'); };
+
+  const end = (event) => {
+    if (pointers.has(event.pointerId)) pointers.delete(event.pointerId);
+    if (pinch && pointers.size < 2) {
+      // The click that follows a pinch must not also pick a board object.
+      if (pinch.moved) state.gestureUntil = performance.now() + 400;
+      pinch = null;
+      state.pinching = false;
+    }
+    if (!pointers.size) {
+      panning = null;
+      el.viewport.classList.remove('grabbing');
+    }
+  };
   el.viewport.addEventListener('pointerup', end);
   el.viewport.addEventListener('pointercancel', end);
+  el.viewport.addEventListener('click', (event) => {
+    if (performance.now() < state.gestureUntil) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, { capture: true });
   let lastWheelTime = -Infinity;
   let isMapScroll = false;
   document.addEventListener('wheel', (event) => {
@@ -434,10 +508,12 @@ function pressNode(node, action, ship = null) {
   let dragged = false;
   if (['move-from', 'move-ship'].includes(action.kind)) {
     node.addEventListener('pointerdown', (event) => {
-      const start = { x: event.clientX, y: event.clientY };
+      const start = { x: event.clientX, y: event.clientY, type: event.pointerType };
       dragged = false;
       window.addEventListener('pointerup', async (end) => {
-        dragged = Math.hypot(end.clientX - start.x, end.clientY - start.y) > 5;
+        if (state.pinching || performance.now() < state.gestureUntil) return;
+        const threshold = start.type === 'touch' ? 10 : 5;
+        dragged = Math.hypot(end.clientX - start.x, end.clientY - start.y) > threshold;
         if (!dragged) return;
         // A drag picks the ship type for the player so one gesture reaches a destination.
         await select(true);
@@ -758,6 +834,7 @@ function bindDragToken(token, destinations) {
   let start = null;
   token.addEventListener('pointerdown', (event) => {
     event.stopPropagation();
+    if (state.pinching) return;
     start = { x: event.clientX, y: event.clientY, left: token.offsetLeft, top: token.offsetTop,
               moved: false };
     token.setPointerCapture(event.pointerId);
@@ -775,12 +852,13 @@ function bindDragToken(token, destinations) {
   });
   token.addEventListener('pointerup', (event) => {
     if (!start) return;
+    const blocked = state.pinching || performance.now() < state.gestureUntil;
     const target = hotspotAt(event.clientX, event.clientY, '.hotspot.move-dest');
     token.style.left = `${start.left}px`;
     token.style.top = `${start.top}px`;
     document.querySelectorAll('.hotspot.drop-target').forEach((node) => node.classList.remove('drop-target'));
     start = null;
-    if (target) {
+    if (target && !blocked) {
       press(Number(target.dataset.messageId), target.dataset.customId, target);
     }
   });
@@ -852,9 +930,8 @@ function panelImage(view, panel, seat, label) {
   image.loading = 'lazy';
   image.src = `/api/games/${encodeURIComponent(view.game.id)}/${panel}.webp`
     + `?v=${encodeURIComponent(view.version)}&seat=${encodeURIComponent(seat || '')}`;
-  image.title = ['ai', 'species', 'player'].includes(panel) ? label : 'Click to enlarge';
-  if (panel === 'player') image.title = 'Click to enlarge';
-  if (!['ai', 'species'].includes(panel)) image.addEventListener('click', () => {
+  image.title = 'Click to enlarge';
+  image.addEventListener('click', () => {
     if (panel === 'market' && image.closest('.researching')) return;
     openZoom(image.src, label, panel === 'player');
   });
@@ -930,7 +1007,9 @@ function renderMarket(view) {
   }
   stage.appendChild(image);
   el.market.replaceChildren(stage);
-  el.marketNote.textContent = choosing ? 'Choose a highlighted technology' : 'Click to enlarge';
+  el.marketNote.textContent = choosing ? 'Choose a highlighted technology'
+    : (phoneScreen.matches
+      ? 'Swipe sideways · tap to enlarge' : 'Click to enlarge');
   if (!choosing) return;
   api.marketLayout(view.game.id).then((layout) => {
     if (!stage.isConnected) return;
@@ -1848,8 +1927,12 @@ function render(view, force = false) {
   renderSeats(view);
   el.mirror.checked = !!view.mirror_to_discord;
   el.boardHint.textContent = view.seat
-    ? `Drag to pan · scroll to zoom · highlighted worlds are choices`
-    : 'Drag to pan · scroll to zoom';
+    ? (coarsePointer.matches
+      ? 'Drag to pan · pinch to zoom · tap a highlighted world'
+      : 'Drag to pan · scroll to zoom · highlighted worlds are choices')
+    : (coarsePointer.matches
+      ? 'Drag to pan · pinch to zoom'
+      : 'Drag to pan · scroll to zoom');
 
   const table = document.querySelector('.table');
   const inCombat = (view.battles || []).length > 0;
@@ -1954,9 +2037,6 @@ function bind() {
         body.textContent = 'No minor species remaining.';
       } else {
         const image = panelImage(state.view, panel, '', button.textContent);
-        if (['ai', 'species'].includes(panel)) {
-          image.style.cursor = 'default';
-        }
         body.replaceChildren(image);
       }
       document.getElementById('reference-dialog').showModal();
@@ -2046,8 +2126,13 @@ function bind() {
     });
   });
 
+  let resizeTimer = null;
   window.addEventListener('resize', () => {
-    if (state.fitPending) fitBoard();
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      // A rotated tablet keeps a user's zoom, but a fitted board follows the new shape.
+      if (state.fitPending || state.fitted) fitBoard();
+    }, 150);
   });
   window.addEventListener('hashchange', () => {
     if (!state.view) return;

@@ -808,3 +808,127 @@ button.market-target:hover:not(:disabled), button.market-target:focus-visible {
 .tech-track-sheet .sheet-head h2 { font-size: 14px; }
 
 .tech-track-sheet::backdrop { background: #01040a55; backdrop-filter: none; }
+
+/* ------------------------------------------------------- touch and phones */
+button, select, input, summary, a { touch-action: manipulation; }
+
+@media (pointer: coarse) {
+  button { min-height: 40px; }
+  button.icon { width: 40px; height: 40px; }
+  select { min-height: 40px; }
+  /* Board targets keep their measured geometry; only chrome buttons grow. */
+  .hotspot, .piece, .market-target, .move-count, .tile-preview { min-height: 0; }
+  .choice { min-height: 42px; padding: 9px 12px; }
+  .choice-fallback summary { display: flex; align-items: center; min-height: 40px; }
+  .tech-track-choice { min-height: 46px; }
+  .part-option { min-height: 44px; }
+  .player-board-head button { min-height: 38px; }
+  .build-card { width: 84px; min-height: 64px; }
+  .build-card img { height: 42px; }
+  .battle-back { display: grid; place-items: center; width: 40px; height: 40px; }
+}
+
+.board-viewport { height: min(64dvh, 690px); }
+.battle-chat { max-height: 70dvh; }
+#history-dialog, #faction-dialog, #reference-dialog, #new-game-dialog { max-height: 88dvh; }
+
+@media (max-width: 1180px) {
+  .board-viewport { height: 56dvh; }
+  .topbar {
+    position: static; gap: 8px 10px;
+    padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      8px max(12px, env(safe-area-inset-left));
+  }
+  .top-controls label {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  #turn-order { display: none; }
+  .brand { display: none; }
+  .players-card .card-head { position: static; }
+  .battle-index, .battle-room { scroll-margin-top: 12px; }
+  .market-stage, .market-card.researching .market-stage { width: 100%; }
+}
+
+@media (max-width: 700px) {
+  body { min-height: 100dvh; }
+  .topbar {
+    position: static;
+    align-items: center;
+    gap: 6px;
+    padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+      8px max(10px, env(safe-area-inset-left));
+  }
+  .top-controls { order: 2; flex: 1 1 0; width: auto; gap: 5px; }
+  #game { order: 1; flex: 2 1 110px; min-width: 0; max-width: none; }
+  #seat { order: 2; flex: 1 1 84px; min-width: 0; max-width: none; }
+  #round { order: 3; }
+  .turn-status { order: 4; }
+  #s3-remaining { order: 5; }
+  #new-game { order: 6; }
+  select, input { font-size: 16px; }
+  .top-actions {
+    order: 3; width: 100%; margin-left: 0; align-self: center;
+    flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+    overscroll-behavior-x: contain; padding-bottom: 2px;
+  }
+  .top-actions::-webkit-scrollbar { display: none; }
+  .top-actions > * { flex: none; }
+  .table {
+    padding: 8px max(8px, env(safe-area-inset-right))
+      calc(24px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    gap: 8px;
+  }
+  .board-viewport { height: clamp(260px, 42dvh, 430px); }
+  .card-head { padding: 8px 10px; }
+  .board-hint { padding: 5px 10px; }
+  .tech-market { overflow-x: auto; overscroll-behavior-x: contain; }
+  .market-stage, .market-card.researching .market-stage { width: 100%; min-width: 540px; }
+  .faction-body { padding: 12px; }
+  .battle-chat { max-height: 60dvh; }
+  .toast {
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    max-width: calc(100vw - 24px);
+  }
+
+  #history-dialog[open], #faction-dialog[open],
+  #reference-dialog[open], #new-game-dialog[open] {
+    width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh;
+    margin: 0; border: 0; border-radius: 0;
+    display: flex; flex-direction: column;
+  }
+  #history-dialog .sheet-head, #faction-dialog .sheet-head, #reference-dialog .sheet-head,
+  #new-game-dialog .sheet-head { border-radius: 0; }
+  .sheet-head {
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-top: max(13px, env(safe-area-inset-top));
+  }
+  #history-dialog .history-list, #faction-dialog .faction-body, #reference-dialog #reference-body {
+    flex: 1 1 auto; min-height: 0; max-height: none; overflow: auto;
+  }
+  #new-game-form { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
+  #new-game-form > p { padding-inline: 14px; }
+  #new-game-form label { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+  #new-game-form input[type="checkbox"] { width: 20px; height: 20px; }
+  .sheet-foot { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+
+  .lightbox img:not(.wide) {
+    width: auto; max-width: none; height: auto; max-height: 82dvh;
+    margin-inline: auto;
+  }
+  .lightbox .close {
+    right: max(14px, env(safe-area-inset-right));
+    top: max(10px, env(safe-area-inset-top));
+  }
+}
+
+@media (max-width: 700px) and (orientation: landscape) {
+  .board-viewport { height: 62dvh; min-height: 220px; }
+}
+
+/* Phones held sideways are wider than the phone breakpoint but still short. */
+@media (max-height: 520px) and (pointer: coarse) {
+  .topbar { position: static; gap: 6px 10px; padding-block: 6px; }
+  .board-viewport { height: 60dvh; min-height: 200px; }
+}

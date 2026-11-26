@@ -79,7 +79,9 @@ screenshots:
 | `pytest tests -m 'not render' -q` | **1024 passed**, 45 deselected |
 | `pytest tests -m render -q` | **45 passed**, 1024 deselected |
 | `python -m dev.webui.smoke` | passed; desktop screenshot, Build menu, hotspots |
-| `python -m dev.webui.browser_checks` | **24/24 passed** (real Chromium, HTTP, two seats) |
+| `python -m dev.webui.browser_checks` | **36/36 passed** (real Chromium, HTTP, two seats; desktop, 1024 tablet, 700 narrow and 390×844 touch phone) |
+| `python -m dev.webui.scroll_checks` | **4/4 passed**: wheel enters from the page, then map zooms without scrolling |
+| `python -m dev.webui.direct_checks movement` | **9/9 passed** after the pointer changes (move by click and drag) |
 | `python -m dev.webui.direct_checks <flow>` | **16/16 flows passed**: movement, movement-drag, movement-stack, explore (click + keyboard), build, upgrade, influence, population, population-neutral, discovery, atlantian-discovery, nebula, retreat, bankrupt, research, combat |
 | `python -m dev.webui.playthrough round` | passed: build, explore, discovery, influence, passing, upkeep → round 2 |
 | `python -m dev.webui.playthrough movement` | passed with the `movement` scenario: click-move 201 → 101 → 201 |
@@ -164,6 +166,31 @@ Reset before smoke/browser checks; each scenario also wipes both development vol
 Cold board render takes a few seconds; the browser waits for `#board-note` to clear
 before clicking or taking evidence screenshots.
 
+## Mobile and tablet pass
+
+The phone layout was measured in Chromium at 390×844 with touch enabled and a 2×
+device scale; the header dropped from 263 px to 150 px, the board is height-capped,
+and the page has no sideways overflow. Verified in `browser_checks` (12 new checks).
+
+- **Header.** On phones and tablets (≤1180 px) the top bar is static, the logo is
+  dropped, and the game/seat selects share a row; labels stay available to screen
+  readers. The turn-order image is hidden, and on phones the secondary actions
+  (Faction, History, references, Discord) scroll sideways in one row. Landscape
+  phones use the same short-screen treatment.
+- **Board gestures.** Two pointers now pinch-zoom around their midpoint and two-finger
+  pan; a pinch suppresses the click that would otherwise pick a ship or world, and a
+  tap still works afterwards. The board refits after rotation when the player has not
+  zoomed away from Fit. Touch hints say “pinch to zoom”.
+- **Touch targets.** Chrome buttons are at least 40 px, choice chips 42 px, selects
+  16 px (no iOS focus zoom), and labels/rings on the map scale up on coarse pointers.
+  The drag-to-move threshold is larger for touch.
+- **Layout.** The board is `clamp(260px, 42dvh, 430px)` on phones and 60dvh in
+  landscape. The tech market uses the full card width on tablets and a 540 px
+  sideways scroll strip on phones instead of shrinking to an unreadable thumbnail.
+- **Dialogs and images.** History, faction, reference and new-game sheets fill the
+  screen on phones; wide reference images open at a readable width in the lightbox.
+  Safe-area insets and `dvh` units cover notches and mobile browser toolbars.
+
 ## Known limits (not implemented)
 
 - No login/authentication. `seat` is a query parameter/local storage. Keep the API on
@@ -173,8 +200,9 @@ before clicking or taking evidence screenshots.
   `mirror_to_discord = false`. Do not claim live cross-play is verified.
 - Remote frontend/WireGuard/TLS/reverse-proxy setup is documented, not installed.
 - Polling every 1.5 s; no push channel.
-- Touch has no pinch zoom and no drag-to-move gesture; clicking the ship, world or
-  destination is the touch/keyboard path, and the board pans with one finger.
+- Touch pinch zoom and two-finger board pan are verified in headless Chromium with
+  touch emulation; ship drag-to-move and pinch were not exercised on a physical
+  iOS/Android device.
 - Faction ability names come from `data/factions.json`; full rule text lives on the
   faction-board image rather than extracted HTML.
 - Bankruptcy prompts are displayed and resolved through trade end to end; removing a
@@ -190,8 +218,9 @@ before clicking or taking evidence screenshots.
 1. Authentication and remote-host deployment (TLS reverse proxy, WireGuard bind,
    seat tokens) before exposing the UI.
 2. One live Discord session to verify the mirror and cross-surface prompt retirement.
-3. Optional polish: richer faction ability text, touch pinch zoom, bankruptcy
-   resolution by removing a sector, Ghosts retreat variants.
+3. Optional polish: richer faction ability text, bankruptcy resolution by removing a
+   sector, Ghosts retreat variants, and a physical-device touch pass (iOS Safari and
+   Android Chrome).
 
 ## Checkpoints
 
@@ -220,3 +249,5 @@ before clicking or taking evidence screenshots.
 `direct-atlantian-discovery-choices.png`, `direct-nebula-targets.png`,
 `direct-retreat-target.png`, `direct-bankrupt-prompt.png`,
 `direct-combat-hit-*.png`. All were opened and inspected.
+Mobile pass: `check-phone.png`, `check-narrow.png`, `before-phone.png`,
+`after-phone.png`, `after-phone-history.png`, `after-landscape.png`.
