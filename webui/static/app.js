@@ -1284,7 +1284,7 @@ function previewPanel(entries, message) {
   return wrap;
 }
 
-function promptCard(message, index) {
+function promptCard(message, index, populationOffer) {
   const card = document.createElement('section');
   card.className = `prompt${message.private ? ' private' : ''}${isCombat(message) ? ' combat' : ''}${index > 0 ? ' older' : ''}`;
   card.dataset.messageId = message.id;
@@ -1404,7 +1404,11 @@ function promptCard(message, index) {
   });
   if (boardSpatial.length) body.appendChild(boardPromptHint(boardSpatial, message));
 
-  body.appendChild(genericChoices(buttons.filter((button) => !handled.has(button.custom_id)), message));
+  const choices = genericChoices(buttons.filter((button) => !handled.has(button.custom_id)), message);
+  if (populationOffer && !buttons.some(isPopulationButton)) {
+    choices.append(...genericChoices(populationOffer.buttons, populationOffer).children);
+  }
+  body.appendChild(choices);
   card.appendChild(body);
   return card;
 }
@@ -1451,7 +1455,7 @@ function waitingCard(view) {
     return card;
   }
   card.innerHTML = `<b>${names.length ? `${escapeHtml(names.join(', '))} ${names.length === 1 ? 'is' : 'are'}` : 'Nobody is'} acting.</b>
-    <div class="row">New prompts appear here; finished actions move to History.</div>`;
+    <div class="row">Your choices appear here when you can act.</div>`;
   return card;
 }
 
@@ -1467,6 +1471,23 @@ const NAV_BUTTONS = /(^|_)(finishAction|restartTurn|deleteMsg|showGame|showReput
 function isChoicePrompt(message) {
   const buttons = message.buttons || [];
   return buttons.some((button) => button.custom_id && !NAV_BUTTONS.test(button.custom_id));
+}
+
+function isPopulationButton(button) {
+  return /(^|_)startPopDrop$/.test(button.custom_id || '');
+}
+
+function latestActionCard(message) {
+  const card = document.createElement('section');
+  card.className = 'prompt latest-action';
+  const heading = document.createElement('h2');
+  heading.className = 'prompt-head';
+  heading.textContent = 'Latest action';
+  card.appendChild(heading);
+  const body = messageContent(message);
+  body.classList.add('prompt-body');
+  card.appendChild(body);
+  return card;
 }
 
 function battlePanel(battle, messages, view) {
@@ -1539,10 +1560,6 @@ function renderDock(view) {
   const battle = selectedBattle(view);
   const visibleBattles = battle ? [battle] : [];
   const pending = [...(view.pending || [])];
-  if (!pending.length && !(view.battles || []).length) {
-    el.dock.replaceChildren(waitingCard(view));
-    return;
-  }
   // The engine sometimes offers the same menu twice (a second research pick, for
   // example). Keep the newest copy; the other is still in the feed if it becomes live.
   const seen = new Map();
@@ -1566,9 +1583,12 @@ function renderDock(view) {
     const panel = battlePanel(battle, rooms.get(battle.room) || [], view);
     dockContent.appendChild(panel);
   }
-  const table = unique.filter((message) => !isCombat(message));
-  const primary = table.filter(isChoicePrompt).sort((a, b) => b.id - a.id);
-  const secondary = table.filter((message) => !isChoicePrompt(message)).sort((a, b) => b.id - a.id);
+  const table = unique.filter((message) => !isCombat(message)).sort((a, b) => b.id - a.id);
+  const populationOffers = table.filter((message) =>
+    message.buttons.length === 1 && isPopulationButton(message.buttons[0]));
+  const actions = table.filter((message) => !populationOffers.includes(message));
+  const primary = actions.filter(isChoicePrompt);
+  const secondary = actions.filter((message) => !isChoicePrompt(message));
   if (!battle) {
     if ((view.battles || []).length) {
       const notice = document.createElement('section');
@@ -1578,8 +1598,12 @@ function renderDock(view) {
       notice.append(heading, document.getElementById('battle-index'));
       dockContent.appendChild(notice);
     }
-    [...primary, ...secondary].forEach((message, index) => dockContent.appendChild(promptCard(message, index)));
+    const populationOffer = primary.length ? populationOffers[0] : null;
+    const prompts = [...primary, ...(populationOffer ? [] : populationOffers), ...secondary];
+    prompts.forEach((message, index) =>
+      dockContent.appendChild(promptCard(message, index, index === 0 ? populationOffer : null)));
     if (!dockContent.childNodes.length) dockContent.appendChild(waitingCard(view));
+    if (view.latest_action) dockContent.appendChild(latestActionCard(view.latest_action));
   }
   el.dock.replaceChildren(dockContent);
   for (const battle of visibleBattles) {
@@ -1615,6 +1639,12 @@ function historyItem(message) {
     ${message.deleted || (message.buttons && message.buttons.length === 0 && message.content) ? '<span class="used">resolved</span>' : ''}
     ${message.for_you === false ? '<span>another seat</span>' : ''}`;
   wrap.appendChild(meta);
+  const body = messageContent(message);
+  if (body.childNodes.length) wrap.appendChild(body);
+  return wrap;
+}
+
+function messageContent(message) {
   const body = document.createElement('div');
   body.className = 'history-content';
   if (message.content) body.innerHTML = bodyHtml(message.content);
@@ -1626,8 +1656,7 @@ function historyItem(message) {
     image.loading = 'lazy';
     body.appendChild(image);
   }
-  if (body.childNodes.length) wrap.appendChild(body);
-  return wrap;
+  return body;
 }
 
 async function loadHistory(reset = false) {
@@ -1768,6 +1797,7 @@ function viewSignature(view) {
     seat: view.seat,
     version: view.version,
     pending: view.pending,
+    latestAction: view.latest_action,
     battles: view.battles,
     game: view.game,
     you: view.you,

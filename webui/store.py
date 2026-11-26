@@ -11,10 +11,20 @@ press arriving from either side compares the same `lastButtonMessage`.
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import time
 
 import discord
+
+# shortcut: announcements are identified by their wording, add an event type if more outcomes need coverage.
+ACTION_RESULT = re.compile(
+    r"^(?:This is what the tile looks like after the build\.|Tile added to position |"
+    r"Tile discarded$|Successfully added a \w+ population to tile )|"
+    r" (?:Moved a .+ from .+ to |acquired the tech |replaced .+ with |"
+    r"(?:acquired|lost) control of |placed a \w+ population |Passed$|"
+    r"has chosen to back up to last start of turn\.$|undid their last part )"
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -284,6 +294,14 @@ class FeedStore:
             " AND (ephemeral_to IS NULL OR ephemeral_to = ?)"
             " ORDER BY id DESC LIMIT ?", (game_id, seat, limit)).fetchall()
         return [self._as_message(row) for row in rows]
+
+    def latest_action(self, game_id):
+        rows = self.conn.execute(
+            "SELECT * FROM messages WHERE game_id = ? AND deleted = 0"
+            " AND ephemeral_to IS NULL AND buttons = '[]' AND content IS NOT NULL"
+            " ORDER BY id DESC", (game_id,))
+        row = next((row for row in rows if ACTION_RESULT.search(row["content"])), None)
+        return self._as_message(row) if row is not None else None
 
     def history_page(self, game_id, seat, before=None, limit=40):
         """One page of the full feed, newest first, including used prompts."""

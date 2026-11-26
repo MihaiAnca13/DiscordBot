@@ -454,6 +454,7 @@ class WebApp:
                     self.store.visible_history(game_id, seat_requested, limit=80)
                     if not row["deleted"] and (row["content"] or row["buttons"] or row["attachments"])]
         messages.reverse()
+        latest_action = self.store.latest_action(game_id)
 
         ended = bool(game.gamestate.get("gameEnded"))
         if ended:
@@ -539,6 +540,7 @@ class WebApp:
                  for row in player_rows],
                 key=lambda row: (row["points"] is None, -(row["points"] or 0))),
             "pending": pending,
+            "latest_action": _message(latest_action, players) if latest_action else None,
             "battles": list(battles.values()),
             "history": history,
             "history_more": history_more,

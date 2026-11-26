@@ -50,6 +50,27 @@ def test_pending_choices_do_not_fall_off_the_history_page(start_game, store, app
     assert view["history_more"] is True
 
 
+def test_latest_action_shows_one_public_result_with_its_image(start_game, store, app):
+    start_game()
+    room = "aeb1-actions"
+    image = {"name": "211.webp", "url": "/media/211.webp"}
+    store.record("aeb1", room, content="Red acquired the tech Improved Hull.")
+    moved = store.record("aeb1", room, content="Red Moved a cruiser from 209 to 211.",
+                         attachments=[image])
+    used_prompt = store.record("aeb1", room, content="Red, select the tile you would like to move from",
+                               buttons=[{"custom_id": "FCIDred_moveFrom_209"}])
+    store.remove(used_prompt)
+    store.record("aeb1", room, content="Red Moved a cruiser from 211 to 212.", ephemeral_to="1")
+    for index in range(80):
+        store.record("aeb1", room, content=f"Newer game prompt {index}")
+
+    view = app.snapshot("aeb1", "1")
+
+    assert view["latest_action"]["id"] == moved
+    assert view["latest_action"]["attachments"] == [image]
+    assert all(message["id"] != moved for message in view["history"])
+
+
 def test_another_seats_public_prompt_is_not_one_of_your_choices(start_game, store, app, run):
     game, _channel = start_game()
     turn_menu(run, store, game, "1", "blue")
