@@ -351,6 +351,10 @@ button.piece.planet:focus-visible { background: transparent; }
 .latest-action .prompt-head { margin: 0; font-weight: 600; }
 .latest-action .history-content { margin-top: 0; overflow-wrap: anywhere; }
 .latest-action img.attachment { display: block; max-width: 100%; max-height: 180px; object-fit: contain; }
+.latest-moves {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); gap: 12px;
+}
+.latest-moves img.attachment { max-height: 112px; }
 .choices { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
 .choices:empty { display: none; }
 .choice {

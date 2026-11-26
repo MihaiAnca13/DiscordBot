@@ -455,6 +455,11 @@ class WebApp:
                     if not row["deleted"] and (row["content"] or row["buttons"] or row["attachments"])]
         messages.reverse()
         latest_action = self.store.latest_action(game_id)
+        if latest_action:
+            move_results = latest_action.get("moves", [])
+            latest_action = _message(latest_action, players)
+            if move_results:
+                latest_action["moves"] = [_message(row, players) for row in move_results]
 
         ended = bool(game.gamestate.get("gameEnded"))
         if ended:
@@ -540,7 +545,7 @@ class WebApp:
                  for row in player_rows],
                 key=lambda row: (row["points"] is None, -(row["points"] or 0))),
             "pending": pending,
-            "latest_action": _message(latest_action, players) if latest_action else None,
+            "latest_action": latest_action,
             "battles": list(battles.values()),
             "history": history,
             "history_more": history_more,

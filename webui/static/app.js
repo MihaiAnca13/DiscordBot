@@ -1484,8 +1484,10 @@ function latestActionCard(message) {
   heading.className = 'prompt-head';
   heading.textContent = 'Latest action';
   card.appendChild(heading);
-  const body = messageContent(message);
-  body.classList.add('prompt-body');
+  const body = document.createElement('div');
+  body.className = 'prompt-body';
+  if (message.moves) body.classList.add('latest-moves');
+  body.append(...(message.moves || [message]).map(messageContent));
   card.appendChild(body);
   return card;
 }

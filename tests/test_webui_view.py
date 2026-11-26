@@ -71,6 +71,35 @@ def test_latest_action_shows_one_public_result_with_its_image(start_game, store,
     assert all(message["id"] != moved for message in view["history"])
 
 
+@pytest.mark.parametrize("boundary", [
+    "Blue is using their turn to move",
+    "## Blue started their turn",
+    "Blue used a pulsar (tile 208) to perform the move action.",
+    "Blue has chosen to back up to last start of turn.",
+])
+def test_latest_move_groups_ship_moves_after_action_boundary(start_game, store, app, boundary):
+    start_game()
+    room = "aeb1-actions"
+    store.record("aeb1", room, content="Blue Moved a cruiser from 209 to 211.")
+    store.record("aeb1", room, content=boundary)
+    first_image = {"name": "205.webp", "url": "/media/205.webp"}
+    second_image = {"name": "000.webp", "url": "/media/000.webp"}
+    first = store.record("aeb1", room, content="Blue Moved a dreadnought from 103 to 205.",
+                         attachments=[first_image])
+    store.record("aeb1", room, content="Blue, select the ship you would like to move from 208.",
+                 buttons=[{"custom_id": "FCIDblue_moveShip_208"}])
+    store.record("aeb1", room, content="Blue Moved a cruiser from 104 to 106.", ephemeral_to="1")
+    second = store.record("aeb1", room, content="Blue Moved a interceptor from 208 to 000.",
+                          attachments=[second_image])
+    store.record("aeb1", room, content="## Red started their turn")
+
+    latest = app.snapshot("aeb1", "2")["latest_action"]
+
+    assert latest["id"] == second
+    assert [move["id"] for move in latest["moves"]] == [first, second]
+    assert [move["attachments"] for move in latest["moves"]] == [[first_image], [second_image]]
+
+
 def test_another_seats_public_prompt_is_not_one_of_your_choices(start_game, store, app, run):
     game, _channel = start_game()
     turn_menu(run, store, game, "1", "blue")

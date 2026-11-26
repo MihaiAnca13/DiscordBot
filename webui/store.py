@@ -18,10 +18,16 @@ import time
 import discord
 
 # shortcut: announcements are identified by their wording, add an event type if more outcomes need coverage.
+MOVE_RESULT = re.compile(r"^(.+?) Moved a .+ from .+ to .+\.$")
+ACTION_START = re.compile(
+    r"^## .+ started their turn\.?$| is using their turn to \w+\.?$|"
+    r" used a pulsar \(tile .+\) to perform the \w+ action\.$|"
+    r" has chosen to back up to last start of turn\.$"
+)
 ACTION_RESULT = re.compile(
     r"^(?:This is what the tile looks like after the build\.|Tile added to position |"
     r"Tile discarded$|Successfully added a \w+ population to tile )|"
-    r" (?:Moved a .+ from .+ to |acquired the tech |replaced .+ with |"
+    r" (?:acquired the tech |replaced .+ with |"
     r"(?:acquired|lost) control of |placed a \w+ population |Passed$|"
     r"has chosen to back up to last start of turn\.$|undid their last part )"
 )
@@ -300,8 +306,31 @@ class FeedStore:
             "SELECT * FROM messages WHERE game_id = ? AND deleted = 0"
             " AND ephemeral_to IS NULL AND buttons = '[]' AND content IS NOT NULL"
             " ORDER BY id DESC", (game_id,))
-        row = next((row for row in rows if ACTION_RESULT.search(row["content"])), None)
-        return self._as_message(row) if row is not None else None
+        for row in rows:
+            move = MOVE_RESULT.match(row["content"])
+            if move or ACTION_RESULT.search(row["content"]):
+                break
+        else:
+            return None
+
+        latest = self._as_message(row)
+        if not move:
+            return latest
+
+        moves = [latest]
+        for earlier in rows:
+            if earlier["room"] != latest["room"]:
+                continue
+            if ACTION_START.search(earlier["content"]):
+                break
+            earlier_move = MOVE_RESULT.match(earlier["content"])
+            if earlier_move:
+                if earlier_move[1] != move[1]:
+                    break
+                moves.append(self._as_message(earlier))
+        if len(moves) > 1:
+            return {**latest, "moves": moves[::-1]}
+        return latest
 
     def history_page(self, game_id, seat, before=None, limit=40):
         """One page of the full feed, newest first, including used prompts."""
